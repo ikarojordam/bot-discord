@@ -472,3 +472,475 @@ client.on('interactionCreate', async interaction => {
       await interaction.reply({ embeds: [embed], ephemeral: true });
     }
                                                        }
+
+  // ============ SELECT MENUS ============
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId === 'select_config') {
+      const configKey = interaction.values[0];
+
+      if (configKey.includes('channel')) {
+        const channels = interaction.guild.channels.cache
+          .filter(c => c.type === ChannelType.GuildText)
+          .first(25);
+
+        const channelSelect = new StringSelectMenuBuilder()
+          .setCustomId(`select_channel_${configKey}`)
+          .setPlaceholder('Selecione um canal')
+          .addOptions(
+            channels.map(c => 
+              new StringSelectMenuOptionBuilder()
+                .setLabel(c.name.substring(0, 100))
+                .setValue(c.id)
+                .setDescription(`#${c.name}`.substring(0, 100))
+            )
+          );
+
+        const row = new ActionRowBuilder().addComponents(channelSelect);
+        await interaction.reply({ content: `Selecione o canal para **${configKey}**:`, components: [row], ephemeral: true });
+      }
+      else if (configKey.includes('role') || configKey === 'cargo_meta') {
+        const roles = interaction.guild.roles.cache
+          .filter(r => r.name !== '@everyone')
+          .first(25);
+
+        const roleSelect = new StringSelectMenuBuilder()
+          .setCustomId(`select_role_${configKey}`)
+          .setPlaceholder('Selecione um cargo')
+          .addOptions(
+            roles.map(r => 
+              new StringSelectMenuOptionBuilder()
+                .setLabel(r.name.substring(0, 100))
+                .setValue(r.id)
+                .setDescription(`Cargo: ${r.name}`.substring(0, 100))
+            )
+          );
+
+        const row = new ActionRowBuilder().addComponents(roleSelect);
+        await interaction.reply({ content: `Selecione o cargo para **${configKey}**:`, components: [row], ephemeral: true });
+      }
+      else if (configKey === 'meta_vendas') {
+        const modal = new ModalBuilder()
+          .setCustomId('modal_meta_vendas')
+          .setTitle('Meta de Vendas');
+
+        const input = new TextInputBuilder()
+          .setCustomId('input_meta')
+          .setLabel('Quantidade de vendas')
+          .setPlaceholder('Ex: 10')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const row = new ActionRowBuilder().addComponents(input);
+        modal.addComponents(row);
+        await interaction.showModal(modal);
+      }
+      else if (configKey.includes('descricao')) {
+        const modal = new ModalBuilder()
+          .setCustomId(`modal_desc_${configKey}`)
+          .setTitle('Descrição');
+
+        const input = new TextInputBuilder()
+          .setCustomId('input_desc')
+          .setLabel('Nova descrição')
+          .setPlaceholder('Digite a descrição')
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(1000)
+          .setRequired(true);
+
+        const row = new ActionRowBuilder().addComponents(input);
+        modal.addComponents(row);
+        await interaction.showModal(modal);
+      }
+    }
+
+    if (interaction.customId === 'select_ticket_config') {
+      const configKey = interaction.values[0];
+
+      if (configKey === 'ticket_cargo') {
+        const roles = interaction.guild.roles.cache
+          .filter(r => r.name !== '@everyone')
+          .first(25);
+
+        const roleSelect = new StringSelectMenuBuilder()
+          .setCustomId('select_role_ticket_cargo')
+          .setPlaceholder('Selecione o cargo de atendimento')
+          .addOptions(
+            roles.map(r => 
+              new StringSelectMenuOptionBuilder()
+                .setLabel(r.name.substring(0, 100))
+                .setValue(r.id)
+                .setDescription(`Cargo: ${r.name}`.substring(0, 100))
+            )
+          );
+
+        const row = new ActionRowBuilder().addComponents(roleSelect);
+        await interaction.reply({ content: 'Selecione o cargo para atendimento:', components: [row], ephemeral: true });
+      }
+      else if (configKey === 'ticket_descricao') {
+        const modal = new ModalBuilder()
+          .setCustomId('modal_desc_ticket_descricao')
+          .setTitle('Descrição do Ticket');
+
+        const input = new TextInputBuilder()
+          .setCustomId('input_desc')
+          .setLabel('Nova descrição')
+          .setPlaceholder('Digite a descrição do painel')
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(1000)
+          .setRequired(true);
+
+        const row = new ActionRowBuilder().addComponents(input);
+        modal.addComponents(row);
+        await interaction.showModal(modal);
+      }
+    }
+
+    if (interaction.customId.startsWith('select_channel_')) {
+      const configKey = interaction.customId.replace('select_channel_', '');
+      const channelId = interaction.values[0];
+      const config = await getConfig(interaction.guild.id);
+      
+      config[configKey] = channelId;
+      await setConfig(interaction.guild.id, config);
+      
+      await interaction.reply({ content: `✅ Canal configurado com sucesso!`, ephemeral: true });
+    }
+
+    if (interaction.customId.startsWith('select_role_')) {
+      const configKey = interaction.customId.replace('select_role_', '');
+      const roleId = interaction.values[0];
+      const config = await getConfig(interaction.guild.id);
+      
+      config[configKey] = roleId;
+      await setConfig(interaction.guild.id, config);
+      
+      await interaction.reply({ content: `✅ Cargo configurado com sucesso!`, ephemeral: true });
+    }
+  }
+
+  // ============ BOTÕES ============
+  if (interaction.isButton()) {
+    // Botão de abrir ticket
+    if (interaction.customId === 'btn_abrir_ticket') {
+      const config = await getConfig(interaction.guild.id);
+      const canal = interaction.channel;
+      
+      const thread = await canal.threads.create({
+        name: `ticket-${interaction.user.username}`,
+        autoArchiveDuration: 60,
+        type: ChannelType.PrivateThread,
+        reason: 'Ticket de suporte',
+      });
+
+      await thread.members.add(interaction.user.id);
+      if (config.ticket_cargo) {
+        const cargo = interaction.guild.roles.cache.get(config.ticket_cargo);
+        if (cargo) await thread.members.add(cargo.id);
+      }
+
+      const ticketEmbed = new EmbedBuilder()
+        .setColor('#9B59B6')
+        .setTitle('🎫 Ticket Aberto')
+        .setDescription(`Ticket de ${interaction.user}`)
+        .addFields(
+          { name: '👤 Usuário', value: `<@${interaction.user.id}>` },
+          { name: '📋 Status', value: 'Aberto' }
+        )
+        .setTimestamp();
+
+      const closeButton = new ButtonBuilder()
+        .setCustomId('btn_fechar_ticket')
+        .setLabel('Fechar Ticket')
+        .setEmoji('🔒')
+        .setStyle(ButtonStyle.Danger);
+
+      const addMemberButton = new ButtonBuilder()
+        .setCustomId('btn_add_membro')
+        .setLabel('Adicionar Membro')
+        .setEmoji('➕')
+        .setStyle(ButtonStyle.Secondary);
+
+      const avisarButton = new ButtonBuilder()
+        .setCustomId('btn_avisar_adm')
+        .setLabel('Avisar Admin')
+        .setEmoji('📢')
+        .setStyle(ButtonStyle.Primary);
+
+      const mentionStaffButton = new ButtonBuilder()
+        .setCustomId('btn_mencionar_staff')
+        .setLabel('Mencionar Staff')
+        .setEmoji('👥')
+        .setStyle(ButtonStyle.Secondary);
+
+      const row1 = new ActionRowBuilder().addComponents(closeButton, addMemberButton);
+      const row2 = new ActionRowBuilder().addComponents(avisarButton, mentionStaffButton);
+
+      await thread.send({ embeds: [ticketEmbed], components: [row1, row2] });
+      await interaction.reply({ content: `✅ Ticket criado em ${thread}`, ephemeral: true });
+    }
+
+    // Botões do ticket (staff apenas)
+    if (interaction.customId === 'btn_fechar_ticket' || 
+        interaction.customId === 'btn_add_membro' || 
+        interaction.customId === 'btn_avisar_adm') {
+      
+      if (!await isTicketStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Você não pode apertar nesse botão, somente nossa equipe.', ephemeral: true });
+      }
+
+      const thread = interaction.channel;
+
+      if (interaction.customId === 'btn_fechar_ticket') {
+        await interaction.reply({ content: '🔒 Ticket será fechado...', ephemeral: true });
+        await thread.setArchived(true);
+        await thread.setLocked(true);
+      }
+
+      if (interaction.customId === 'btn_add_membro') {
+        const modal = new ModalBuilder()
+          .setCustomId('modal_add_membro')
+          .setTitle('Adicionar Membro');
+
+        const input = new TextInputBuilder()
+          .setCustomId('input_user_id')
+          .setLabel('ID do usuário')
+          .setPlaceholder('Cole o ID do usuário')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const row = new ActionRowBuilder().addComponents(input);
+        modal.addComponents(row);
+        await interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'btn_avisar_adm') {
+        const config = await getConfig(interaction.guild.id);
+        const cargo = interaction.guild.roles.cache.get(config.ticket_cargo);
+        if (cargo) {
+          await thread.send({ content: `📢 Atenção ${cargo}! Um admin está online e disponível no ticket.` });
+        }
+        await interaction.reply({ content: '✅ Staff avisado!', ephemeral: true });
+      }
+    }
+
+    // Botão para mencionar staff (qualquer usuário)
+    if (interaction.customId === 'btn_mencionar_staff') {
+      const config = await getConfig(interaction.guild.id);
+      const cargo = interaction.guild.roles.cache.get(config.ticket_cargo);
+      if (cargo) {
+        await interaction.channel.send({ content: `${cargo} foi mencionado pelo usuário ${interaction.user}!` });
+      }
+      await interaction.reply({ content: '✅ Staff mencionado!', ephemeral: true });
+    }
+
+    // Botão de vender
+    if (interaction.customId === 'btn_vender') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_vender')
+        .setTitle('Vender Gmail');
+
+      const emailInput = new TextInputBuilder()
+        .setCustomId('input_email')
+        .setLabel('E-mail')
+        .setPlaceholder('exemplo@gmail.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const senhaInput = new TextInputBuilder()
+        .setCustomId('input_senha')
+        .setLabel('Senha')
+        .setPlaceholder('Senha do e-mail')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const pixInput = new TextInputBuilder()
+        .setCustomId('input_pix')
+        .setLabel('Chave PIX')
+        .setPlaceholder('Sua chave PIX')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const row1 = new ActionRowBuilder().addComponents(emailInput);
+      const row2 = new ActionRowBuilder().addComponents(senhaInput);
+      const row3 = new ActionRowBuilder().addComponents(pixInput);
+
+      modal.addComponents(row1, row2, row3);
+      await interaction.showModal(modal);
+    }
+
+    // Botões de verificação de venda
+    if (interaction.customId === 'btn_verificado' || interaction.customId === 'btn_recusado') {
+      const config = await getConfig(interaction.guild.id);
+      const thread = interaction.channel;
+      if (!thread.isThread()) return interaction.reply({ content: 'Não é uma thread.', ephemeral: true });
+
+      if (!await isAdmin(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas administradores podem verificar.', ephemeral: true });
+      }
+
+      const vendedorId = thread.name.split('-')[0];
+      const vendedor = await interaction.guild.members.fetch(vendedorId).catch(() => null);
+
+      if (interaction.customId === 'btn_verificado') {
+        const targetChannel = interaction.guild.channels.cache.get(config.verificado_channel);
+        if (!targetChannel) return interaction.reply({ content: 'Canal verificado não configurado.', ephemeral: true });
+
+        await targetChannel.send({ content: `✅ Venda verificada por ${interaction.user.tag}\nVendedor: <@${vendedorId}>` });
+        await thread.setArchived(true);
+        await thread.setLocked(true);
+        await incrementUserSales(vendedorId, interaction.guild.id);
+
+        const totalSales = await getUserSales(vendedorId, interaction.guild.id);
+        if (config.meta_vendas > 0 && totalSales >= config.meta_vendas && config.cargo_meta) {
+          const cargoMeta = interaction.guild.roles.cache.get(config.cargo_meta);
+          if (cargoMeta && vendedor) {
+            try {
+              await vendedor.roles.add(cargoMeta);
+              await vendedor.send(`🏆 Parabéns! Você atingiu ${totalSales} vendas e ganhou o cargo **${cargoMeta.name}**!`);
+            } catch (e) {}
+          }
+        }
+
+        if (vendedor) {
+          try {
+            await vendedor.send('🎉 Sua venda foi **verificada**!');
+          } catch (e) {}
+        }
+
+        const feedbackChannel = interaction.guild.channels.cache.get(config.feedback_channel);
+        if (feedbackChannel) {
+          await feedbackChannel.send(`📝 Venda de <@${vendedorId}> foi verificada. Deixe um feedback!`);
+        }
+        await interaction.reply({ content: '✅ Venda verificada!', ephemeral: true });
+      }
+
+      if (interaction.customId === 'btn_recusado') {
+        const targetChannel = interaction.guild.channels.cache.get(config.recusado_channel);
+        if (!targetChannel) return interaction.reply({ content: 'Canal recusado não configurado.', ephemeral: true });
+
+        await targetChannel.send({ content: `❌ Venda recusada por ${interaction.user.tag}\nVendedor: <@${vendedorId}>` });
+        await thread.setArchived(true);
+        await thread.setLocked(true);
+
+        if (vendedor) {
+          try {
+            await vendedor.send('😔 Sua venda foi **recusada**.');
+          } catch (e) {}
+        }
+        await interaction.reply({ content: '❌ Venda recusada.', ephemeral: true });
+      }
+    }
+  }
+
+  // ============ MODAIS ============
+  if (interaction.isModalSubmit()) {
+    // Modal de venda
+    if (interaction.customId === 'modal_vender') {
+      const email = interaction.fields.getTextInputValue('input_email');
+      const senha = interaction.fields.getTextInputValue('input_senha');
+      const pix = interaction.fields.getTextInputValue('input_pix');
+
+      const vendedor = interaction.user;
+      const channel = interaction.channel;
+      if (!channel) return;
+
+      try {
+        const thread = await channel.threads.create({
+          name: `${vendedor.id}-venda`,
+          autoArchiveDuration: 60,
+          type: ChannelType.PrivateThread,
+          reason: 'Venda de Gmail',
+        });
+
+        const config = await getConfig(interaction.guild.id);
+        const adminRole = interaction.guild.roles.cache.get(config.admin_role);
+        if (adminRole) {
+          await thread.members.add(adminRole.id);
+        }
+
+        await thread.members.remove(vendedor.id).catch(() => {});
+
+        const infoEmbed = new EmbedBuilder()
+          .setColor('#FFD700')
+          .setTitle('📧 Nova Venda de Gmail')
+          .setDescription('**Detalhes da conta** (clique para copiar):')
+          .addFields(
+            { name: '📧 E-mail', value: `\`\`\`${email}\`\`\`` },
+            { name: '🔒 Senha', value: `\`\`\`${senha}\`\`\`` },
+            { name: '💠 Chave PIX', value: `\`\`\`${pix}\`\`\`` },
+            { name: '👤 Vendedor', value: `<@${vendedor.id}>` }
+          )
+          .setFooter({ text: 'Use os botões abaixo para verificar ou recusar.' });
+
+        // Gerar QR Code PIX
+        const qrCodeUrl = generatePixQrCode(pix);
+        
+        const verificadoButton = new ButtonBuilder()
+          .setCustomId('btn_verificado')
+          .setLabel('Verificado')
+          .setStyle(ButtonStyle.Success)
+          .setEmoji('✅');
+
+        const recusadoButton = new ButtonBuilder()
+          .setCustomId('btn_recusado')
+          .setLabel('Recusar')
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji('❌');
+
+        const row = new ActionRowBuilder().addComponents(verificadoButton, recusadoButton);
+
+        // Enviar QR Code primeiro
+        await thread.send({ 
+          content: '📱 **QR Code PIX para pagamento:**',
+          files: [qrCodeUrl] 
+        });
+        
+        // Depois enviar o embed com informações
+        await thread.send({ embeds: [infoEmbed], components: [row] });
+        
+        await interaction.reply({ content: `✅ Venda enviada! Os administradores revisarão.`, ephemeral: true });
+      } catch (e) {
+        console.error('Erro ao criar thread:', e);
+        await interaction.reply({ content: '❌ Erro ao processar venda. Tente novamente.', ephemeral: true });
+      }
+    }
+
+    // Modal de adicionar membro ao ticket
+    if (interaction.customId === 'modal_add_membro') {
+      const userId = interaction.fields.getTextInputValue('input_user_id');
+      const thread = interaction.channel;
+      
+      try {
+        await thread.members.add(userId);
+        await interaction.reply({ content: `✅ Membro <@${userId}> adicionado ao ticket!`, ephemeral: true });
+      } catch (e) {
+        await interaction.reply({ content: '❌ Erro ao adicionar membro. Verifique o ID.', ephemeral: true });
+      }
+    }
+
+    // Modal de meta de vendas
+    if (interaction.customId === 'modal_meta_vendas') {
+      const meta = parseInt(interaction.fields.getTextInputValue('input_meta'));
+      if (isNaN(meta) || meta < 0) {
+        return interaction.reply({ content: '❌ Valor inválido.', ephemeral: true });
+      }
+      const config = await getConfig(interaction.guild.id);
+      config.meta_vendas = meta;
+      await setConfig(interaction.guild.id, config);
+      await interaction.reply({ content: `✅ Meta de vendas definida para ${meta}!`, ephemeral: true });
+    }
+
+    // Modais de descrição
+    if (interaction.customId.startsWith('modal_desc_')) {
+      const configKey = interaction.customId.replace('modal_desc_', '');
+      const value = interaction.fields.getTextInputValue('input_desc');
+      const config = await getConfig(interaction.guild.id);
+      
+      config[configKey] = value;
+      await setConfig(interaction.guild.id, config);
+      await interaction.reply({ content: `✅ Descrição atualizada!`, ephemeral: true });
+    }
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN);

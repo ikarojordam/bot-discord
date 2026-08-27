@@ -153,6 +153,11 @@ async function registerCommands() {
 
 client.once('ready', async () => {
   console.log(`✅ Bot ${client.user.tag} está online!`);
+  
+  // Limpa TODOS os comandos globais (evita duplicação)
+  await client.application.commands.set([]);
+  
+  // Agora registra os comandos por servidor
   await registerCommands();
 });
 

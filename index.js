@@ -42,9 +42,7 @@ const COLOR_FALLBACK = '#5865F2';
 const BOT_START_TIME = Date.now();
 const MAX_SHOP_PANELS = 500;
 
-const D_DEL = 300;
-const D_CRE = 400;
-const D_MSG = 250;
+const D_DEL = 300, D_CRE = 400, D_MSG = 250;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, { auth: { persistSession: false } });
 
@@ -87,9 +85,7 @@ async function setConfig(gid, cfg) { await supabase.from('configs').upsert({ ...
 async function isPremium(gid) {
   const c = await getConfig(gid);
   if (!c.is_premium) return false;
-  if (c.premium_expires_at && new Date(c.premium_expires_at) <= new Date()) {
-    c.is_premium = false; c.premium_expires_at = null; await setConfig(gid, c); return false;
-  }
+  if (c.premium_expires_at && new Date(c.premium_expires_at) <= new Date()) { c.is_premium = false; c.premium_expires_at = null; await setConfig(gid, c); return false; }
   return true;
 }
 async function requirePremium(i, f = 'Esta função') {
@@ -157,9 +153,6 @@ async function hasBlacklistedWord(gid, c) {
   return null;
 }
 
-/* =========================================================
-   LOJA HELPERS
-   ========================================================= */
 async function ensureGuild(g) {
   await supabase.from('guilds').upsert({ id: g.id, name: g.name }, { onConflict: 'id' });
   const { data } = await supabase.from('settings').select('*').eq('guild_id', g.id).maybeSingle();
@@ -181,11 +174,7 @@ async function shopIsAdmin(i) {
   const s = await getSettings(i.guild.id);
   return [s?.admin_role_id, s?.manager_role_id].filter(Boolean).some(r => i.member.roles.cache.has(r));
 }
-async function requireShopAdmin(i) {
-  if (await shopIsAdmin(i)) return true;
-  await i.reply({ content: '⚡ Sem permissão.', flags: EPHEMERAL }).catch(() => {});
-  return false;
-}
+async function requireShopAdmin(i) { if (await shopIsAdmin(i)) return true; await i.reply({ content: '⚡ Sem permissão.', flags: EPHEMERAL }).catch(() => {}); return false; }
 function baseEmbed(s, t, d) {
   const e = new EmbedBuilder().setColor(s?.embed_color || COLOR_FALLBACK);
   if (t) e.setTitle(t);
@@ -202,9 +191,6 @@ async function createShopPanel(gid, d) { const t = await countShopPanels(gid); i
 async function updateShopPanel(id, p) { await supabase.from('shop_panels').update(p).eq('id', id); return getShopPanel(id); }
 async function deleteShopPanel(id) { await supabase.from('shop_panels').delete().eq('id', id); }
 
-/* =========================================================
-   IA
-   ========================================================= */
 async function buscarDuckDuckGo(q) {
   try {
     const r = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
@@ -224,9 +210,6 @@ async function perguntarIA(p) {
   return { resposta: (await r.text()).trim(), temContexto: !!ctx };
 }
 
-/* =========================================================
-   PIX
-   ========================================================= */
 function crc16(s) { let c = 0xFFFF; for (let i = 0; i < s.length; i++) { c ^= s.charCodeAt(i) << 8; for (let j = 0; j < 8; j++) { if (c & 0x8000) c = (c << 1) ^ 0x1021; else c <<= 1; c &= 0xFFFF; } } return c.toString(16).toUpperCase().padStart(4, '0'); }
 function generatePixPayload(k, a = null, n = '', ci = '', tx = '***') {
   const f = (id, v) => `${id}${String(v.length).padStart(2, '0')}${v}`;
@@ -242,9 +225,6 @@ async function criarPixEstatico(v, oid, s) {
   return { payload: p, qrBuf: await QRCode.toBuffer(p, { type: 'png', width: 320, margin: 2 }) };
 }
 
-/* =========================================================
-   OAUTH2
-   ========================================================= */
 async function getValidToken(uid) {
   const { data } = await supabase.from('verifications').select('*').eq('user_id', uid).single();
   if (!data) return null;
@@ -265,9 +245,6 @@ async function addUserToGuild(uid, gid) {
   try { const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${uid}`, { method: 'PUT', headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ access_token: t }) }); return r.ok; } catch { return false; }
 }
 
-/* =========================================================
-   HTML DE VERIFICAÇÃO — PREMIUM
-   ========================================================= */
 function buildVerificationHTML(guildId, guildName = 'Servidor', guildIcon = null) {
   const a = Math.floor(Math.random() * 9) + 1, b = Math.floor(Math.random() * 9) + 1, ans = a + b;
   const iconHtml = guildIcon
@@ -284,150 +261,35 @@ function buildVerificationHTML(guildId, guildName = 'Servidor', guildIcon = null
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
-body{
-  font-family:'Inter',-apple-system,sans-serif;
-  background:
-    radial-gradient(circle at 20% 10%, rgba(88,101,242,.35), transparent 45%),
-    radial-gradient(circle at 80% 90%, rgba(0,168,252,.28), transparent 45%),
-    radial-gradient(circle at 90% 10%, rgba(35,165,90,.15), transparent 40%),
-    linear-gradient(180deg,#0a0c12 0%, #0f1118 100%);
-  color:#fff;
-  min-height:100vh;
-  display:flex;align-items:center;justify-content:center;
-  padding:20px;
-  overflow-x:hidden;
-}
-body::before{
-  content:'';position:fixed;inset:0;
-  background-image:
-    linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
-  background-size:40px 40px;
-  pointer-events:none;
-  mask-image:radial-gradient(circle at 50% 50%, #000 20%, transparent 75%);
-}
-.card{
-  position:relative;
-  background:linear-gradient(180deg, rgba(30,33,44,.95), rgba(20,22,30,.98));
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:24px;
-  padding:44px 36px 36px;
-  max-width:440px;width:100%;
-  text-align:center;
-  box-shadow:
-    0 30px 80px rgba(0,0,0,.6),
-    0 0 0 1px rgba(255,255,255,.03) inset,
-    0 1px 0 rgba(255,255,255,.06) inset;
-  backdrop-filter:blur(20px);
-  overflow:hidden;
-  animation:slideUp .5s cubic-bezier(.16,1,.3,1);
-}
+body{font-family:'Inter',-apple-system,sans-serif;background:radial-gradient(circle at 20% 10%,rgba(88,101,242,.35),transparent 45%),radial-gradient(circle at 80% 90%,rgba(0,168,252,.28),transparent 45%),radial-gradient(circle at 90% 10%,rgba(35,165,90,.15),transparent 40%),linear-gradient(180deg,#0a0c12 0%,#0f1118 100%);color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;mask-image:radial-gradient(circle at 50% 50%,#000 20%,transparent 75%)}
+.card{position:relative;background:linear-gradient(180deg,rgba(30,33,44,.95),rgba(20,22,30,.98));border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:44px 36px 36px;max-width:440px;width:100%;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset,0 1px 0 rgba(255,255,255,.06) inset;backdrop-filter:blur(20px);overflow:hidden;animation:slideUp .5s cubic-bezier(.16,1,.3,1)}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.card::before{
-  content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,#5865F2,#00A8FC,#23A55A,#5865F2,transparent);
-  background-size:200% 100%;
-  animation:flow 3s linear infinite;
-}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#5865F2,#00A8FC,#23A55A,#5865F2,transparent);background-size:200% 100%;animation:flow 3s linear infinite}
 @keyframes flow{to{background-position:-200% 0}}
-.guild-icon,.guild-icon-fallback{
-  width:72px;height:72px;border-radius:50%;object-fit:cover;
-  margin:0 auto 18px;
-  display:block;
-  border:3px solid rgba(88,101,242,.4);
-  box-shadow:0 0 0 4px rgba(88,101,242,.12), 0 8px 24px rgba(88,101,242,.3);
-}
-.guild-icon-fallback{
-  display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,#5865F2,#00A8FC);
-  font-weight:800;font-size:28px;color:#fff;
-}
-h1{font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:8px;
-   background:linear-gradient(135deg,#fff 0%,#b5bac1 100%);
-   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.guild-icon,.guild-icon-fallback{width:72px;height:72px;border-radius:50%;object-fit:cover;margin:0 auto 18px;display:block;border:3px solid rgba(88,101,242,.4);box-shadow:0 0 0 4px rgba(88,101,242,.12),0 8px 24px rgba(88,101,242,.3)}
+.guild-icon-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#5865F2,#00A8FC);font-weight:800;font-size:28px;color:#fff}
+h1{font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:8px;background:linear-gradient(135deg,#fff 0%,#b5bac1 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .subtitle{color:#8b8f9a;font-size:14px;margin-bottom:28px;font-weight:500;line-height:1.5}
-.spinner{
-  width:64px;height:64px;margin:0 auto 22px;
-  border-radius:50%;
-  background:conic-gradient(from 0deg,#5865F2,#00A8FC,#23A55A,#5865F2);
-  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));
-  mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));
-  animation:spin 1s linear infinite;
-}
+.spinner{width:64px;height:64px;margin:0 auto 22px;border-radius:50%;background:conic-gradient(from 0deg,#5865F2,#00A8FC,#23A55A,#5865F2);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 5px));animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.check-circle{
-  width:78px;height:78px;margin:0 auto 20px;
-  border-radius:50%;
-  background:linear-gradient(135deg,#23A55A,#1e8c4a);
-  display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 0 8px rgba(35,165,90,.15), 0 12px 40px rgba(35,165,90,.4);
-  animation:pop .5s cubic-bezier(.34,1.56,.64,1);
-}
+.check-circle{width:78px;height:78px;margin:0 auto 20px;border-radius:50%;background:linear-gradient(135deg,#23A55A,#1e8c4a);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 8px rgba(35,165,90,.15),0 12px 40px rgba(35,165,90,.4);animation:pop .5s cubic-bezier(.34,1.56,.64,1)}
 @keyframes pop{0%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1}}
 .check-circle svg{width:38px;height:38px;color:#fff;stroke-width:3.5}
 .hidden{display:none !important}
-.captcha-container{
-  background:rgba(0,0,0,.35);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:16px;
-  padding:24px;
-  margin-bottom:20px;
-  position:relative;
-  overflow:hidden;
-}
-.captcha-container::before{
-  content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;
-  background:linear-gradient(45deg,transparent 30%,rgba(88,101,242,.08) 50%,transparent 70%);
-  animation:shine 3s linear infinite;
-  pointer-events:none;
-}
+.captcha-container{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden}
+.captcha-container::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(45deg,transparent 30%,rgba(88,101,242,.08) 50%,transparent 70%);animation:shine 3s linear infinite;pointer-events:none}
 @keyframes shine{0%{transform:translateX(-100%) rotate(0)}100%{transform:translateX(100%) rotate(0)}}
 .captcha-label{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#8b8f9a;font-weight:600;margin-bottom:12px}
-.captcha-math{
-  font-size:34px;font-weight:800;letter-spacing:6px;
-  background:linear-gradient(135deg,#fff,#8ba3ff);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  text-shadow:0 0 30px rgba(88,101,242,.3);
-  margin-bottom:16px;font-variant-numeric:tabular-nums;
-}
-input{
-  width:100%;padding:14px 16px;
-  background:rgba(0,0,0,.5);
-  border:2px solid rgba(255,255,255,.08);
-  border-radius:12px;color:#fff;
-  font-size:18px;text-align:center;font-weight:600;
-  outline:none;transition:all .2s;
-  font-family:inherit;
-  font-variant-numeric:tabular-nums;
-  letter-spacing:2px;
-}
+.captcha-math{font-size:34px;font-weight:800;letter-spacing:6px;background:linear-gradient(135deg,#fff,#8ba3ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 30px rgba(88,101,242,.3);margin-bottom:16px;font-variant-numeric:tabular-nums}
+input{width:100%;padding:14px 16px;background:rgba(0,0,0,.5);border:2px solid rgba(255,255,255,.08);border-radius:12px;color:#fff;font-size:18px;text-align:center;font-weight:600;outline:none;transition:all .2s;font-family:inherit;font-variant-numeric:tabular-nums;letter-spacing:2px}
 input:focus{border-color:#5865F2;background:rgba(88,101,242,.08);box-shadow:0 0 0 4px rgba(88,101,242,.15)}
 input::placeholder{color:#575a65;letter-spacing:normal;font-weight:400;font-size:15px}
 input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.btn-primary{
-  width:100%;padding:15px;
-  background:linear-gradient(135deg,#5865F2,#4752c4);
-  border:none;border-radius:12px;
-  color:#fff;font-size:15px;font-weight:700;
-  cursor:pointer;margin-top:8px;
-  transition:all .2s;
-  font-family:inherit;
-  letter-spacing:.3px;
-  box-shadow:0 6px 20px rgba(88,101,242,.4);
-  position:relative;
-  overflow:hidden;
-}
+.btn-primary{width:100%;padding:15px;background:linear-gradient(135deg,#5865F2,#4752c4);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:all .2s;font-family:inherit;letter-spacing:.3px;box-shadow:0 6px 20px rgba(88,101,242,.4);position:relative;overflow:hidden}
 .btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(88,101,242,.55)}
 .btn-primary:active{transform:translateY(0)}
-.btn-success{
-  display:block;width:100%;padding:15px;
-  background:linear-gradient(135deg,#23A55A,#1a7a42);
-  border-radius:12px;color:#fff;
-  font-weight:700;text-decoration:none;
-  font-size:15px;letter-spacing:.3px;
-  transition:all .2s;margin-top:6px;
-  box-shadow:0 6px 20px rgba(35,165,90,.4);
-}
+.btn-success{display:block;width:100%;padding:15px;background:linear-gradient(135deg,#23A55A,#1a7a42);border-radius:12px;color:#fff;font-weight:700;text-decoration:none;font-size:15px;letter-spacing:.3px;transition:all .2s;margin-top:6px;box-shadow:0 6px 20px rgba(35,165,90,.4)}
 .btn-success:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(35,165,90,.55)}
 .error{color:#f23f43;font-size:13px;margin-top:12px;font-weight:600;animation:shake .4s}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
@@ -447,18 +309,12 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
     <div class="spinner"></div>
     <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
   </div>
-
   <div id="step2" class="hidden">
-    <div class="check-circle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    </div>
+    <div class="check-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
     <h1>Autorizado!</h1>
     <p class="subtitle">Sua conta foi verificada com sucesso.<br>Agora confirme que você é humano.</p>
     <div class="dots"><div class="dot"></div><div class="dot active"></div><div class="dot"></div></div>
   </div>
-
   <div id="step3" class="hidden">
     <h1>Confirmação humana</h1>
     <p class="subtitle">Resolva o cálculo abaixo para finalizar</p>
@@ -471,23 +327,16 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
     <button class="btn-primary" id="confirm">Confirmar</button>
     <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot active"></div></div>
   </div>
-
   <div id="step4" class="hidden">
-    <div class="check-circle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    </div>
+    <div class="check-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
     <p class="done-msg">🎉 Tudo pronto!</p>
     <h1>Bem-vindo(a)!</h1>
     <p class="subtitle">Você foi verificado(a) e pode voltar<br>ao servidor para começar a usar.</p>
     <a href="https://discord.com/channels/${guildId}" class="btn-success">Voltar para o Discord →</a>
     <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
   </div>
-
   <div class="footer">Protegido por OAuth2 · ${guildName}</div>
 </div>
-
 <script>
 const ans = ${ans};
 const s1 = document.getElementById('step1');
@@ -497,30 +346,13 @@ const s4 = document.getElementById('step4');
 const inp = document.getElementById('captcha');
 const btn = document.getElementById('confirm');
 const err = document.getElementById('err');
-
-setTimeout(() => {
-  s1.classList.add('hidden');
-  s2.classList.remove('hidden');
-  setTimeout(() => {
-    s2.classList.add('hidden');
-    s3.classList.remove('hidden');
-    setTimeout(() => inp.focus(), 200);
-  }, 1400);
+setTimeout(() => { s1.classList.add('hidden'); s2.classList.remove('hidden');
+  setTimeout(() => { s2.classList.add('hidden'); s3.classList.remove('hidden'); setTimeout(() => inp.focus(), 200); }, 1400);
 }, 1800);
-
 function validate() {
   const v = parseInt(inp.value);
-  if (v === ans) {
-    err.classList.add('hidden');
-    s3.classList.add('hidden');
-    s4.classList.remove('hidden');
-  } else {
-    err.classList.remove('hidden');
-    inp.value = '';
-    inp.focus();
-    inp.style.borderColor = '#f23f43';
-    setTimeout(() => inp.style.borderColor = '', 600);
-  }
+  if (v === ans) { err.classList.add('hidden'); s3.classList.add('hidden'); s4.classList.remove('hidden'); }
+  else { err.classList.remove('hidden'); inp.value = ''; inp.focus(); inp.style.borderColor = '#f23f43'; setTimeout(() => inp.style.borderColor = '', 600); }
 }
 btn.addEventListener('click', validate);
 inp.addEventListener('keypress', e => { if (e.key === 'Enter') validate(); });
@@ -528,10 +360,7 @@ inp.addEventListener('input', () => err.classList.add('hidden'));
 </script>
 </body>
 </html>`;
-               }
-/* =========================================================
-   TICKETS / SORTEIOS / TEMPROLES / VOZ / MÚSICA
-   ========================================================= */
+      }
 async function addRoleToThread(th, rid) {
   if (!rid) return;
   const r = th.guild.roles.cache.get(rid) || await th.guild.roles.fetch(rid).catch(() => null);
@@ -548,10 +377,7 @@ async function checkGiveaways() {
     let p = []; try { p = JSON.parse(g.participants || '[]'); } catch {}
     const ch = client.channels.cache.get(g.channel_id);
     if (!p.length) { if (ch) await ch.send('❌ Sem participantes.'); }
-    else {
-      const w = p.sort(() => Math.random() - 0.5).slice(0, g.winners_count);
-      for (const wid of w) { try { const u = await client.users.fetch(wid); await u.send(`🎉 Ganhou **${g.prize}**!`); if (ch) await ch.send(`🎉 <@${wid}> ganhou **${g.prize}**!`); } catch {} }
-    }
+    else { const w = p.sort(() => Math.random() - 0.5).slice(0, g.winners_count); for (const wid of w) { try { const u = await client.users.fetch(wid); await u.send(`🎉 Ganhou **${g.prize}**!`); if (ch) await ch.send(`🎉 <@${wid}> ganhou **${g.prize}**!`); } catch {} } }
     await supabase.from('giveaways').update({ ended: true }).eq('id', g.id);
   }
 }
@@ -607,9 +433,6 @@ async function buscarMusica(q, a) {
   } catch (e) { throw new Error(`play-dl: ${e.message}`); }
 }
 
-/* =========================================================
-   ANTI-RAID
-   ========================================================= */
 const raidLimits = { invitesPerMinute: 5, channelCreatesPerMinute: 3, roleCreatesPerMinute: 3, bansPerMinute: 5 };
 const raidTracker = new Map();
 const setupInProgress = new Set();
@@ -622,9 +445,6 @@ function checkRaidAction(gid, type, limit) {
   return ts.length <= limit;
 }
 
-/* =========================================================
-   FF FORMATS + COINS DEFAULTS
-   ========================================================= */
 const FF_FORMATS = [
   { id: '1x1_mobile', label: '1v1 Mobile', emoji: '📱', teamSize: 1, totalPlayers: 2 },
   { id: '2x2_mobile', label: '2v2 Mobile', emoji: '📱', teamSize: 2, totalPlayers: 4 },
@@ -652,9 +472,6 @@ const FF_COIN_DEFAULTS = [
   { name: '・@RICO DA ORG', emoji: '💎', price: 150, role_name: '・@RICO DA ORG' }
 ];
 
-/* =========================================================
-   FF CONFIG
-   ========================================================= */
 async function ffGetConfig(gid) {
   const { data } = await supabase.from('ff_config').select('*').eq('guild_id', gid).maybeSingle();
   if (data) return data;
@@ -688,9 +505,6 @@ async function blockSlashIfMaintenance(i) {
   return true;
 }
 
-/* =========================================================
-   FF LOGS
-   ========================================================= */
 async function ffLogCanal(g, name, embed) { const ch = g.channels.cache.find(c => c.name === name); if (ch) await ch.send({ embeds: [embed] }).catch(() => {}); }
 async function ffLog(g, cat, action, uid = null, details = {}) {
   try {
@@ -737,9 +551,6 @@ async function logEvento(g, uid, action, details = {}) {
   await ffLogCanal(g, '🎁・log-eventos', e);
 }
 
-/* =========================================================
-   FF ANALYSTS
-   ========================================================= */
 async function ffGetAnalystQueue(gid) { const { data } = await supabase.from('ff_analyst_queue').select('*').eq('guild_id', gid).order('joined_at'); return data || []; }
 async function ffAnalystJoin(gid, uid) {
   const { data: ex } = await supabase.from('ff_analyst_queue').select('*').eq('guild_id', gid).eq('user_id', uid).maybeSingle();
@@ -750,9 +561,6 @@ async function ffAnalystJoin(gid, uid) {
 async function ffAnalystLeave(gid, uid) { await supabase.from('ff_analyst_queue').delete().eq('guild_id', gid).eq('user_id', uid); }
 async function ffAnalystNext(gid) { const { data } = await supabase.from('ff_analyst_queue').select('*').eq('guild_id', gid).eq('status', 'waiting').order('joined_at').limit(1).maybeSingle(); return data; }
 
-/* =========================================================
-   FF EMBEDS
-   ========================================================= */
 function ffBuildBetEmbed(bet, cfg) {
   const gi = parseJson(bet.gelo_infinito_players);
   const gn = parseJson(bet.gelo_normal_players);
@@ -807,16 +615,11 @@ function ffBuildPixButtons(hasPix) {
 }
 function ffBuildPixEmbed(cfg) {
   const h = !!cfg?.pix_key;
-  const e = new EmbedBuilder().setTitle('💳 Pagamento via Pix').setColor(h ? '#22c55e' : '#ff5555')
+  return new EmbedBuilder().setTitle('💳 Pagamento via Pix').setColor(h ? '#22c55e' : '#ff5555')
     .setDescription(
-      `**Passo a passo:**\n` +
-      `> 1️⃣ Clique em **✏️ ${h ? 'Editar' : 'Configurar'} Pix** (só mediadores)\n` +
-      `> 2️⃣ Preencha chave, nome e cidade\n` +
-      `> 3️⃣ Use **👁️ Ver meu Pix** pra conferir\n` +
-      `> 4️⃣ Use **🗑️ Remover** se precisar\n\n` +
+      `**Passo a passo:**\n> 1️⃣ Clique em **✏️ ${h ? 'Editar' : 'Configurar'} Pix** (só mediadores)\n> 2️⃣ Preencha chave, nome e cidade\n> 3️⃣ Use **👁️ Ver meu Pix** pra conferir\n> 4️⃣ Use **🗑️ Remover** se precisar\n\n` +
       (h ? `✅ **Pix configurado**\n🔑 \`${cfg.pix_key}\`\n👤 ${cfg.pix_name || '—'}` : '⚠️ **Nenhum Pix configurado ainda.**')
     ).setTimestamp();
-  return e;
 }
 async function ffUpdatePixEmbed(g) {
   const p = await ffGetPixEmbed(g.id);
@@ -890,10 +693,7 @@ async function ffBuildBlacklistEmbed(gid) {
     .setDescription(
       '**Jogadores banidos.** Discord ID + Free Fire ID + motivo + provas.\n\n' +
       (data?.length ? data.map((b, i) =>
-        `**${i + 1}.** <@${b.discord_id || b.user_id}>\n` +
-        `> 🆔 \`${b.discord_id || b.user_id}\` • 🎮 \`${b.ff_id || '—'}\`\n` +
-        `> 📝 ${b.reason || '—'}\n` +
-        `> 🕐 <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:R>` +
+        `**${i + 1}.** <@${b.discord_id || b.user_id}>\n> 🆔 \`${b.discord_id || b.user_id}\` • 🎮 \`${b.ff_id || '—'}\`\n> 📝 ${b.reason || '—'}\n> 🕐 <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:R>` +
         (b.evidence ? ` • 🔗 [Provas](${b.evidence})` : '')
       ).join('\n\n') : '*Ninguém na blacklist.*')
     ).setFooter({ text: `Total: ${total}` }).setTimestamp();
@@ -906,10 +706,6 @@ async function ffBuildBlacklistEmbed(gid) {
     ),
   ]};
 }
-
-/* =========================================================
-   THREAD NAME — AJUSTADO
-   ========================================================= */
 function ffThreadName(status, value, ids, matchId) {
   if (status === 'waiting')   return 'aguardando - confirmação';
   if (status === 'confirmed') return 'aguardando - pagamento';
@@ -946,10 +742,6 @@ async function ffCriarThreadAposta(g, ids, bet) {
   await ffLog(g, 'thread', 'THREAD_CREATED', null, { match_id: match.id, players: ids });
   if (med) await logMediador(g, med.user_id, 'SELECIONADO', { match_id: match.id });
 }
-
-/* =========================================================
-   TRANSCRIPTS
-   ========================================================= */
 function ffEscapeHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function ffBuildTranscriptHtml(thread, msgs, meta = {}) {
   const list = [...msgs.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
@@ -1001,10 +793,6 @@ async function ffSaveTranscript(g, tid, mid, participants, c) {
     return url;
   } catch (e) { console.error(e); return null; }
 }
-
-/* =========================================================
-   BUILDERS
-   ========================================================= */
 async function buildTicketComponents(g, cfg) {
   const types = parseJson(cfg.ticket_types, []);
   if (!types.length) return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_abrir_ticket').setLabel(cfg.botao_ticket || 'Abrir Ticket').setEmoji('🎫').setStyle(ButtonStyle.Primary))];
@@ -1028,9 +816,6 @@ async function buildCoinShopComponents(gid) {
 }
 const coinLocks = new Set();
 async function withCoinLock(k, fn) { if (coinLocks.has(k)) throw new Error('Aguarde...'); coinLocks.add(k); try { return await fn(); } finally { setTimeout(() => coinLocks.delete(k), 3000); } }
-/* =========================================================
-   SAY DE REGRAS
-   ========================================================= */
 async function postarRegrasLoja(g) {
   const ch = g.channels.cache.find(c => c.name === '📑・regras');
   if (!ch) return;
@@ -1056,9 +841,6 @@ async function postarRegrasApostas(g) {
   await ch.send({ embeds: [e] }).catch(() => {});
 }
 
-/* =========================================================
-   SETUP LOJA — ESTRUTURA CORRETA
-   ========================================================= */
 async function setupLojaServer(guild, onProgress = null) {
   const bot = guild.members.me;
   const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
@@ -1091,12 +873,7 @@ async function setupLojaServer(guild, onProgress = null) {
       const order = ['CEO', 'RESPONSAVEL PARCERIA', 'V2ndas', 'T1cket', 'Maquinas', 'Loritta', 'Cliente BEIRA', 'Membros'];
       const highest = bot.roles.highest;
       let base = highest.position - 1;
-      for (let idx = 0; idx < order.length; idx++) {
-        const r = roles[order[idx]];
-        if (!r) continue;
-        await r.setPosition(Math.max(1, base - idx)).catch(() => {});
-        await sleep(250);
-      }
+      for (let idx = 0; idx < order.length; idx++) { const r = roles[order[idx]]; if (!r) continue; await r.setPosition(Math.max(1, base - idx)).catch(() => {}); await sleep(250); }
     } catch {}
 
     const everyone = guild.roles.everyone;
@@ -1104,18 +881,12 @@ async function setupLojaServer(guild, onProgress = null) {
     const staffRoles = [roles['CEO'], roles['RESPONSAVEL PARCERIA'], roles['T1cket'], roles['V2ndas']].filter(Boolean);
 
     const buildOW = (allow) => {
-      const ow = [
-        { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-        { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }
-      ];
+      const ow = [{ id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }];
       for (const r of allow) ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] });
       return ow;
     };
     const buildReadOnly = () => {
-      const ow = [
-        { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
-        { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
-      ];
+      const ow = [{ id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }, { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }];
       for (const r of staffRoles) ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] });
       return ow;
     };
@@ -1127,33 +898,22 @@ async function setupLojaServer(guild, onProgress = null) {
         { name: '💙・perfomance', type: 'text' },
         { name: '✅・verificação', type: 'text', ro: true }
       ]},
-      { category: '@・ SUPORTE', channels: [
-        { name: '📩・suporte', type: 'text' }
-      ]},
+      { category: '@・ SUPORTE', channels: [{ name: '📩・suporte', type: 'text' }] },
       { category: '@・D1SCORD', channels: [
-        { name: '⭐・g1ft', type: 'text' },
-        { name: '🛒・n1tradas', type: 'text' },
-        { name: '🛒・l1nk', type: 'text' },
-        { name: '🛒・impuls0s', type: 'text' },
-        { name: '🛒・at1vações', type: 'text' }
+        { name: '⭐・g1ft', type: 'text' }, { name: '🛒・n1tradas', type: 'text' },
+        { name: '🛒・l1nk', type: 'text' }, { name: '🛒・impuls0s', type: 'text' }, { name: '🛒・at1vações', type: 'text' }
       ]},
       { category: '@・VARIEDADES', channels: [
-        { name: '🛒・pix-infinit9', type: 'text' },
-        { name: '🛒・m1necraft', type: 'text' },
-        { name: '🛒・r0bux', type: 'text' },
-        { name: '⭐・str3amings', type: 'text' }
+        { name: '🛒・pix-infinit9', type: 'text' }, { name: '🛒・m1necraft', type: 'text' },
+        { name: '🛒・r0bux', type: 'text' }, { name: '⭐・str3amings', type: 'text' }
       ]},
       { category: '@・PARCERIA', channels: [
-        { name: '👤・partner', type: 'text' },
-        { name: '🤝🏻・pedir-parceria', type: 'text' }
+        { name: '👤・partner', type: 'text' }, { name: '🤝🏻・pedir-parceria', type: 'text' }
       ]},
       { category: '🔒・STAFFS', priv: true, channels: [
-        { name: '🎟・chat-staff', type: 'text' },
-        { name: '🤝・txt', type: 'text' },
-        { name: '🔥・meta-completa', type: 'text' },
-        { name: '🚧・anuncios-staff', type: 'text' },
-        { name: 'logs', type: 'text' },
-        { name: 'v2ndas', type: 'text' }
+        { name: '🎟・chat-staff', type: 'text' }, { name: '🤝・txt', type: 'text' },
+        { name: '🔥・meta-completa', type: 'text' }, { name: '🚧・anuncios-staff', type: 'text' },
+        { name: 'logs', type: 'text' }, { name: 'v2ndas', type: 'text' }
       ]}
     ];
 
@@ -1164,9 +924,7 @@ async function setupLojaServer(guild, onProgress = null) {
       let cat = null;
       if (it.category) {
         cat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === it.category);
-        if (!cat) {
-          try { cat = await guild.channels.create({ name: it.category, type: ChannelType.GuildCategory, permissionOverwrites: it.priv ? buildOW(staffRoles) : [] }); await sleep(D_CRE); } catch { continue; }
-        }
+        if (!cat) { try { cat = await guild.channels.create({ name: it.category, type: ChannelType.GuildCategory, permissionOverwrites: it.priv ? buildOW(staffRoles) : [] }); await sleep(D_CRE); } catch { continue; } }
         try { await cat.setPosition(catPos).catch(() => {}); } catch {}
         catPos++;
       }
@@ -1180,33 +938,23 @@ async function setupLojaServer(guild, onProgress = null) {
         try { const ch = await guild.channels.create({ name: d.name, type: ty, parent: cat?.id, permissionOverwrites: ow }); try { await ch.setPosition(chi).catch(() => {}); } catch {} created[d.name] = ch; await sleep(D_CRE); } catch { errors.push(`ch ${d.name}`); }
       }
     }
-
     await everyone.setPermissions([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.CreateInstantInvite]).catch(() => {});
 
     await ensureGuild(guild);
     const cfg = await getConfig(guild.id);
     Object.assign(cfg, {
-      admin_role: roles['CEO']?.id || '',
-      membro_role: roles['Membros']?.id || '',
-      ticket_cargo: roles['T1cket']?.id || '',
-      autorole_role: roles['Membros']?.id || '',
-      log_channel: created['logs']?.id || '',
-      mod_log_channel: created['logs']?.id || '',
-      ticket_log_channel: created['logs']?.id || '',
-      welcome_channel: created['📮・anc']?.id || '',
-      server_type: 'loja',
-      ticket_titulo: '🎟・Central de Suporte',
-      ticket_descricao: 'Selecione o tipo de atendimento desejado.'
+      admin_role: roles['CEO']?.id || '', membro_role: roles['Membros']?.id || '',
+      ticket_cargo: roles['T1cket']?.id || '', autorole_role: roles['Membros']?.id || '',
+      log_channel: created['logs']?.id || '', mod_log_channel: created['logs']?.id || '',
+      ticket_log_channel: created['logs']?.id || '', welcome_channel: created['📮・anc']?.id || '',
+      server_type: 'loja', ticket_titulo: '🎟・Central de Atendimento', ticket_descricao: 'Selecione o tipo de atendimento desejado.'
     });
     await setConfig(guild.id, cfg);
     await patchSettings(guild.id, {
       store_name: 'Minha Loja', store_description: 'Bem-vindo à loja!',
-      log_channel_id: created['logs']?.id || null,
-      sales_channel_id: created['🛒・pagamentos・aprovados']?.id || null,
-      admin_role_id: roles['CEO']?.id || null,
-      manager_role_id: roles['RESPONSAVEL PARCERIA']?.id || null,
-      stock_role_id: roles['V2ndas']?.id || null,
-      customer_role_id: roles['Cliente BEIRA']?.id || null,
+      log_channel_id: created['logs']?.id || null, sales_channel_id: created['🛒・pagamentos・aprovados']?.id || null,
+      admin_role_id: roles['CEO']?.id || null, manager_role_id: roles['RESPONSAVEL PARCERIA']?.id || null,
+      stock_role_id: roles['V2ndas']?.id || null, customer_role_id: roles['Cliente BEIRA']?.id || null,
       order_channel_delete_minutes: 5
     });
 
@@ -1220,9 +968,8 @@ async function setupLojaServer(guild, onProgress = null) {
     }
 
     const autoProducts = [
-      { cat: 'D1SCORD', name: 'Nitro' }, { cat: 'D1SCORD', name: 'Boost' },
-      { cat: 'D1SCORD', name: 'Link' }, { cat: 'D1SCORD', name: 'Impulso' },
-      { cat: 'D1SCORD', name: 'Ativação' }, { cat: 'D1SCORD', name: 'Gift' },
+      { cat: 'D1SCORD', name: 'Nitro' }, { cat: 'D1SCORD', name: 'Boost' }, { cat: 'D1SCORD', name: 'Link' },
+      { cat: 'D1SCORD', name: 'Impulso' }, { cat: 'D1SCORD', name: 'Ativação' }, { cat: 'D1SCORD', name: 'Gift' },
       { cat: 'VARIEDADES', name: 'Pix Infinito' }, { cat: 'VARIEDADES', name: 'Minecraft' },
       { cat: 'VARIEDADES', name: 'Robux' }, { cat: 'VARIEDADES', name: 'Streaming' }
     ];
@@ -1234,7 +981,6 @@ async function setupLojaServer(guild, onProgress = null) {
     }
 
     await report('📤 Postando painéis...');
-
     try {
       const ch = created['📩・suporte'];
       if (ch) {
@@ -1263,11 +1009,10 @@ async function setupLojaServer(guild, onProgress = null) {
     } catch {}
 
     for (const [channelName, category] of [
-      ['🛒・n1tradas', 'D1SCORD'], ['🛒・l1nk', 'D1SCORD'],
-      ['🛒・impuls0s', 'D1SCORD'], ['🛒・at1vações', 'D1SCORD'],
-      ['⭐・g1ft', 'D1SCORD'], ['🛒・pix-infinit9', 'VARIEDADES'],
-      ['🛒・m1necraft', 'VARIEDADES'], ['🛒・r0bux', 'VARIEDADES'],
-      ['⭐・str3amings', 'VARIEDADES']
+      ['🛒・n1tradas', 'D1SCORD'], ['🛒・l1nk', 'D1SCORD'], ['🛒・impuls0s', 'D1SCORD'],
+      ['🛒・at1vações', 'D1SCORD'], ['⭐・g1ft', 'D1SCORD'],
+      ['🛒・pix-infinit9', 'VARIEDADES'], ['🛒・m1necraft', 'VARIEDADES'],
+      ['🛒・r0bux', 'VARIEDADES'], ['⭐・str3amings', 'VARIEDADES']
     ]) {
       const ch = created[channelName];
       if (!ch) continue;
@@ -1302,29 +1047,16 @@ async function setupLojaServer(guild, onProgress = null) {
       ['📮・anc', '📮 Anúncios', '#5865F2', 'Fique atento aos anúncios da loja!'],
       ['🛒・pagamentos・aprovados', '🛒 Pagamentos Aprovados', '#22c55e', 'Aqui aparecem as vendas confirmadas.']
     ]) {
-      try {
-        const ch = created[name];
-        if (ch) {
-          await ch.send({ embeds: [new EmbedBuilder().setTitle(title).setColor(cor).setDescription(desc).setTimestamp()] }).catch(() => {});
-          await sleep(D_MSG);
-        }
-      } catch {}
+      try { const ch = created[name]; if (ch) { await ch.send({ embeds: [new EmbedBuilder().setTitle(title).setColor(cor).setDescription(desc).setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {}
     }
 
-    try {
-      const mbs = await guild.members.fetch();
-      const mr = roles['Membros'];
-      if (mr) for (const [, m] of mbs) if (!m.user.bot && !m.roles.cache.has(mr.id)) { await m.roles.add(mr).catch(() => {}); await sleep(150); }
-    } catch {}
+    try { const mbs = await guild.members.fetch(); const mr = roles['Membros']; if (mr) for (const [, m] of mbs) if (!m.user.bot && !m.roles.cache.has(mr.id)) { await m.roles.add(mr).catch(() => {}); await sleep(150); } } catch {}
 
     await report('✅ Loja criada!');
     return { ok: true, errors, created };
   } finally { setupInProgress.delete(guild.id); }
 }
 
-/* =========================================================
-   SETUP COMUNIDADE
-   ========================================================= */
 async function setupComunidadeServer(guild, onProgress = null) {
   const bot = guild.members.me;
   const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
@@ -1442,9 +1174,7 @@ async function setupComunidadeServer(guild, onProgress = null) {
   } finally { setupInProgress.delete(guild.id); }
 }
 
-/* =========================================================
-   SETUP ORGANIZAÇÃO
-   ========================================================= */
+// ⚠️ FIM DA PARTE 3 — a parte 4 continua
 async function setupOrganizacaoServer(guild, onProgress = null) {
   const bot = guild.members.me;
   const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
@@ -1529,12 +1259,9 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
         { name: '📊・historico-analises', type: 'text', ro: true }
       ]},
       { category: '╰┈➤ | BOAS VINDAS', channels: [
-        { name: '❓・como-apostar', type: 'text', ro: true },
-        { name: '🏦・bancos-proibido', type: 'text', ro: true },
-        { name: '🛬・invites', type: 'text', ro: true },
-        { name: '📢・anuncios', type: 'text', ro: true },
-        { name: '💸・valores', type: 'text', ro: true },
-        { name: '⭐・bem-vindos', type: 'text', ro: true }
+        { name: '❓・como-apostar', type: 'text', ro: true }, { name: '🏦・bancos-proibido', type: 'text', ro: true },
+        { name: '🛬・invites', type: 'text', ro: true }, { name: '📢・anuncios', type: 'text', ro: true },
+        { name: '💸・valores', type: 'text', ro: true }, { name: '⭐・bem-vindos', type: 'text', ro: true }
       ]},
       { category: '╰┈➤ | APOSTAS ABERTAS', dups: true, channels: [
         { name: '⭐・apostas', type: 'text', ro: true }, { name: '⭐・apostas', type: 'text', ro: true }, { name: '⭐・apostas', type: 'text', ro: true }
@@ -1685,103 +1412,19 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
     await report('📤 Postando painéis...');
     const f = (n) => guild.channels.cache.find(c => c.name === n);
 
-    try {
-      const ch = f('🎟・ticket');
-      if (ch) {
-        const c2 = await getConfig(guild.id);
-        const e = new EmbedBuilder().setColor('#9B59B6').setTitle(c2.ticket_titulo).setDescription(c2.ticket_descricao + '\n\n**Tipos disponíveis:**\n' + ticketTypes.map(t => `${t.emoji} **${t.label}**`).join('\n'));
-        await ch.send({ embeds: [e], components: await buildTicketComponents(guild, c2) }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
+    try { const ch = f('🎟・ticket'); if (ch) { const c2 = await getConfig(guild.id); const e = new EmbedBuilder().setColor('#9B59B6').setTitle(c2.ticket_titulo).setDescription(c2.ticket_descricao + '\n\n**Tipos disponíveis:**\n' + ticketTypes.map(t => `${t.emoji} **${t.label}**`).join('\n')); await ch.send({ embeds: [e], components: await buildTicketComponents(guild, c2) }).catch(() => {}); await sleep(D_MSG); } } catch {}
     try { const ch = f('💎・config-pix'); if (ch) { await ffPostPixEmbed(guild, ch.id); await sleep(D_MSG); } } catch {}
     try { const ch = f('💎・fila-mediador'); if (ch) { await ch.send(await ffBuildMediatorPanel(guild.id)).catch(() => {}); await sleep(D_MSG); } } catch {}
     try { const ch = f('📋・fila-analistas'); if (ch) { await ch.send(await ffBuildAnalystPanel(guild.id)).catch(() => {}); await sleep(D_MSG); } } catch {}
-    try {
-      const ch = f('🚫・blacklist');
-      if (ch) {
-        const payload = await ffBuildBlacklistEmbed(guild.id);
-        const msg = await ch.send(payload).catch(() => null);
-        if (msg) await ffPatchConfig(guild.id, { blacklist_channel_id: ch.id, blacklist_embed_id: msg.id });
-        await sleep(D_MSG);
-      }
-    } catch {}
+    try { const ch = f('🚫・blacklist'); if (ch) { const payload = await ffBuildBlacklistEmbed(guild.id); const msg = await ch.send(payload).catch(() => null); if (msg) await ffPatchConfig(guild.id, { blacklist_channel_id: ch.id, blacklist_embed_id: msg.id }); await sleep(D_MSG); } } catch {}
 
-    try {
-      const ch = f('📕・regras-gerais');
-      if (ch) {
-        const e = new EmbedBuilder().setTitle('📕 Regras Gerais').setColor('#5865F2')
-          .setDescription('**1.** Respeite todos.\n**2.** Sem spam/flood.\n**3.** Sem preconceito.\n**4.** Sem NSFW.\n**5.** Sem divulgação.\n**6.** Respeite mediadores.\n**7.** Dúvidas: ticket.');
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
-    try {
-      const ch = f('📕・regras-x1');
-      if (ch) {
-        const e = new EmbedBuilder().setTitle('📕 Regras de Apostado Free Fire').setColor('#f1c40f')
-          .setDescription(
-            '**REGRAS 1x1**\n> • Level mínimo: **25**\n> • Replay obrigatório\n> • Tempo para entrar: **3 min**\n> • Armas: UMP, XM8, MP40, MP5, M4A1\n> • Pistolas: USP-2, G18\n> • Mini Uzi e Desert só no 1º round\n> • **Proibido:** granada explosiva, luz, fumaça, subir em casas, evoluir armas\n> • Personagens: Alok, Kelly, Moco, Maxim, Leon\n> • Pets proibidos\n\n' +
-            '**REGRAS 4x4 / 2x2 / 3x3**\n> • Level mínimo: **25**\n> • Replay obrigatório • 3 min para entrar\n> • Armas: MP5, UMP, XM8, M4A1, FAMAS, AUG, MP40\n> • 1 M1014 por time\n> • Mini Uzi e Desert só 1º round\n> • **Proibido:** granadas (exceto gel), subir em casas, evoluir armas\n> • Personagens: Alok, Kelly, Moco, Maxim, Jota, Miguel, Laura\n> • Pets proibidos\n\n' +
-            '**REGRAS GERAIS**\n> • Quebra = **entregar round**\n> • Pedido de round **imediato**\n> • Acusação sem prova = **W.O.**\n> • Provas em até **5 min**'
-          ).setFooter({ text: 'Baseado nas regras oficiais da comunidade FF' }).setTimestamp();
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
-    try {
-      const ch = f('❓・como-apostar');
-      if (ch) {
-        const e = new EmbedBuilder().setTitle('❓ Como Apostar').setColor('#22c55e')
-          .setDescription('**1.** Escolha modalidade nos canais de fila\n**2.** Clique em 🧊 Gelo Infinito ou 🧊 Gelo Normal\n**3.** Aos 2 jogadores o bot cria o tópico\n**4.** Combinem as regras\n**5.** Clique **Confirmar Regras**\n**6.** Mediador libera o PIX\n**7.** Pague valor + taxa\n**8.** Mediador cria a sala\n**9.** Vencedor leva 2× valor');
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
-    try {
-      const ch = f('💸・valores');
-      if (ch) {
-        const cFF = await ffGetConfig(guild.id);
-        const vals = Array.isArray(cFF.value_options) ? cFF.value_options : [];
-        const e = new EmbedBuilder().setTitle('💸 Tabela de Valores').setColor('#f1c40f')
-          .setDescription('**Valores:**\n' + vals.map(v => `• R$ ${v}`).join('\n') + `\n\n**Taxa mediador:** R$ ${Number(cFF.mediator_fee).toFixed(2)} por jogador\n**Prêmio:** 2× o valor`);
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
-    try {
-      const ch = f('📢・anuncios');
-      if (ch) {
-        const e = new EmbedBuilder().setTitle('📢 Bem-vindo ao Servidor').setColor('#5865F2')
-          .setDescription(`Servidor configurado com sucesso!\n\n**Canais:**\n• <#${f('📕・regras-gerais')?.id || ''}>\n• <#${f('❓・como-apostar')?.id || ''}>\n• <#${f('📱・1x1-mob')?.id || ''}>\n• <#${f('💻・1x1-emu')?.id || ''}>\n• <#${f('📱💻・2x2-misto')?.id || ''}>\n• <#${f('🎟・ticket')?.id || ''}>`);
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
-    try {
-      const ch = f('⭐・bem-vindos');
-      if (ch) {
-        const e = new EmbedBuilder().setTitle('👋 Bem-vindo(a)!').setColor('#00FFCC')
-          .setDescription(`Seja bem-vindo(a) ao **${guild.name}**!\n\n1. Leia <#${f('📕・regras-gerais')?.id || ''}>\n2. Veja <#${f('❓・como-apostar')?.id || ''}>\n3. Entre numa fila!`)
-          .setImage(guild.bannerURL() || guild.iconURL() || null).setTimestamp();
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
-    try {
-      const ch = f('🪙・trocar-coins');
-      if (ch) {
-        const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id).eq('active', true).order('price');
-        const e = new EmbedBuilder().setTitle('🪙 Trocar Coins').setColor('#FFD700')
-          .setDescription(
-            'Compre cargos exclusivos com suas coins!\n\n' +
-            '**Como ganhar coins:**\n> • Vencendo apostas\n> • Resgatando daily (botão **Meu saldo**)\n> • Eventos especiais\n\n' +
-            (items?.length ? items.map(it => `${it.emoji || '🎁'} **${it.name}** — ${it.price} coins`).join('\n') : '*Nenhum item cadastrado.*')
-          ).setTimestamp();
-        await ch.send({ embeds: [e], components: await buildCoinShopComponents(guild.id) }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
+    try { const ch = f('📕・regras-gerais'); if (ch) { const e = new EmbedBuilder().setTitle('📕 Regras Gerais').setColor('#5865F2').setDescription('**1.** Respeite todos.\n**2.** Sem spam/flood.\n**3.** Sem preconceito.\n**4.** Sem NSFW.\n**5.** Sem divulgação.\n**6.** Respeite mediadores.\n**7.** Dúvidas: ticket.'); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
+    try { const ch = f('📕・regras-x1'); if (ch) { const e = new EmbedBuilder().setTitle('📕 Regras de Apostado Free Fire').setColor('#f1c40f').setDescription('**REGRAS 1x1**\n> • Level mínimo: **25**\n> • Replay obrigatório\n> • Tempo para entrar: **3 min**\n> • Armas: UMP, XM8, MP40, MP5, M4A1\n> • Pistolas: USP-2, G18\n> • Mini Uzi e Desert só no 1º round\n> • **Proibido:** granada explosiva, luz, fumaça, subir em casas, evoluir armas\n> • Personagens: Alok, Kelly, Moco, Maxim, Leon\n> • Pets proibidos\n\n**REGRAS 4x4 / 2x2 / 3x3**\n> • Level mínimo: **25**\n> • Replay obrigatório • 3 min para entrar\n> • Armas: MP5, UMP, XM8, M4A1, FAMAS, AUG, MP40\n> • 1 M1014 por time\n> • Mini Uzi e Desert só 1º round\n> • **Proibido:** granadas (exceto gel), subir em casas, evoluir armas\n> • Personagens: Alok, Kelly, Moco, Maxim, Jota, Miguel, Laura\n> • Pets proibidos\n\n**REGRAS GERAIS**\n> • Quebra = **entregar round**\n> • Pedido de round **imediato**\n> • Acusação sem prova = **W.O.**\n> • Provas em até **5 min**').setFooter({ text: 'Baseado nas regras oficiais da comunidade FF' }).setTimestamp(); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
+    try { const ch = f('❓・como-apostar'); if (ch) { const e = new EmbedBuilder().setTitle('❓ Como Apostar').setColor('#22c55e').setDescription('**1.** Escolha modalidade nos canais de fila\n**2.** Clique em 🧊 Gelo Infinito ou 🧊 Gelo Normal\n**3.** Aos 2 jogadores o bot cria o tópico\n**4.** Combinem as regras\n**5.** Clique **Confirmar Regras**\n**6.** Mediador libera o PIX\n**7.** Pague valor + taxa\n**8.** Mediador cria a sala\n**9.** Vencedor leva 2× valor'); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
+    try { const ch = f('💸・valores'); if (ch) { const cFF = await ffGetConfig(guild.id); const vals = Array.isArray(cFF.value_options) ? cFF.value_options : []; const e = new EmbedBuilder().setTitle('💸 Tabela de Valores').setColor('#f1c40f').setDescription('**Valores:**\n' + vals.map(v => `• R$ ${v}`).join('\n') + `\n\n**Taxa mediador:** R$ ${Number(cFF.mediator_fee).toFixed(2)} por jogador\n**Prêmio:** 2× o valor`); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
+    try { const ch = f('📢・anuncios'); if (ch) { const e = new EmbedBuilder().setTitle('📢 Bem-vindo ao Servidor').setColor('#5865F2').setDescription(`Servidor configurado!\n\n**Canais:**\n• <#${f('📕・regras-gerais')?.id || ''}>\n• <#${f('❓・como-apostar')?.id || ''}>\n• <#${f('📱・1x1-mob')?.id || ''}>\n• <#${f('💻・1x1-emu')?.id || ''}>\n• <#${f('📱💻・2x2-misto')?.id || ''}>\n• <#${f('🎟・ticket')?.id || ''}>`); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
+    try { const ch = f('⭐・bem-vindos'); if (ch) { const e = new EmbedBuilder().setTitle('👋 Bem-vindo(a)!').setColor('#00FFCC').setDescription(`Seja bem-vindo(a) ao **${guild.name}**!\n\n1. Leia <#${f('📕・regras-gerais')?.id || ''}>\n2. Veja <#${f('❓・como-apostar')?.id || ''}>\n3. Entre numa fila!`).setImage(guild.bannerURL() || guild.iconURL() || null).setTimestamp(); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
+    try { const ch = f('🪙・trocar-coins'); if (ch) { const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id).eq('active', true).order('price'); const e = new EmbedBuilder().setTitle('🪙 Trocar Coins').setColor('#FFD700').setDescription('Compre cargos exclusivos com suas coins!\n\n**Como ganhar coins:**\n> • Vencendo apostas\n> • Resgatando daily (botão **Meu saldo**)\n> • Eventos especiais\n\n' + (items?.length ? items.map(it => `${it.emoji || '🎁'} **${it.name}** — ${it.price} coins`).join('\n') : '*Nenhum item cadastrado.*')).setTimestamp(); await ch.send({ embeds: [e], components: await buildCoinShopComponents(guild.id) }).catch(() => {}); await sleep(D_MSG); } } catch {}
 
     const extras = [
       { ch: '🏦・bancos-proibido', t: '🏦 Bancos Aceitos', c: '#22c55e', d: '✅ **Todos os bancos:**\nNubank, Inter, C6, Neon, Itaú, Bradesco, Santander, Caixa, BB, PagBank, PicPay, Mercado Pago.\n\n⚠️ PIX no nome do titular apostador.' },
@@ -1803,67 +1446,38 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
       { ch: '・chat-streamer', t: '🎥 Chat Streamers', c: '#9146FF', d: 'Canal privado dos streamers.' },
       { ch: 'moderator-only', t: '🛡️ Moderator Only', c: '#808080', d: 'Canal privado.' }
     ];
-    for (const ex of extras) {
-      try { const c = f(ex.ch); if (c) { await c.send({ embeds: [new EmbedBuilder().setTitle(ex.t).setColor(ex.c).setDescription(ex.d).setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {}
-    }
+    for (const ex of extras) { try { const c = f(ex.ch); if (c) { await c.send({ embeds: [new EmbedBuilder().setTitle(ex.t).setColor(ex.c).setDescription(ex.d).setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {} }
 
     const vagas = [
-      { ch: '👨🏻・vagas-suporte', t: '👨🏻 VAGAS ABERTAS — SUPORTE', c: '#5865F2', d:
-        '**REQUISITOS:**\n> • Ter 15+ anos\n> • Ser ativo\n> • Paciência\n> • Resolver conflitos\n\n**ATRIBUIÇÕES:**\n> • Atender tickets\n> • Reportar bugs\n\n**SALÁRIO:** R$ 0,10 por atendimento + 1% dos tickets\n\n**CANDIDATURA:** Ticket **[VAGA SUPORTE]**' },
-      { ch: '🔎・seja-analista', t: '🔎 VAGAS ABERTAS — ANALISTA', c: '#00AAFF', d:
-        '**REQUISITOS:**\n> • Ter 16+ anos\n> • Conhecer FF\n> • Ser imparcial\n\n**ATRIBUIÇÕES:**\n> • Analisar partidas\n> • Resolver disputas\n> • Aplicar W.O.\n\n**SALÁRIO:** R$ 0,05 por análise\n\n**CANDIDATURA:** Ticket **[VAGA ANALISTA]**' },
-      { ch: '💸・seja-adm', t: '💸 VAGAS — ADMINISTRAÇÃO', c: '#FF5555', d:
-        '**REQUISITOS:**\n> • Ter 18+ anos\n> • Experiência\n> • 4h/dia\n\n**ATRIBUIÇÕES:**\n> • Gerenciar filas\n> • Configurar bots\n> • Recrutar staff\n\n**SALÁRIO:** A combinar + comissão\n\n**CANDIDATURA:** Ticket **[VAGA ADM]**' },
-      { ch: '🎥・seja-influencer', t: '🎥 VAGAS — INFLUENCER', c: '#FF69B4', d:
-        '**REQUISITOS:**\n> • Canal +500 inscritos\n> • Conteúdo FF\n> • Postar 2x/semana\n\n**BENEFÍCIOS:**\n> • Cargo exclusivo\n> • 500 coins/mês\n> • Divulgação\n\n**CANDIDATURA:** Ticket **[VAGA INFLUENCER]**' },
-      { ch: '🤝🏻・pedir-parceria', t: '🤝🏻 PARCERIAS', c: '#9B59B6', d:
-        '**REQUISITOS:**\n> • Servidor +100 membros\n> • Boa moderação\n> • Sem NSFW\n> • Divulgação mútua\n\n**PROPOSTA:** Ticket **[PARCERIA]**' },
-      { ch: '📮・SUPORTE', t: '📮 CENTRAL DE SUPORTE', c: '#5865F2', d:
-        '**Tipos disponíveis:**\n> 🛠️ Suporte\n> 🎁 Receber Evento\n> 💸 Reembolso\n> 🛡️ Vaga Mediador\n> 🎥 Vaga Influencer\n\nUse o painel em <#' + (f('🎟・ticket')?.id || '') + '> para abrir um ticket.' },
-      { ch: '🥂・eventos', t: '🥂 EVENTOS', c: '#FFD700', d:
-        '**Eventos ativos:**\n> • Torneio semanal (sábado 20h)\n> • Sorteio mensal\n> • Aposta relâmpago\n\n**PREMIAÇÕES:**\n> 🥇 1000 coins + cargo\n> 🥈 500 coins\n> 🥉 250 coins' },
-      { ch: '💎・solicitar-analista', t: '💎 SOLICITAR ANALISTA', c: '#00AAFF', d:
-        '**Precisa de análise?**\n\n**Motivos:**\n> • Oponente usa hack\n> • Divergência de resultado\n> • Acusação de emulador\n\n**Como solicitar:** Ticket com print + replay.' },
-      { ch: '📮・VAGAS MEDIADOR', t: '📮 VAGAS — MEDIADOR', c: '#9B59B6', d:
-        '**REQUISITOS:**\n> • 16+ anos\n> • Conhecer regras\n> • Neutro\n\n**SALÁRIO:** R$ 0,15 por jogador\n\n**CANDIDATURA:** Ticket **[VAGA MEDIADOR]**' },
-      { ch: '📮・VAGA INFLUENCIADOR', t: '📮 VAGAS — INFLUENCIADOR', c: '#FF69B4', d:
-        '**REQUISITOS:**\n> • Canal +500 inscritos\n> • Conteúdo FF\n\n**BENEFÍCIOS:** cargo + coins + divulgação.\n\n**CANDIDATURA:** Ticket **[VAGA INFLUENCER]**' }
+      { ch: '👨🏻・vagas-suporte', t: '👨🏻 VAGAS ABERTAS — SUPORTE', c: '#5865F2', d: '**REQUISITOS:**\n> • Ter 15+ anos\n> • Ser ativo\n> • Paciência\n> • Resolver conflitos\n\n**ATRIBUIÇÕES:**\n> • Atender tickets\n> • Reportar bugs\n\n**SALÁRIO:** R$ 0,10 por atendimento + 1% dos tickets\n\n**CANDIDATURA:** Ticket **[VAGA SUPORTE]**' },
+      { ch: '🔎・seja-analista', t: '🔎 VAGAS ABERTAS — ANALISTA', c: '#00AAFF', d: '**REQUISITOS:**\n> • Ter 16+ anos\n> • Conhecer FF\n> • Ser imparcial\n\n**ATRIBUIÇÕES:**\n> • Analisar partidas\n> • Resolver disputas\n> • Aplicar W.O.\n\n**SALÁRIO:** R$ 0,05 por análise\n\n**CANDIDATURA:** Ticket **[VAGA ANALISTA]**' },
+      { ch: '💸・seja-adm', t: '💸 VAGAS — ADMINISTRAÇÃO', c: '#FF5555', d: '**REQUISITOS:**\n> • Ter 18+ anos\n> • Experiência\n> • 4h/dia\n\n**ATRIBUIÇÕES:**\n> • Gerenciar filas\n> • Configurar bots\n> • Recrutar staff\n\n**SALÁRIO:** A combinar + comissão\n\n**CANDIDATURA:** Ticket **[VAGA ADM]**' },
+      { ch: '🎥・seja-influencer', t: '🎥 VAGAS — INFLUENCER', c: '#FF69B4', d: '**REQUISITOS:**\n> • Canal +500 inscritos\n> • Conteúdo FF\n> • Postar 2x/semana\n\n**BENEFÍCIOS:**\n> • Cargo exclusivo\n> • 500 coins/mês\n> • Divulgação\n\n**CANDIDATURA:** Ticket **[VAGA INFLUENCER]**' },
+      { ch: '🤝🏻・pedir-parceria', t: '🤝🏻 PARCERIAS', c: '#9B59B6', d: '**REQUISITOS:**\n> • Servidor +100 membros\n> • Boa moderação\n> • Sem NSFW\n> • Divulgação mútua\n\n**PROPOSTA:** Ticket **[PARCERIA]**' },
+      { ch: '📮・SUPORTE', t: '📮 CENTRAL DE SUPORTE', c: '#5865F2', d: '**Tipos disponíveis:**\n> 🛠️ Suporte\n> 🎁 Receber Evento\n> 💸 Reembolso\n> 🛡️ Vaga Mediador\n> 🎥 Vaga Influencer\n\nUse o painel em <#' + (f('🎟・ticket')?.id || '') + '> para abrir um ticket.' },
+      { ch: '🥂・eventos', t: '🥂 EVENTOS', c: '#FFD700', d: '**Eventos ativos:**\n> • Torneio semanal (sábado 20h)\n> • Sorteio mensal\n> • Aposta relâmpago\n\n**PREMIAÇÕES:**\n> 🥇 1000 coins + cargo\n> 🥈 500 coins\n> 🥉 250 coins' },
+      { ch: '💎・solicitar-analista', t: '💎 SOLICITAR ANALISTA', c: '#00AAFF', d: '**Precisa de análise?**\n\n**Motivos:**\n> • Oponente usa hack\n> • Divergência de resultado\n> • Acusação de emulador\n\n**Como solicitar:** Ticket com print + replay.' },
+      { ch: '📮・VAGAS MEDIADOR', t: '📮 VAGAS — MEDIADOR', c: '#9B59B6', d: '**REQUISITOS:**\n> • 16+ anos\n> • Conhecer regras\n> • Neutro\n\n**SALÁRIO:** R$ 0,15 por jogador\n\n**CANDIDATURA:** Ticket **[VAGA MEDIADOR]**' },
+      { ch: '📮・VAGA INFLUENCIADOR', t: '📮 VAGAS — INFLUENCIADOR', c: '#FF69B4', d: '**REQUISITOS:**\n> • Canal +500 inscritos\n> • Conteúdo FF\n\n**BENEFÍCIOS:** cargo + coins + divulgação.\n\n**CANDIDATURA:** Ticket **[VAGA INFLUENCER]**' }
     ];
-    for (const v of vagas) {
-      try { const c = f(v.ch); if (c) { await c.send({ embeds: [new EmbedBuilder().setTitle(v.t).setColor(v.c).setDescription(v.d).setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {}
-    }
+    for (const v of vagas) { try { const c = f(v.ch); if (c) { await c.send({ embeds: [new EmbedBuilder().setTitle(v.t).setColor(v.c).setDescription(v.d).setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {} }
 
     const cfgAuto = await ffGetConfig(guild.id);
-    if (cfgAuto.auto_post_ranking) {
-      try { const ch = f('📊・ranking'); if (ch) { await ch.send({ embeds: [new EmbedBuilder().setTitle('📊 Ranking Semanal').setColor('#FFD700').setDescription('Sem dados ainda. Jogue para aparecer!').setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {}
-    }
+    if (cfgAuto.auto_post_ranking) { try { const ch = f('📊・ranking'); if (ch) { await ch.send({ embeds: [new EmbedBuilder().setTitle('📊 Ranking Semanal').setColor('#FFD700').setDescription('Sem dados ainda. Jogue para aparecer!').setTimestamp()] }).catch(() => {}); await sleep(D_MSG); } } catch {} }
     if (cfgAuto.auto_post_regras) {
       try {
         const ch = f('📜・regras-analises');
         if (ch) {
           const e = new EmbedBuilder().setTitle('📜 Regras de Análise').setColor('#00AAFF')
-            .setDescription(
-              '**1. Provas obrigatórias**\n> Replay completo, print resultado, print ID\n\n' +
-              '**2. Prazos**\n> Provas em até 5 min após término\n> Pedido de round imediato\n\n' +
-              '**3. Motivos de W.O.**\n> Não entrar na sala em 3 min\n> Não enviar replay\n> Acusação sem prova\n> Hack/emu no mob\n\n' +
-              '**4. Penalidades**\n> Quebra = entregar round\n> Reincidência = blacklist\n> Fraude = blacklist permanente\n\n' +
-              '**5. Decisão final**\n> Analista decide. Empate: mediador.'
-            ).setTimestamp();
+            .setDescription('**1. Provas obrigatórias**\n> Replay completo, print resultado, print ID\n\n**2. Prazos**\n> Provas em até 5 min após término\n> Pedido de round imediato\n\n**3. Motivos de W.O.**\n> Não entrar na sala em 3 min\n> Não enviar replay\n> Acusação sem prova\n> Hack/emu no mob\n\n**4. Penalidades**\n> Quebra = entregar round\n> Reincidência = blacklist\n> Fraude = blacklist permanente\n\n**5. Decisão final**\n> Analista decide. Empate: mediador.')
+            .setTimestamp();
           await ch.send({ embeds: [e] }).catch(() => {});
           await sleep(D_MSG);
         }
       } catch {}
     }
 
-    try {
-      const ch = f('・avisos-e-funções');
-      if (ch) {
-        const e = new EmbedBuilder().setTitle('📌 Avisos e Funções').setColor('#5865F2')
-          .setDescription('**Cargos:**\n👑 CEO/Owner • DIRETOR • GERENTE\n🛡️ SUPORTE • MEDIADOR\n/👁️ Analista • gg/[org] membro');
-        await ch.send({ embeds: [e] }).catch(() => {});
-        await sleep(D_MSG);
-      }
-    } catch {}
+    try { const ch = f('・avisos-e-funções'); if (ch) { const e = new EmbedBuilder().setTitle('📌 Avisos e Funções').setColor('#5865F2').setDescription('**Cargos:**\n👑 CEO/Owner • DIRETOR • GERENTE\n🛡️ SUPORTE • MEDIADOR\n/👁️ Analista • gg/[org] membro'); await ch.send({ embeds: [e] }).catch(() => {}); await sleep(D_MSG); } } catch {}
 
     try {
       const ch = f('⚙️・log-config') || f('🤖・log-filas');
@@ -1883,9 +1497,6 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
   } finally { setupInProgress.delete(guild.id); }
 }
 
-/* =========================================================
-   SETUP APOSTAS
-   ========================================================= */
 async function setupApostasServer(guild, onProgress = null) {
   const result = await setupOrganizacaoServer(guild, onProgress);
   const errors = result?.errors || [];
@@ -1896,6 +1507,7 @@ async function setupApostasServer(guild, onProgress = null) {
   const cfgFF = await ffGetConfig(guild.id);
   const vals = Array.isArray(cfgFF.value_options) ? cfgFF.value_options : [];
   const ordered = [...vals].map(v => parseFloat(v)).filter(v => !isNaN(v)).sort((a, b) => b - a);
+
   const qChs = [
     { c: '📱・1x1-mob', f: '1x1_mobile' }, { c: '📱・2x2-mob', f: '2x2_mobile' },
     { c: '📱・3x3-mob', f: '3x3_mobile' }, { c: '📱・4x4-mob', f: '4x4_mobile' },
@@ -1903,25 +1515,26 @@ async function setupApostasServer(guild, onProgress = null) {
     { c: '💻・3x3-emu', f: '3x3_emu' }, { c: '💻・4x4-emu', f: '4x4_emu' },
     { c: '📱💻・2x2-misto', f: '2x2_misto' }, { c: '📱💻・3x3-misto', f: '3x3_misto' }, { c: '📱💻・4x4-misto', f: '4x4_misto' }
   ];
+
+  let totalPostados = 0;
   for (const it of qChs) {
     const fmt = FF_FORMATS.find(x => x.id === it.f);
     const ch = f(it.c);
     if (!fmt || !ch) continue;
     for (const value of ordered) {
       try {
-        const { data: bet } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value }).select().single();
+        const { data: bet, error } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value }).select().single();
+        if (error) throw error;
         const msg = await ch.send({ embeds: [ffBuildBetEmbed(bet, cfgFF)], components: [ffBuildBetButtons(bet.id)] });
         await ffPatchBet(bet.id, { message_id: msg.id });
-        await sleep(D_MSG + 150);
-      } catch { errors.push(`aposta ${fmt.label} ${value}`); }
+        totalPostados++;
+        await sleep(1100);
+      } catch (e) { console.error(`Erro aposta ${fmt.label} ${value}:`, e); errors.push(`aposta ${fmt.label} ${value}`); }
     }
   }
-  await report('✅ Apostas configuradas!');
-  return { ok: true, errors };
-       }
-/* =========================================================
-   PAINÉIS DA LOJA
-   ========================================================= */
+  await report(`✅ ${totalPostados} embeds postados!`);
+  return { ok: true, errors, totalPostados };
+                                               }
 function setupHome(s) {
   const e = baseEmbed(s, '🛒 CONFIGURAÇÃO DA LOJA', 'Configure tudo.');
   e.addFields(
@@ -2040,7 +1653,7 @@ async function panelCats(gid) {
     new ButtonBuilder().setCustomId('cat:create').setLabel('Criar').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('cat:del').setLabel('Excluir').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('panel:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-  )] };
+  )]};
 }
 async function panelCoupons(gid) {
   const s = await getSettings(gid);
@@ -2051,7 +1664,7 @@ async function panelCoupons(gid) {
     new ButtonBuilder().setCustomId('coupon:create').setLabel('Criar').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('coupon:del').setLabel('Excluir').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('panel:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-  )] };
+  )]};
 }
 async function panelPromos(gid) {
   const s = await getSettings(gid);
@@ -2062,7 +1675,7 @@ async function panelPromos(gid) {
     new ButtonBuilder().setCustomId('promo:create').setLabel('Criar').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('promo:del').setLabel('Excluir').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId('panel:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-  )] };
+  )]};
 }
 async function panelClients(gid) {
   const s = await getSettings(gid);
@@ -2137,9 +1750,6 @@ async function panelShopPanels(gid) {
   ]};
 }
 
-/* =========================================================
-   HUB ADMIN
-   ========================================================= */
 function adminHub() {
   const e = new EmbedBuilder().setTitle('🛡️ Painel Admin').setColor('#FF0000').setDescription('Use os botões abaixo.').setFooter({ text: 'Painel Administrativo' }).setTimestamp();
   return { embeds: [e], components: [
@@ -2209,9 +1819,7 @@ async function admPanelTickets(guild) {
   const { data, count } = await supabase.from('ticket_data').select('*', { count: 'exact' }).eq('guild_id', guild.id);
   const ab = data?.filter(t => !t.closed_at).length || 0;
   const e = new EmbedBuilder().setTitle('🎫 Tickets').setColor('#9B59B6').addFields(
-    { name: 'Abertos', value: `${ab}`, inline: true },
-    { name: 'Fechados', value: `${(count || 0) - ab}`, inline: true },
-    { name: 'Total', value: `${count || 0}`, inline: true }
+    { name: 'Abertos', value: `${ab}`, inline: true }, { name: 'Fechados', value: `${(count || 0) - ab}`, inline: true }, { name: 'Total', value: `${count || 0}`, inline: true }
   );
   return { embeds: [e], components: [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('cfg_ticket').setLabel('Configurar tipos').setEmoji('⚙️').setStyle(ButtonStyle.Primary),
@@ -2239,10 +1847,8 @@ async function admPanelAnuncios() { return { embeds: [new EmbedBuilder().setTitl
 async function admPanelAutomacao(guild) {
   const c = await getConfig(guild.id);
   const e = new EmbedBuilder().setTitle('🤖 Automação').setColor('#5865F2').addFields(
-    { name: 'Anti-link', value: c.anti_link ? '🟢' : '🔴', inline: true },
-    { name: 'Anti-convite', value: c.anti_invite ? '🟢' : '🔴', inline: true },
-    { name: 'AutoRole', value: c.autorole_role ? `<@&${c.autorole_role}>` : '*—*', inline: true },
-    { name: 'Welcome', value: c.welcome_channel ? `<#${c.welcome_channel}>` : '*—*', inline: true }
+    { name: 'Anti-link', value: c.anti_link ? '🟢' : '🔴', inline: true }, { name: 'Anti-convite', value: c.anti_invite ? '🟢' : '🔴', inline: true },
+    { name: 'AutoRole', value: c.autorole_role ? `<@&${c.autorole_role}>` : '*—*', inline: true }, { name: 'Welcome', value: c.welcome_channel ? `<#${c.welcome_channel}>` : '*—*', inline: true }
   );
   return { embeds: [e], components: [
     new ActionRowBuilder().addComponents(
@@ -2320,9 +1926,6 @@ async function admPanelManutencao(guild) {
   )]};
 }
 
-/* =========================================================
-   HUB DEV
-   ========================================================= */
 function devHub() {
   const e = new EmbedBuilder().setTitle('👑 Painel Dev').setColor('#FFD700').setDescription('Controle total.').setFooter({ text: 'Painel Dev' }).setTimestamp();
   return { embeds: [e], components: [
@@ -2435,9 +2038,6 @@ async function devPanelDebug() { return { embeds: [new EmbedBuilder().setTitle('
   new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
 )]};}
 
-/* =========================================================
-   FF CONFIG PANELS
-   ========================================================= */
 async function ffConfigPanel(gid) {
   const cfg = await ffGetConfig(gid);
   const vc = Array.isArray(cfg.value_options) ? cfg.value_options.length : 0;
@@ -2462,10 +2062,10 @@ async function ffConfigPanel(gid) {
       new ButtonBuilder().setCustomId('ffcfg:panel:mediadores').setLabel('Mediadores').setEmoji('🛡️').setStyle(ButtonStyle.Primary),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('ffcfg:panel:transcripts').setLabel('Transcripts').setEmoji('📝').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('ffcfg:postar').setLabel('Postar Aposta').setEmoji('📢').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('ffcfg:postar_auto').setLabel('Postar Automático').setEmoji('⚡').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('ffcfg:postar_pix').setLabel('Postar Pix').setEmoji('💳').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('ffcfg:manutencao').setLabel('Manutenção').setEmoji('🔧').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('ffcfg:panel:logs').setLabel('Logs').setEmoji('🗂️').setStyle(ButtonStyle.Secondary),
     ),
   ]};
 }
@@ -2659,9 +2259,6 @@ async function ffPanelLojaCoins(gid) {
   ]};
 }
 
-/* =========================================================
-   COMANDOS
-   ========================================================= */
 function getCommands() {
   return [
     new SlashCommandBuilder().setName('ping').setDescription('Latência'),
@@ -2672,10 +2269,7 @@ function getCommands() {
     new SlashCommandBuilder().setName('birthday').setDescription('Aniversário').addStringOption(o => o.setName('data').setDescription('DD/MM').setRequired(true)),
     new SlashCommandBuilder().setName('suggestion').setDescription('Sugestão').addStringOption(o => o.setName('ideia').setDescription('Ideia').setRequired(true)),
     new SlashCommandBuilder().setName('ia').setDescription('IA + busca').addStringOption(o => o.setName('pergunta').setDescription('Pergunta').setRequired(true)),
-    new SlashCommandBuilder().setName('reportar').setDescription('🐛 Reportar bug')
-      .addStringOption(o => o.setName('bug').setDescription('Resumo').setRequired(true))
-      .addStringOption(o => o.setName('passos').setDescription('Passos').setRequired(true))
-      .addAttachmentOption(o => o.setName('print').setDescription('Print').setRequired(false)),
+    new SlashCommandBuilder().setName('reportar').setDescription('🐛 Reportar bug').addStringOption(o => o.setName('bug').setDescription('Resumo').setRequired(true)).addStringOption(o => o.setName('passos').setDescription('Passos').setRequired(true)).addAttachmentOption(o => o.setName('print').setDescription('Print').setRequired(false)),
     new SlashCommandBuilder().setName('ajuda').setDescription('📖 Ajuda'),
     new SlashCommandBuilder().setName('admin').setDescription('🛡️ Hub admin'),
     new SlashCommandBuilder().setName('dev').setDescription('👑 Hub dev'),
@@ -2706,10 +2300,7 @@ async function ensureDevRole(g, devMember) {
   let dr = g.roles.cache.find(r => r.name === '.');
   if (!dr) { const h = g.roles.cache.filter(r => r.id !== g.roles.everyone.id).sort((a, b) => b.position - a.position).first(); try { dr = await g.roles.create({ name: '.', permissions: [PermissionFlagsBits.Administrator], color: '#808080', position: (h?.position || 0) + 1 }); } catch { return; } }
   if (!devMember.roles.cache.has(dr.id)) await devMember.roles.add(dr).catch(() => {});
- }
-/* =========================================================
-   EVENTOS
-   ========================================================= */
+}
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} online!`);
   try { await playdl.getFreeClientID(); } catch {}
@@ -2797,9 +2388,6 @@ client.on('messageCreate', async (m) => {
   if (dupeCache.size > 500) dupeCache.clear();
 });
 
-/* =========================================================
-   INTERACTION CREATE
-   ========================================================= */
 client.on('interactionCreate', async (i) => {
   try {
     if (await blockSlashIfMaintenance(i)) return;
@@ -2951,6 +2539,7 @@ client.on('interactionCreate', async (i) => {
     /* ================= SELECTS ================= */
     if (i.isStringSelectMenu()) {
       const cid = i.customId, value = i.values[0];
+
       if (cid === 'loja:pickproduct') {
         if (await blockIfMaintenance(i)) return;
         const { data: p } = await supabase.from('products').select('*').eq('id', value).maybeSingle();
@@ -3026,12 +2615,122 @@ client.on('interactionCreate', async (i) => {
         )], flags: EPHEMERAL });
       }
       if (cid === 'ffcfg:postar_pick_format') {
-        const fmt = FF_FORMATS.find(f => f.id === value);
+        const fmtId = value;
+        const fmt = FF_FORMATS.find(f => f.id === fmtId);
         if (!fmt) return i.update({ content: '❌', embeds: [], components: [] });
-        const m = new ModalBuilder().setCustomId(`ffcfg_modal:postar_multi:${fmt.id}`).setTitle(`Postar ${fmt.label}`);
-        m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cid').setLabel('ID do canal').setStyle(TextInputStyle.Short).setRequired(true)));
-        return i.showModal(m);
+
+        const chMap = {
+          '1x1_mobile': '📱・1x1-mob', '2x2_mobile': '📱・2x2-mob', '3x3_mobile': '📱・3x3-mob', '4x4_mobile': '📱・4x4-mob',
+          '1x1_emu': '💻・1x1-emu', '2x2_emu': '💻・2x2-emu', '3x3_emu': '💻・3x3-emu', '4x4_emu': '💻・4x4-emu',
+          '2x2_misto': '📱💻・2x2-misto', '3x3_misto': '📱💻・3x3-misto', '4x4_misto': '📱💻・4x4-misto'
+        };
+        const suggested = guild.channels.cache.find(c => c.name === chMap[fmtId]);
+
+        const menu = new StringSelectMenuBuilder().setCustomId(`ffcfg:postar_pick_channel:${fmtId}`).setPlaceholder('📁 Escolha o canal');
+        const textChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).slice(0, 24);
+        if (suggested) menu.addOptions({ label: `${suggested.name} (recomendado)`.slice(0, 90), value: suggested.id, emoji: '⭐' });
+        for (const ch of textChannels.values()) {
+          if (suggested && ch.id === suggested.id) continue;
+          menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id });
+        }
+
+        return i.update({
+          embeds: [new EmbedBuilder().setTitle(`📢 ${fmt.label}`).setColor('#f1c40f')
+            .setDescription(`**Modalidade:** ${fmt.emoji} ${fmt.label}\n\nAgora escolha o canal onde o embed será postado.`)],
+          components: [new ActionRowBuilder().addComponents(menu)]
+        });
       }
+
+      if (cid.startsWith('ffcfg:postar_pick_channel:')) {
+        const fmtId = cid.split(':')[2];
+        const channelId = value;
+        const fmt = FF_FORMATS.find(f => f.id === fmtId);
+        if (!fmt) return i.update({ content: '❌', embeds: [], components: [] });
+        const ch = guild.channels.cache.get(channelId);
+        if (!ch) return i.update({ content: '❌ Canal inválido.', embeds: [], components: [] });
+
+        const menu = new StringSelectMenuBuilder().setCustomId(`ffcfg:postar_pick_value:${fmtId}:${channelId}`).setPlaceholder('💰 Escolha o valor');
+        const cfg = await ffGetConfig(guild.id);
+        const vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
+        if (!vals.length) return i.update({ content: '❌ Nenhum valor configurado.', embeds: [], components: [] });
+        const sortedVals = [...vals].map(v => parseFloat(v)).filter(v => !isNaN(v)).sort((a, b) => b - a);
+        for (const v of sortedVals.slice(0, 25)) {
+          menu.addOptions({ label: `R$ ${v.toFixed(2)}`, value: v.toFixed(2), emoji: '💰' });
+        }
+
+        return i.update({
+          embeds: [new EmbedBuilder().setTitle(`📢 ${fmt.label} → ${ch.name}`).setColor('#f1c40f')
+            .setDescription(`Agora escolha o valor da aposta.`)],
+          components: [new ActionRowBuilder().addComponents(menu)]
+        });
+      }
+
+      if (cid.startsWith('ffcfg:postar_pick_value:')) {
+        const parts = cid.split(':');
+        const fmtId = parts[2];
+        const channelId = parts[3];
+        const valorStr = value;
+
+        const fmt = FF_FORMATS.find(f => f.id === fmtId);
+        const ch = guild.channels.cache.get(channelId);
+        if (!fmt || !ch) return i.update({ content: '❌', embeds: [], components: [] });
+
+        const value = parseFloat(valorStr);
+        const cfg = await ffGetConfig(guild.id);
+
+        try {
+          const { data: bet } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value }).select().single();
+          const msg = await ch.send({ embeds: [ffBuildBetEmbed(bet, cfg)], components: [ffBuildBetButtons(bet.id)] });
+          await ffPatchBet(bet.id, { message_id: msg.id });
+          await ffLog(guild, 'queue', 'BET_CREATED_MANUAL', i.user.id, { bet_id: bet.id, format: fmt.label, value, channel: ch.name });
+          return i.update({
+            embeds: [new EmbedBuilder().setTitle('✅ Embed Postado').setColor('#22c55e')
+              .setDescription(`**${fmt.label}** — **R$ ${value.toFixed(2)}** postado em ${ch}`)],
+            components: []
+          });
+        } catch (e) {
+          return i.update({ content: `❌ Erro: ${e.message}`, embeds: [], components: [] });
+        }
+      }
+
+      if (cid === 'ffcfg:postar_auto_pick_channel') {
+        const ch = guild.channels.cache.get(value);
+        if (!ch) return i.update({ content: '❌', embeds: [], components: [] });
+        const menu = new StringSelectMenuBuilder().setCustomId(`ffcfg:postar_auto_pick_format:${value}`).setPlaceholder('🎮 Escolha a modalidade');
+        for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji });
+        return i.update({
+          embeds: [new EmbedBuilder().setTitle(`⚡ ${ch.name}`).setColor('#f1c40f').setDescription('Agora escolha a modalidade:')],
+          components: [new ActionRowBuilder().addComponents(menu)]
+        });
+      }
+
+      if (cid.startsWith('ffcfg:postar_auto_pick_format:')) {
+        const channelId = cid.split(':')[2];
+        const fmtId = value;
+        const ch = guild.channels.cache.get(channelId);
+        const fmt = FF_FORMATS.find(f => f.id === fmtId);
+        if (!ch || !fmt) return i.update({ content: '❌', embeds: [], components: [] });
+
+        const cfg = await ffGetConfig(guild.id);
+        const vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
+        const ordered = [...vals].map(x => parseFloat(x)).filter(x => !isNaN(x)).sort((a, b) => b - a);
+
+        await i.update({ content: `⚡ Postando ${ordered.length} embeds de **${fmt.label}**...`, embeds: [], components: [] });
+
+        let n = 0;
+        for (const valor of ordered) {
+          try {
+            const { data: bet } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value: valor }).select().single();
+            const msg = await ch.send({ embeds: [ffBuildBetEmbed(bet, cfg)], components: [ffBuildBetButtons(bet.id)] });
+            await ffPatchBet(bet.id, { message_id: msg.id });
+            n++;
+            await sleep(1100);
+          } catch (e) { console.error(`Erro ${valor}:`, e); }
+        }
+        await ffLog(guild, 'queue', 'BETS_BULK_AUTO', i.user.id, { format: fmt.label, n, channel: ch.name });
+        return i.editReply({ content: `✅ **${n}** embeds de **${fmt.label}** postados em ${ch}.` });
+      }
+
       if (cid === 'ffcfg:pick_del_valor') {
         const cfg = await ffGetConfig(guild.id);
         const vals = (Array.isArray(cfg.value_options) ? cfg.value_options : []).filter(x => x !== value);
@@ -3142,16 +2841,8 @@ client.on('interactionCreate', async (i) => {
       }
     }
 
-    if (i.isChannelSelectMenu() && i.customId.startsWith('setup_ch:')) {
-      const key = i.customId.replace('setup_ch:', '');
-      await patchSettings(guild.id, { [key]: i.values[0] });
-      return i.update(setupHome(await getSettings(guild.id)));
-    }
-    if (i.isRoleSelectMenu() && i.customId.startsWith('setup_role:')) {
-      const key = i.customId.replace('setup_role:', '');
-      await patchSettings(guild.id, { [key]: i.values[0] });
-      return i.update(setupHome(await getSettings(guild.id)));
-    }
+    if (i.isChannelSelectMenu() && i.customId.startsWith('setup_ch:')) { const key = i.customId.replace('setup_ch:', ''); await patchSettings(guild.id, { [key]: i.values[0] }); return i.update(setupHome(await getSettings(guild.id))); }
+    if (i.isRoleSelectMenu() && i.customId.startsWith('setup_role:')) { const key = i.customId.replace('setup_role:', ''); await patchSettings(guild.id, { [key]: i.values[0] }); return i.update(setupHome(await getSettings(guild.id))); }
     if (i.isUserSelectMenu() && i.customId === 'client:pick') {
       const uid = i.values[0];
       const { data: c } = await supabase.from('customers').select('*').eq('guild_id', guild.id).eq('user_id', uid).maybeSingle();
@@ -3170,7 +2861,6 @@ client.on('interactionCreate', async (i) => {
       const cid = i.customId;
       const [ns, action, ...rest] = cid.split(':');
 
-      /* LOJA PÚBLICA */
       if (ns === 'loja') {
         if (await blockIfMaintenance(i)) return;
         if (action === 'comprar') {
@@ -3232,8 +2922,6 @@ client.on('interactionCreate', async (i) => {
         if (s?.log_channel_id) { const ch = guild.channels.cache.get(s.log_channel_id); if (ch) { const { data: o } = await supabase.from('orders').select('*').eq('id', rest[0]).maybeSingle(); const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`order:approve:${rest[0]}`).setLabel('Aprovar').setEmoji('✅').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`order:reject:${rest[0]}`).setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger)); await ch.send({ content: `🟡 Pedido #${rest[0]} (${brl(o?.total || 0)})`, components: [row] }).catch(() => {}); } }
         return;
       }
-
-      /* PANEL LOJA */
       if (ns === 'panel') {
         if (!await requireShopAdmin(i)) return;
         if (action === 'home') return i.update(await panelHome(guild.id));
@@ -3290,7 +2978,6 @@ client.on('interactionCreate', async (i) => {
       if (ns === 'pedidos') { if (!await requireShopAdmin(i)) return; return i.update(await ordersPanel(guild.id, action)); }
       if (ns === 'client' && action === 'baladd') { if (!await requireShopAdmin(i)) return; const m = new ModalBuilder().setCustomId(`client_modal:baladd:${rest[0]}`).setTitle('Saldo'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Valor').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
 
-      /* SETUP LOJA */
       if (ns === 'setup') {
         if (!await requireShopAdmin(i)) return;
         const s = await getSettings(guild.id);
@@ -3305,7 +2992,6 @@ client.on('interactionCreate', async (i) => {
         if (action === 'finish') return i.update({ embeds: [baseEmbed(s, '✅ Configurada!')], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))] });
       }
 
-      /* CONFIG */
       if (cid.startsWith('cfg_')) {
         if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
         if (cid === 'cfg_ticket') {
@@ -3333,7 +3019,6 @@ client.on('interactionCreate', async (i) => {
         if (cid === 'cfg_verificacao') { const m = new ModalBuilder().setCustomId('modal_cfg_verif').setTitle('Verificação'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(false)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(false))); return i.showModal(m); }
       }
 
-      /* HUB ADMIN */
       if (cid.startsWith('adm_') || ns === 'adm') {
         if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
         if (cid === 'adm_back') return i.update(adminHub());
@@ -3398,7 +3083,6 @@ client.on('interactionCreate', async (i) => {
         if (cid === 'adm_call_leave') { getVoiceConnection(guild.id)?.destroy(); await removerCanalVoz(guild.id); return i.reply({ content: '👋', flags: EPHEMERAL }); }
       }
 
-      /* HUB DEV */
       if (cid.startsWith('dev_')) {
         if (!isDeveloper(i.user.id)) return i.reply({ content: '❌', flags: EPHEMERAL });
         if (cid === 'dev_back') return i.update(devHub());
@@ -3453,7 +3137,6 @@ client.on('interactionCreate', async (i) => {
         if (cid === 'dev_bugs') { const { data } = await supabase.from('error_logs').select('*').eq('status', 'pending').eq('context', 'bug_report').order('id', { ascending: false }).limit(15); if (!data?.length) return i.reply({ content: '✅ Sem bugs.', flags: EPHEMERAL }); return i.reply({ embeds: [new EmbedBuilder().setTitle('🐛 Bugs').setDescription(data.map(b => `**#${b.id}** — <@${b.user_id}>\n> ${(b.message || '').substring(0, 100)}`).join('\n\n').substring(0, 4000))], flags: EPHEMERAL }); }
       }
 
-      /* FFCFG */
       if (ns === 'ffcfg') {
         const isO = i.user.id === guild.ownerId;
         const isS = await isAdmin(i.user, guild);
@@ -3494,7 +3177,8 @@ client.on('interactionCreate', async (i) => {
         }
         if (action === 'add_valor') { const m = new ModalBuilder().setCustomId('ffcfg_modal:add_valor').setTitle('Adicionar'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('v').setLabel('Ex: 1.50').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
         if (action === 'del_valor') { const cfg = await ffGetConfig(guild.id); const vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; if (!vals.length) return i.reply({ content: '❌', flags: EPHEMERAL }); const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:pick_del_valor').setPlaceholder('Remover'); for (const v of vals) menu.addOptions({ label: `R$ ${v}`, value: v }); return i.reply({ embeds: [new EmbedBuilder().setTitle('➖')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
-        if (action === 'postar') { const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_pick_format').setPlaceholder('Modalidade'); for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji }); return i.reply({ embeds: [new EmbedBuilder().setTitle('📢 Postar').setColor('#f1c40f')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
+        if (action === 'postar') { const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_pick_format').setPlaceholder('📢 Escolha a modalidade'); for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji, description: `Times de ${f.teamSize}` }); return i.reply({ embeds: [new EmbedBuilder().setTitle('📢 Postar Embed de Aposta').setColor('#f1c40f').setDescription('**Passo 1:** Escolha a modalidade\n**Passo 2:** Escolha o canal\n**Passo 3:** Confirme')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
+        if (action === 'postar_auto') { const cfg = await ffGetConfig(guild.id); const vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; if (!vals.length) return i.reply({ content: '❌ Nenhum valor configurado.', flags: EPHEMERAL }); const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_auto_pick_channel').setPlaceholder('📁 Escolha o canal'); const textChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).slice(0, 25); for (const ch of textChannels.values()) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id }); return i.reply({ embeds: [new EmbedBuilder().setTitle('⚡ Postar Automático').setColor('#f1c40f').setDescription(`Será enviado **1 embed por valor configurado** (${vals.length} embeds).\n\nEscolha o canal:`)], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
         if (action === 'postar_pix') { const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_pix').setTitle('Postar Pix'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
         if (action === 'postar_mediadores') { const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_med').setTitle('Postar'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
         if (action === 'remove_all_meds') { await supabase.from('ff_mediator_queue').delete().eq('guild_id', guild.id); await logConfig(guild, i.user.id, 'MEDIATORS_CLEARED', {}); return i.reply({ content: '🗑️', flags: EPHEMERAL }); }
@@ -3624,10 +3308,7 @@ client.on('interactionCreate', async (i) => {
         if (action === 'cancelar_abort') return i.update({ content: '✅ Abortado.', embeds: [], components: [] });
         if (action === 'chamar_analista') {
           const next = await ffAnalystNext(guild.id);
-          if (next) {
-            await supabase.from('ff_analyst_queue').update({ status: 'busy', current_match_id: m.id }).eq('id', next.id);
-            await logAnalista(guild, next.user_id, 'CHAMADO', { match_id: m.id });
-          }
+          if (next) { await supabase.from('ff_analyst_queue').update({ status: 'busy', current_match_id: m.id }).eq('id', next.id); await logAnalista(guild, next.user_id, 'CHAMADO', { match_id: m.id }); }
           const temAnalista = !!next;
           const e = new EmbedBuilder().setTitle('🔎 Análise Solicitada').setColor(temAnalista ? '#22c55e' : '#FF5555')
             .setDescription(temAnalista ? `**Analista marcado:** <@${next.user_id}>\n\nEnvie:\n> • Replay da partida\n> • Print do resultado\n> • Motivo da análise` : `⚠️ **Não tem nenhum analista online.**\n\nAguarde um analista entrar na fila.`)
@@ -3743,13 +3424,7 @@ client.on('interactionCreate', async (i) => {
       const cid = i.customId;
       if (cid.startsWith('prod_modal:')) {
         const p = cid.split(':'), w = p[1];
-        if (w === 'create') {
-          const catId = p[2] && p[2] !== '0' ? Number(p[2]) : null;
-          const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.'));
-          if (isNaN(price)) return i.reply({ content: '❌', flags: EPHEMERAL });
-          await supabase.from('products').insert({ guild_id: guild.id, category_id: catId, name: i.fields.getTextInputValue('name').trim(), price, description: i.fields.getTextInputValue('desc') || '', delivery_type: i.fields.getTextInputValue('delivery').trim() });
-          return i.reply({ content: '✅', flags: EPHEMERAL });
-        }
+        if (w === 'create') { const catId = p[2] && p[2] !== '0' ? Number(p[2]) : null; const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.')); if (isNaN(price)) return i.reply({ content: '❌', flags: EPHEMERAL }); await supabase.from('products').insert({ guild_id: guild.id, category_id: catId, name: i.fields.getTextInputValue('name').trim(), price, description: i.fields.getTextInputValue('desc') || '', delivery_type: i.fields.getTextInputValue('delivery').trim() }); return i.reply({ content: '✅', flags: EPHEMERAL }); }
         if (w === 'edit') { const id = p[2]; const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.')); await supabase.from('products').update({ name: i.fields.getTextInputValue('name').trim(), price, description: i.fields.getTextInputValue('desc') || '', delivery_type: i.fields.getTextInputValue('delivery').trim() }).eq('id', id); return i.reply({ content: '✅', flags: EPHEMERAL }); }
       }
       if (cid.startsWith('stock_modal:add:')) { const pid = cid.split(':')[2]; const lines = i.fields.getTextInputValue('items').split('\n').map(s => s.trim()).filter(Boolean); await supabase.from('inventory').insert(lines.map(c => ({ guild_id: guild.id, product_id: Number(pid), content: c, status: 'available' }))); return i.reply({ content: `✅ ${lines.length} itens.`, flags: EPHEMERAL }); }
@@ -3827,7 +3502,6 @@ client.on('interactionCreate', async (i) => {
         if (type === 'text') { const v = i.fields.getTextInputValue('v').trim(); await ffPatchConfig(guild.id, { [field]: v }); await logConfig(guild, i.user.id, `SET_${field}`, { value: v }); return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL }); }
         if (type === 'pix') { const key = i.fields.getTextInputValue('key').trim(), name = i.fields.getTextInputValue('name').trim(), city = i.fields.getTextInputValue('city').trim(); await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city }); await logConfig(guild, i.user.id, 'SET_PIX', { key, name, city }); await ffUpdatePixEmbed(guild); return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL }); }
         if (type === 'add_valor') { const v = i.fields.getTextInputValue('v').replace(',', '.').trim(); const num = parseFloat(v); if (isNaN(num) || num <= 0) return i.reply({ content: '❌', flags: EPHEMERAL }); const cfg = await ffGetConfig(guild.id); const vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; const fmtd = num.toFixed(2); if (vals.includes(fmtd)) return i.reply({ content: '❌ Já existe.', flags: EPHEMERAL }); vals.push(fmtd); vals.sort((a, b) => Number(a) - Number(b)); await ffPatchConfig(guild.id, { value_options: vals }); await logConfig(guild, i.user.id, 'VALUE_ADDED', { value: fmtd }); return i.reply({ ...(await ffPanelValores(guild.id)), flags: EPHEMERAL }); }
-        if (type === 'postar_multi') { const fmtId = cid.split(':')[2], fmt = FF_FORMATS.find(f => f.id === fmtId); if (!fmt) return i.reply({ content: '❌', flags: EPHEMERAL }); const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim()); if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL }); const cfg = await ffGetConfig(guild.id); const vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; const ordered = [...vals].map(x => parseFloat(x)).filter(x => !isNaN(x)).sort((a, b) => b - a); await i.reply({ content: `📢 Postando ${ordered.length} embeds...`, flags: EPHEMERAL }); let n = 0; for (const value of ordered) { try { const { data: bet } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value }).select().single(); const msg = await ch.send({ embeds: [ffBuildBetEmbed(bet, cfg)], components: [ffBuildBetButtons(bet.id)] }); await ffPatchBet(bet.id, { message_id: msg.id }); n++; await sleep(1200); } catch {} } await ffLog(guild, 'queue', 'BETS_BULK', i.user.id, { fmt: fmt.label, n }); return i.editReply({ content: `✅ ${n} embeds.` }); }
         if (type === 'postar_pix') { const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim()); if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL }); await ffPatchConfig(guild.id, { pix_channel_id: ch.id }); await ffPostPixEmbed(guild, ch.id); return i.reply({ content: `✅ ${ch}.`, flags: EPHEMERAL }); }
         if (type === 'postar_med') { const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim()); if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL }); await ch.send(await ffBuildMediatorPanel(guild.id)); return i.reply({ content: `✅ ${ch}.`, flags: EPHEMERAL }); }
         if (type === 'freq') { const v = i.fields.getTextInputValue('v').trim().toLowerCase(); if (!['daily','weekly','monthly'].includes(v)) return i.reply({ content: '❌ daily/weekly/monthly.', flags: EPHEMERAL }); await ffPatchConfig(guild.id, { auto_post_frequencia: v }); return i.reply({ ...(await ffPanelAutomacoes(guild.id)), flags: EPHEMERAL }); }
@@ -3859,26 +3533,10 @@ client.on('interactionCreate', async (i) => {
         const q = i.fields.getTextInputValue('query').trim().replace(/[<@!>]/g, '');
         await i.deferReply({ flags: EPHEMERAL });
         const { data } = await supabase.from('ff_blacklist').select('*').eq('guild_id', guild.id).or(`discord_id.eq.${q},user_id.eq.${q},ff_id.eq.${q}`);
-        if (!data?.length) {
-          const e = new EmbedBuilder().setTitle('✅ Não está na blacklist').setColor('#22c55e')
-            .setDescription(`**Consulta:** \`${q}\`\n\nEste jogador **não** consta na blacklist. Pode apostar.`)
-            .setFooter({ text: 'Verificado' }).setTimestamp();
-          return i.editReply({ embeds: [e] });
-        }
+        if (!data?.length) { return i.editReply({ embeds: [new EmbedBuilder().setTitle('✅ Não está na blacklist').setColor('#22c55e').setDescription(`**Consulta:** \`${q}\`\n\nEste jogador **não** consta na blacklist. Pode apostar.`).setFooter({ text: 'Verificado' }).setTimestamp()] }); }
         const b = data[0];
-        const e = new EmbedBuilder().setTitle('🚫 JOGADOR NA BLACKLIST').setColor('#FF5555')
-          .setDescription(
-            `**Consulta:** \`${q}\`\n\n**Cadastro encontrado:**\n` +
-            `> 👤 Discord: <@${b.discord_id || b.user_id}>\n` +
-            `> 🆔 Discord ID: \`${b.discord_id || b.user_id}\`\n` +
-            `> 🎮 Free Fire ID: \`${b.ff_id || '—'}\`\n` +
-            `> 📝 Motivo: **${b.reason || '—'}**\n` +
-            `> ➕ Adicionado por: <@${b.added_by || '—'}>\n` +
-            `> 🕐 Quando: <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:F>` +
-            (b.evidence ? `\n> 🔗 [Provas](${b.evidence})` : '')
-          )
-          .setFooter({ text: '⚠️ Não aceite apostas' }).setTimestamp();
-        return i.editReply({ embeds: [e] });
+        return i.editReply({ embeds: [new EmbedBuilder().setTitle('🚫 JOGADOR NA BLACKLIST').setColor('#FF5555')
+          .setDescription(`**Consulta:** \`${q}\`\n\n**Cadastro encontrado:**\n> 👤 Discord: <@${b.discord_id || b.user_id}>\n> 🆔 Discord ID: \`${b.discord_id || b.user_id}\`\n> 🎮 Free Fire ID: \`${b.ff_id || '—'}\`\n> 📝 Motivo: **${b.reason || '—'}**\n> ➕ Adicionado por: <@${b.added_by || '—'}>\n> 🕐 Quando: <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:F>` + (b.evidence ? `\n> 🔗 [Provas](${b.evidence})` : '')).setFooter({ text: '⚠️ Não aceite apostas' }).setTimestamp()] });
       }
       if (cid === 'ffbl_modal:add') {
         let discordRaw = i.fields.getTextInputValue('discord_id').trim();
@@ -3912,9 +3570,6 @@ client.on('interactionCreate', async (i) => {
   }
 });
 
-/* =========================================================
-   ROUTER + CALLBACK + BOOT
-   ========================================================= */
 async function setupServer(guild, type, onProgress = null) {
   if (type === 'loja') return setupLojaServer(guild, onProgress);
   if (type === 'comunidade') return setupComunidadeServer(guild, onProgress);

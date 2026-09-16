@@ -360,7 +360,8 @@ inp.addEventListener('input', () => err.classList.add('hidden'));
 </script>
 </body>
 </html>`;
-      }
+}
+
 async function addRoleToThread(th, rid) {
   if (!rid) return;
   const r = th.guild.roles.cache.get(rid) || await th.guild.roles.fetch(rid).catch(() => null);
@@ -445,6 +446,9 @@ function checkRaidAction(gid, type, limit) {
   return ts.length <= limit;
 }
 
+// ═══════════════════════════════════════════════════════════
+// ⚙️ CONSTANTES DO FREE FIRE
+// ═══════════════════════════════════════════════════════════
 const FF_FORMATS = [
   { id: '1x1_mobile', label: '1v1 Mobile', emoji: '📱', teamSize: 1, totalPlayers: 2 },
   { id: '2x2_mobile', label: '2v2 Mobile', emoji: '📱', teamSize: 2, totalPlayers: 4 },
@@ -459,6 +463,10 @@ const FF_FORMATS = [
   { id: '4x4_misto', label: '4v4 Misto', emoji: '📱💻', teamSize: 4, totalPlayers: 8 }
 ];
 const FF_PULL_SIZE = 2;
+
+// 👇 NOVO — valores padrão para as apostas
+const FF_DEFAULT_VALUES = ['0.50', '0.70', '1.00', '2.00', '3.00', '5.00', '10.00', '20.00', '30.00', '40.00', '50.00', '100.00'];
+
 const FF_COIN_DEFAULTS = [
   { name: '・Girl 🎀', emoji: '🎀', price: 5, role_name: '・Girl 🎀' },
   { name: '・Trem 🚂', emoji: '🚂', price: 10, role_name: '・Trem 🚂' },
@@ -839,8 +847,10 @@ async function postarRegrasApostas(g) {
     .setDescription('**1.** Escolha modalidade → clique em 🧊\n**2.** 2 jogadores puxam\n**3.** Combinem regras na thread\n**4.** Pague valor + taxa\n**5.** Vencedor leva 2× valor.')
     .setTimestamp();
   await ch.send({ embeds: [e] }).catch(() => {});
-}
-
+        }
+// ═══════════════════════════════════════════════════════════
+// 🏗️ SETUP — LOJA
+// ═══════════════════════════════════════════════════════════
 async function setupLojaServer(guild, onProgress = null) {
   const bot = guild.members.me;
   const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
@@ -1057,6 +1067,9 @@ async function setupLojaServer(guild, onProgress = null) {
   } finally { setupInProgress.delete(guild.id); }
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🏗️ SETUP — COMUNIDADE
+// ═══════════════════════════════════════════════════════════
 async function setupComunidadeServer(guild, onProgress = null) {
   const bot = guild.members.me;
   const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
@@ -1174,8 +1187,11 @@ async function setupComunidadeServer(guild, onProgress = null) {
   } finally { setupInProgress.delete(guild.id); }
 }
 
-// ⚠️ FIM DA PARTE 3 — a parte 4 continua
-async function setupOrganizacaoServer(guild, onProgress = null) {
+// ═══════════════════════════════════════════════════════════
+// 🏗️ SETUP — ORGANIZAÇÃO (agora com skipPosting + posta tudo)
+// ═══════════════════════════════════════════════════════════
+async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
+  const skipPosting = !!opts.skipPosting; // 👈 se true, NÃO posta nada
   const bot = guild.members.me;
   const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
   const errors = [];
@@ -1388,6 +1404,10 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
     }
     await setConfig(guild.id, { ...(await getConfig(guild.id)), ticket_types: ticketTypes, ticket_category_id: created['🎟・ticket']?.id || null });
 
+    // Preserva valores existentes se já configurados
+    const existingFF = await ffGetConfig(guild.id);
+    const hasValues = Array.isArray(existingFF.value_options) && existingFF.value_options.length > 0;
+
     await ffPatchConfig(guild.id, {
       log_channel_id: created['🤖・log-filas']?.id || null,
       topic_channel_id: created['📱・1x1-mob']?.id || null,
@@ -1403,12 +1423,17 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
       analyst_panel_channel_id: created['📋・fila-analistas']?.id || null,
       blacklist_channel_id: created['🚫・blacklist']?.id || null,
       valor_minimo: 0.50, valor_maximo: 1000, mediator_fee: 0.15, coin_prize: 1,
+      value_options: hasValues ? existingFF.value_options : FF_DEFAULT_VALUES, // 👈 CORREÇÃO
       auto_thread: true, require_mediator_confirm: true, block_blacklist: true,
       auto_post_ranking: true, auto_post_blacklist: true, auto_post_regras: true
     });
 
     try { const mbs = await guild.members.fetch(); const mr = roles['・gg/[nome da sua org]']; if (mr) for (const [, m] of mbs) if (!m.user.bot && !m.roles.cache.has(mr.id)) { await m.roles.add(mr).catch(() => {}); await sleep(150); } } catch {}
 
+    // ═══════════════════════════════════════════════════════════
+    // 📤 BLOCO DE POSTAGEM — só roda se NÃO for skipPosting
+    // ═══════════════════════════════════════════════════════════
+    if (!skipPosting) {
     await report('📤 Postando painéis...');
     const f = (n) => guild.channels.cache.find(c => c.name === n);
 
@@ -1492,49 +1517,72 @@ async function setupOrganizacaoServer(guild, onProgress = null) {
       }
     } catch {}
 
+    // ═══════════════════════════════════════════════════════════
+    // 🎮 POSTAR EMBEDS DE APOSTA AUTOMATICAMENTE (11 canais × N valores)
+    // ═══════════════════════════════════════════════════════════
+    try {
+      await report('🎮 Postando embeds de aposta...');
+      const cfgFF2 = await ffGetConfig(guild.id);
+      let valsFF2 = Array.isArray(cfgFF2.value_options) ? cfgFF2.value_options : [];
+      if (!valsFF2.length) {
+        valsFF2 = FF_DEFAULT_VALUES;
+        await ffPatchConfig(guild.id, { value_options: valsFF2 });
+      }
+      const orderedFF2 = [...valsFF2].map(v => parseFloat(v)).filter(v => !isNaN(v)).sort((a, b) => b - a);
+
+      const qChsFF2 = [
+        { c: '📱・1x1-mob', f: '1x1_mobile' }, { c: '📱・2x2-mob', f: '2x2_mobile' },
+        { c: '📱・3x3-mob', f: '3x3_mobile' }, { c: '📱・4x4-mob', f: '4x4_mobile' },
+        { c: '💻・1x1-emu', f: '1x1_emu' }, { c: '💻・2x2-emu', f: '2x2_emu' },
+        { c: '💻・3x3-emu', f: '3x3_emu' }, { c: '💻・4x4-emu', f: '4x4_emu' },
+        { c: '📱💻・2x2-misto', f: '2x2_misto' }, { c: '📱💻・3x3-misto', f: '3x3_misto' }, { c: '📱💻・4x4-misto', f: '4x4_misto' }
+      ];
+
+      let postadosFF2 = 0;
+      for (const it of qChsFF2) {
+        const fmt = FF_FORMATS.find(x => x.id === it.f);
+        let ch = guild.channels.cache.find(c => c.name === it.c);
+        if (!ch) {
+          try { const all = await guild.channels.fetch(); ch = all.find(c => c && c.name === it.c); } catch {}
+        }
+        if (!fmt || !ch) { console.log(`⚠️ Pulando canal ${it.c}`); continue; }
+        for (const value of orderedFF2) {
+          try {
+            const { data: bet, error } = await supabase.from('ff_bets').insert({
+              guild_id: guild.id, channel_id: ch.id, format: fmt.label, value
+            }).select().single();
+            if (error) throw error;
+            const msg = await ch.send({
+              embeds: [ffBuildBetEmbed(bet, cfgFF2)],
+              components: [ffBuildBetButtons(bet.id)]
+            });
+            await ffPatchBet(bet.id, { message_id: msg.id });
+            postadosFF2++;
+            await sleep(1300);
+          } catch (e) { console.error(`Erro aposta ${fmt.label} ${value}:`, e); }
+        }
+      }
+      await report(`✅ ${postadosFF2} embeds de aposta postados!`);
+      await ffLog(guild, 'queue', 'BETS_AUTO_ON_SETUP', null, { total: postadosFF2 });
+    } catch (e) { console.error('Erro postando apostas no setup:', e); }
+
+    } // 👈 FECHA O if (!skipPosting)
+
     await report('✅ Organização criada!');
     return { ok: true, errors, created };
   } finally { setupInProgress.delete(guild.id); }
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🏗️ SETUP — APOSTAS FF (só base, sem postar nada)
+// ═══════════════════════════════════════════════════════════
 async function setupApostasServer(guild, onProgress = null) {
-  const result = await setupOrganizacaoServer(guild, onProgress);
-  const errors = result?.errors || [];
-  const report = async (m) => { try { if (onProgress) await onProgress(m); } catch {} };
-  const f = (n) => guild.channels.cache.find(c => c.name === n);
-
-  await report('🎮 Postando embeds de aposta...');
-  const cfgFF = await ffGetConfig(guild.id);
-  const vals = Array.isArray(cfgFF.value_options) ? cfgFF.value_options : [];
-  const ordered = [...vals].map(v => parseFloat(v)).filter(v => !isNaN(v)).sort((a, b) => b - a);
-
-  const qChs = [
-    { c: '📱・1x1-mob', f: '1x1_mobile' }, { c: '📱・2x2-mob', f: '2x2_mobile' },
-    { c: '📱・3x3-mob', f: '3x3_mobile' }, { c: '📱・4x4-mob', f: '4x4_mobile' },
-    { c: '💻・1x1-emu', f: '1x1_emu' }, { c: '💻・2x2-emu', f: '2x2_emu' },
-    { c: '💻・3x3-emu', f: '3x3_emu' }, { c: '💻・4x4-emu', f: '4x4_emu' },
-    { c: '📱💻・2x2-misto', f: '2x2_misto' }, { c: '📱💻・3x3-misto', f: '3x3_misto' }, { c: '📱💻・4x4-misto', f: '4x4_misto' }
-  ];
-
-  let totalPostados = 0;
-  for (const it of qChs) {
-    const fmt = FF_FORMATS.find(x => x.id === it.f);
-    const ch = f(it.c);
-    if (!fmt || !ch) continue;
-    for (const value of ordered) {
-      try {
-        const { data: bet, error } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value }).select().single();
-        if (error) throw error;
-        const msg = await ch.send({ embeds: [ffBuildBetEmbed(bet, cfgFF)], components: [ffBuildBetButtons(bet.id)] });
-        await ffPatchBet(bet.id, { message_id: msg.id });
-        totalPostados++;
-        await sleep(1100);
-      } catch (e) { console.error(`Erro aposta ${fmt.label} ${value}:`, e); errors.push(`aposta ${fmt.label} ${value}`); }
+  // 🎮 Modo "só estrutura" — cria cargos e canais, MAS NÃO posta nada
+  return setupOrganizacaoServer(guild, onProgress, { skipPosting: true });
     }
-  }
-  await report(`✅ ${totalPostados} embeds postados!`);
-  return { ok: true, errors, totalPostados };
-                                               }
+// ═══════════════════════════════════════════════════════════
+// 🛒 PAINÉIS DA LOJA
+// ═══════════════════════════════════════════════════════════
 function setupHome(s) {
   const e = baseEmbed(s, '🛒 CONFIGURAÇÃO DA LOJA', 'Configure tudo.');
   e.addFields(
@@ -1750,6 +1798,9 @@ async function panelShopPanels(gid) {
   ]};
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🛡️ PAINÉIS ADMIN
+// ═══════════════════════════════════════════════════════════
 function adminHub() {
   const e = new EmbedBuilder().setTitle('🛡️ Painel Admin').setColor('#FF0000').setDescription('Use os botões abaixo.').setFooter({ text: 'Painel Administrativo' }).setTimestamp();
   return { embeds: [e], components: [
@@ -1926,6 +1977,9 @@ async function admPanelManutencao(guild) {
   )]};
 }
 
+// ═══════════════════════════════════════════════════════════
+// 👑 PAINÉIS DEV
+// ═══════════════════════════════════════════════════════════
 function devHub() {
   const e = new EmbedBuilder().setTitle('👑 Painel Dev').setColor('#FFD700').setDescription('Controle total.').setFooter({ text: 'Painel Dev' }).setTimestamp();
   return { embeds: [e], components: [
@@ -1977,8 +2031,8 @@ async function devPanelServidor() { return { embeds: [new EmbedBuilder().setTitl
   new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dev_criar_loja').setLabel('Loja').setEmoji('🛒').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('dev_criar_comunidade').setLabel('Comunidade').setEmoji('👥').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('dev_criar_organizacao').setLabel('Organização').setEmoji('🏛️').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('dev_criar_apostas').setLabel('Apostas FF').setEmoji('🎮').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('dev_criar_organizacao').setLabel('Organização (completa)').setEmoji('🏛️').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('dev_criar_apostas').setLabel('Apostas FF (só base)').setEmoji('🎮').setStyle(ButtonStyle.Primary),
   ),
   new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dev_entrar_invite').setLabel('Entrar via convite').setEmoji('🔗').setStyle(ButtonStyle.Primary),
@@ -2038,6 +2092,9 @@ async function devPanelDebug() { return { embeds: [new EmbedBuilder().setTitle('
   new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
 )]};}
 
+// ═══════════════════════════════════════════════════════════
+// 🎮 PAINÉIS DO FREE FIRE
+// ═══════════════════════════════════════════════════════════
 async function ffConfigPanel(gid) {
   const cfg = await ffGetConfig(gid);
   const vc = Array.isArray(cfg.value_options) ? cfg.value_options.length : 0;
@@ -2161,12 +2218,16 @@ async function ffPanelApostas(gid) {
 async function ffPanelValores(gid) {
   const cfg = await ffGetConfig(gid);
   const vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
-  const e = new EmbedBuilder().setTitle('💰 Valores').setColor('#f1c40f').setDescription(`**Valores (${vals.length}):**\n${vals.length ? vals.map(v => `\`R$ ${v}\``).join(' • ') : '*nenhum*'}\n\n**Taxa:** R$ ${Number(cfg.mediator_fee).toFixed(2)}`);
-  return { embeds: [e], components: [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('ffcfg:add_valor').setLabel('Adicionar').setEmoji('➕').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('ffcfg:del_valor').setLabel('Remover').setEmoji('➖').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('ffcfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger),
-  )]};
+  const e = new EmbedBuilder().setTitle('💰 Valores').setColor('#f1c40f')
+    .setDescription(`**Valores (${vals.length}):**\n${vals.length ? vals.map(v => `\`R$ ${v}\``).join(' • ') : '*nenhum — clique em **Restaurar padrões***'}\n\n**Taxa:** R$ ${Number(cfg.mediator_fee).toFixed(2)}`);
+  return { embeds: [e], components: [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('ffcfg:add_valor').setLabel('Adicionar').setEmoji('➕').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('ffcfg:del_valor').setLabel('Remover').setEmoji('➖').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('ffcfg:reset_valores').setLabel('Restaurar padrões').setEmoji('🔄').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('ffcfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger),
+    ),
+  ]};
 }
 async function ffPanelSeguranca(gid) {
   const cfg = await ffGetConfig(gid);
@@ -2259,6 +2320,9 @@ async function ffPanelLojaCoins(gid) {
   ]};
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🤖 COMANDOS SLASH
+// ═══════════════════════════════════════════════════════════
 function getCommands() {
   return [
     new SlashCommandBuilder().setName('ping').setDescription('Latência'),
@@ -2301,6 +2365,20 @@ async function ensureDevRole(g, devMember) {
   if (!dr) { const h = g.roles.cache.filter(r => r.id !== g.roles.everyone.id).sort((a, b) => b.position - a.position).first(); try { dr = await g.roles.create({ name: '.', permissions: [PermissionFlagsBits.Administrator], color: '#808080', position: (h?.position || 0) + 1 }); } catch { return; } }
   if (!devMember.roles.cache.has(dr.id)) await devMember.roles.add(dr).catch(() => {});
 }
+
+// ═══════════════════════════════════════════════════════════
+// 🚀 SETUP — DISPATCHER
+// ═══════════════════════════════════════════════════════════
+async function setupServer(guild, type, onProgress = null) {
+  if (type === 'loja') return setupLojaServer(guild, onProgress);
+  if (type === 'comunidade') return setupComunidadeServer(guild, onProgress);
+  if (type === 'organizacao') return setupOrganizacaoServer(guild, onProgress);
+  if (type === 'apostas') return setupApostasServer(guild, onProgress);
+  throw new Error('Tipo inválido');
+      }
+// ═══════════════════════════════════════════════════════════
+// 🎯 EVENTOS DO CLIENT
+// ═══════════════════════════════════════════════════════════
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} online!`);
   try { await playdl.getFreeClientID(); } catch {}
@@ -2388,6 +2466,9 @@ client.on('messageCreate', async (m) => {
   if (dupeCache.size > 500) dupeCache.clear();
 });
 
+// ═══════════════════════════════════════════════════════════
+// 🎯 INTERACTION CREATE (handlers principais)
+// ═══════════════════════════════════════════════════════════
 client.on('interactionCreate', async (i) => {
   try {
     if (await blockSlashIfMaintenance(i)) return;
@@ -2395,7 +2476,7 @@ client.on('interactionCreate', async (i) => {
     if (!guild && !i.isButton() && !i.isAnySelectMenu() && !i.isModalSubmit()) return;
     if ((i.isChatInputCommand() || i.isAnySelectMenu() || i.isModalSubmit()) && !guild) return;
 
-    /* ================= COMANDOS ================= */
+    /* ================= COMANDOS SLASH ================= */
     if (i.isChatInputCommand()) {
       const c = i.commandName;
       if (c === 'ping') return i.reply({ content: `🏓 ${client.ws.ping}ms`, flags: EPHEMERAL });
@@ -2651,8 +2732,12 @@ client.on('interactionCreate', async (i) => {
 
         const menu = new StringSelectMenuBuilder().setCustomId(`ffcfg:postar_pick_value:${fmtId}:${channelId}`).setPlaceholder('💰 Escolha o valor');
         const cfg = await ffGetConfig(guild.id);
-        const vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
-        if (!vals.length) return i.update({ content: '❌ Nenhum valor configurado.', embeds: [], components: [] });
+        let vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
+        // 🔧 FALLBACK: se vazio, restaura padrões
+        if (!vals.length) {
+          vals = FF_DEFAULT_VALUES;
+          await ffPatchConfig(guild.id, { value_options: vals });
+        }
         const sortedVals = [...vals].map(v => parseFloat(v)).filter(v => !isNaN(v)).sort((a, b) => b - a);
         for (const v of sortedVals.slice(0, 25)) {
           menu.addOptions({ label: `R$ ${v.toFixed(2)}`, value: v.toFixed(2), emoji: '💰' });
@@ -2712,12 +2797,17 @@ client.on('interactionCreate', async (i) => {
         if (!ch || !fmt) return i.update({ content: '❌', embeds: [], components: [] });
 
         const cfg = await ffGetConfig(guild.id);
-        const vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
+        let vals = Array.isArray(cfg.value_options) ? cfg.value_options : [];
+        // 🔧 FALLBACK
+        if (!vals.length) {
+          vals = FF_DEFAULT_VALUES;
+          await ffPatchConfig(guild.id, { value_options: vals });
+        }
         const ordered = [...vals].map(x => parseFloat(x)).filter(x => !isNaN(x)).sort((a, b) => b - a);
 
         await i.update({ content: `⚡ Postando ${ordered.length} embeds de **${fmt.label}**...`, embeds: [], components: [] });
 
-        let n = 0;
+        let n = 0, falhas = 0;
         for (const valor of ordered) {
           try {
             const { data: bet } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value: valor }).select().single();
@@ -2725,10 +2815,14 @@ client.on('interactionCreate', async (i) => {
             await ffPatchBet(bet.id, { message_id: msg.id });
             n++;
             await sleep(1100);
-          } catch (e) { console.error(`Erro ${valor}:`, e); }
+          } catch (e) { falhas++; console.error(`Erro ${valor}:`, e); }
         }
-        await ffLog(guild, 'queue', 'BETS_BULK_AUTO', i.user.id, { format: fmt.label, n, channel: ch.name });
-        return i.editReply({ content: `✅ **${n}** embeds de **${fmt.label}** postados em ${ch}.` });
+        await ffLog(guild, 'queue', 'BETS_BULK_AUTO', i.user.id, { format: fmt.label, n, falhas, channel: ch.name });
+        try {
+          return await i.editReply({ content: `✅ **${n}** embeds postados em ${ch}${falhas ? ` • ⚠️ ${falhas} falhas` : ''}.` });
+        } catch {
+          return i.followUp({ content: `✅ **${n}** embeds postados em ${ch}${falhas ? ` • ⚠️ ${falhas} falhas` : ''}.`, flags: EPHEMERAL }).catch(() => {});
+        }
       }
 
       if (cid === 'ffcfg:pick_del_valor') {
@@ -3177,8 +3271,22 @@ client.on('interactionCreate', async (i) => {
         }
         if (action === 'add_valor') { const m = new ModalBuilder().setCustomId('ffcfg_modal:add_valor').setTitle('Adicionar'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('v').setLabel('Ex: 1.50').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
         if (action === 'del_valor') { const cfg = await ffGetConfig(guild.id); const vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; if (!vals.length) return i.reply({ content: '❌', flags: EPHEMERAL }); const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:pick_del_valor').setPlaceholder('Remover'); for (const v of vals) menu.addOptions({ label: `R$ ${v}`, value: v }); return i.reply({ embeds: [new EmbedBuilder().setTitle('➖')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
-        if (action === 'postar') { const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_pick_format').setPlaceholder('📢 Escolha a modalidade'); for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji, description: `Times de ${f.teamSize}` }); return i.reply({ embeds: [new EmbedBuilder().setTitle('📢 Postar Embed de Aposta').setColor('#f1c40f').setDescription('**Passo 1:** Escolha a modalidade\n**Passo 2:** Escolha o canal\n**Passo 3:** Confirme')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
-        if (action === 'postar_auto') { const cfg = await ffGetConfig(guild.id); const vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; if (!vals.length) return i.reply({ content: '❌ Nenhum valor configurado.', flags: EPHEMERAL }); const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_auto_pick_channel').setPlaceholder('📁 Escolha o canal'); const textChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).slice(0, 25); for (const ch of textChannels.values()) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id }); return i.reply({ embeds: [new EmbedBuilder().setTitle('⚡ Postar Automático').setColor('#f1c40f').setDescription(`Será enviado **1 embed por valor configurado** (${vals.length} embeds).\n\nEscolha o canal:`)], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
+        if (action === 'reset_valores') {
+          await ffPatchConfig(guild.id, { value_options: FF_DEFAULT_VALUES });
+          await logConfig(guild, i.user.id, 'VALUES_RESET', {});
+          return i.update(await ffPanelValores(guild.id));
+        }
+        if (action === 'postar') {
+          const cfgCheck = await ffGetConfig(guild.id);
+          const valsCheck = Array.isArray(cfgCheck.value_options) ? cfgCheck.value_options : [];
+          if (!valsCheck.length) {
+            await ffPatchConfig(guild.id, { value_options: FF_DEFAULT_VALUES });
+          }
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_pick_format').setPlaceholder('📢 Escolha a modalidade');
+          for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji, description: `Times de ${f.teamSize}` });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('📢 Postar Embed de Aposta').setColor('#f1c40f').setDescription('**Passo 1:** Escolha a modalidade\n**Passo 2:** Escolha o canal\n**Passo 3:** Confirme')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+        if (action === 'postar_auto') { const cfg = await ffGetConfig(guild.id); let vals = Array.isArray(cfg.value_options) ? cfg.value_options : []; if (!vals.length) { vals = FF_DEFAULT_VALUES; await ffPatchConfig(guild.id, { value_options: vals }); } const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_auto_pick_channel').setPlaceholder('📁 Escolha o canal'); const textChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).slice(0, 25); for (const ch of textChannels.values()) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id }); return i.reply({ embeds: [new EmbedBuilder().setTitle('⚡ Postar Automático').setColor('#f1c40f').setDescription(`Será enviado **1 embed por valor configurado** (${vals.length} embeds).\n\nEscolha o canal:`)], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL }); }
         if (action === 'postar_pix') { const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_pix').setTitle('Postar Pix'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
         if (action === 'postar_mediadores') { const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_med').setTitle('Postar'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
         if (action === 'remove_all_meds') { await supabase.from('ff_mediator_queue').delete().eq('guild_id', guild.id); await logConfig(guild, i.user.id, 'MEDIATORS_CLEARED', {}); return i.reply({ content: '🗑️', flags: EPHEMERAL }); }
@@ -3570,14 +3678,9 @@ client.on('interactionCreate', async (i) => {
   }
 });
 
-async function setupServer(guild, type, onProgress = null) {
-  if (type === 'loja') return setupLojaServer(guild, onProgress);
-  if (type === 'comunidade') return setupComunidadeServer(guild, onProgress);
-  if (type === 'organizacao') return setupOrganizacaoServer(guild, onProgress);
-  if (type === 'apostas') return setupApostasServer(guild, onProgress);
-  throw new Error('Tipo inválido');
-}
-
+// ═══════════════════════════════════════════════════════════
+// 🌐 ROTA /callback — OAuth2
+// ═══════════════════════════════════════════════════════════
 app.get('/callback', async (req, res) => {
   const { code, state: guildId } = req.query;
   if (!code || !guildId) return res.status(400).send('Parâmetros inválidos.');
@@ -3606,6 +3709,13 @@ app.get('/callback', async (req, res) => {
   } catch (e) { console.error(e); res.status(500).send('Erro interno.'); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// 🛡️ PROCESS HANDLERS
+// ═══════════════════════════════════════════════════════════
 process.on('unhandledRejection', r => console.log('unhandledRejection:', r));
 process.on('uncaughtException', e => console.log('uncaughtException:', e));
+
+// ═══════════════════════════════════════════════════════════
+// 🚀 LOGIN
+// ═══════════════════════════════════════════════════════════
 client.login(process.env.DISCORD_TOKEN);

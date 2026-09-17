@@ -1451,45 +1451,49 @@ async function setupServer(guild, type, onProgress = null) {
 // PAINÉIS DEV
 // ═══════════════════════════════════════════════════════════
 function devHub() {
-  const e = new EmbedBuilder().setTitle('👑 Painel Dev').setColor('#FFD700').setDescription('Controle total do bot.').setFooter({ text: 'Painel Dev' }).setTimestamp();
+  const e = new EmbedBuilder()
+    .setTitle('👑 Painel Dev')
+    .setColor('#FFD700')
+    .setDescription('Controle total do bot.')
+    .setFooter({ text: 'Painel Dev' })
+    .setTimestamp();
+
   return { embeds: [e], components: [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('dev_dashboard').setLabel('Dashboard').setEmoji('📊').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('dev_bot').setLabel('Bot').setEmoji('🤖').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_premium').setLabel('Premium').setEmoji('💰').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('dev_verificados').setLabel('Verificados').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('dev_servidor').setLabel('Servidor').setEmoji('🏗️').setStyle(ButtonStyle.Danger),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('dev_servidor').setLabel('Servidor').setEmoji('🏗️').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('dev_gerenciamento').setLabel('Gerenciamento').setEmoji('🎯').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_gerenciamento').setLabel('Gerenciar').setEmoji('🎯').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_alerts').setLabel('Alertas').setEmoji('🚨').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('dev_audit').setLabel('Audit').setEmoji('🕵️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('dev_inject').setLabel('Injetar').setEmoji('🎁').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_global_events').setLabel('Eventos').setEmoji('🌐').setStyle(ButtonStyle.Primary),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('dev_inject').setLabel('Injetar Item').setEmoji('🎁').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('dev_global_events').setLabel('Eventos Globais').setEmoji('🌐').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_inspector').setLabel('Inspetor').setEmoji('🔍').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('dev_staff_global').setLabel('Staff Global').setEmoji('👥').setStyle(ButtonStyle.Primary),
-    ),
-    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dev_staff_global').setLabel('Staff').setEmoji('👥').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_ranking').setLabel('Ranking').setEmoji('🏆').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_dead_servers').setLabel('Mortos').setEmoji('💀').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('dev_manutencao').setLabel('Manutenção').setEmoji('🛠️').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('dev_debug').setLabel('Debug').setEmoji('🔧').setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dev_debug').setLabel('Debug').setEmoji('🔧').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('dev_monitor').setLabel('Monitor').setEmoji('📡').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('dev_ratelimit').setLabel('Rate Limit').setEmoji('⚡').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('dev_ratelimit').setLabel('RateLimit').setEmoji('⚡').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('dev_force_rejoin').setLabel('Rejoin').setEmoji('🎯').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('dev_kill_switch').setLabel('Kill Switch').setEmoji('🚨').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('dev_kill_switch').setLabel('KillSwitch').setEmoji('🚨').setStyle(ButtonStyle.Danger),
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('dev_sandbox').setLabel('Sandbox').setEmoji('🧪').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_preview').setLabel('Preview').setEmoji('🎨').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_simulator').setLabel('Simulador').setEmoji('🎬').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dev_autoheal').setLabel('Auto-Heal').setEmoji('🔄').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('dev_locale').setLabel('Idioma').setEmoji('🌐').setStyle(ButtonStyle.Secondary),
     ),
-    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_locale').setLabel('Idioma').setEmoji('🌐').setStyle(ButtonStyle.Secondary)),
   ]};
 }
 async function devPanelDashboard() {

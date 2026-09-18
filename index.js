@@ -47,7 +47,29 @@ const BOT_START_TIME = Date.now();
 const MAX_SHOP_PANELS = 500;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, { auth: { persistSession: false } });
-
+// ═══════════════════════════════════════════════════════════
+// 🔧 FIX GLOBAL — Supabase PostgrestBuilder não tem .catch()
+// ═══════════════════════════════════════════════════════════
+try {
+  const _probe = supabase.from('_polyfill_probe_').select();
+  let _proto = Object.getPrototypeOf(_probe);
+  while (_proto && _proto !== Object.prototype) {
+    if (typeof _proto.then === 'function' && typeof _proto.catch !== 'function') {
+      Object.defineProperty(_proto, 'catch', {
+        value: function (onRejected) {
+          return this.then(undefined, onRejected);
+        },
+        writable: true,
+        configurable: true,
+      });
+      console.log('✅ [FIX] Polyfill .catch() aplicado ao Supabase PostgrestBuilder');
+      break;
+    }
+    _proto = Object.getPrototypeOf(_proto);
+  }
+} catch (e) {
+  console.error('⚠️ [FIX] Falha ao aplicar polyfill .catch():', e.message);
+}
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,

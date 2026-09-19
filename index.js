@@ -2697,10 +2697,42 @@ async function openTicket(i, panel, tipo) {
   const cfg = await getConfig(guild.id);
 
   // Define canal pai: tipo.canal_id > panel.canal_id > canal atual
-  let parentCh = null;
+    let parentCh = null;
   if (tipo?.canal_id) parentCh = guild.channels.cache.get(tipo.canal_id) || await guild.channels.fetch(tipo.canal_id).catch(() => null);
   if (!parentCh && panel?.canal_id) parentCh = guild.channels.cache.get(panel.canal_id) || await guild.channels.fetch(panel.canal_id).catch(() => null);
-  if (!parentCh) parentCh = i.channel;
+
+  // 🔧 FIX: fallback inteligente — só aceita canais de texto que suportam threads
+  if (!parentCh) {
+    // Tenta o canal atual
+    if (i.channel?.isTextBased?.() && !i.channel.isThread?.()) {
+      parentCh = i.channel;
+    }
+    // Se não, procura no config
+    if (!parentCh) {
+      const cfg2 = await getConfig(guild.id);
+      if (cfg2.ticket_category_id) {
+        parentCh = guild.channels.cache.get(cfg2.ticket_category_id);
+      }
+    }
+    // Se ainda não, cria um canal temporário "#🎟・tickets"
+    if (!parentCh) {
+      try {
+        parentCh = await guild.channels.create({
+          name: '🎟・tickets',
+          type: ChannelType.GuildText,
+          reason: 'Fallback para tickets',
+        });
+        await parentCh.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
+      } catch (e) {
+        throw new Error(`Não encontrei um canal válido pra criar o ticket. Configure um canal no painel com \`Adicionar tipo → canal\`.`);
+      }
+    }
+  }
+
+  // 🔧 FIX: valida que o canal suporta threads
+  if (!parentCh.isTextBased?.() || parentCh.isThread?.()) {
+    throw new Error(`O canal <#${parentCh.id}> não suporta threads. Configure outro canal no tipo do ticket.`);
+  }
 
   if (!parentCh.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreatePrivateThreads)) {
     throw new Error('Bot sem permissão de criar threads privadas neste canal.');

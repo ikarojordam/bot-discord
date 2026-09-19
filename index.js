@@ -2541,8 +2541,18 @@ async function getTicketPanels(gid) {
   return parseJson(cfg.ticket_panels, []);
 }
 async function saveTicketPanels(gid, panels) {
-  const cfg = await getConfig(gid);
-  await setConfig(gid, { ...cfg, ticket_panels: panels });
+  // 🔧 FIX: só atualiza a coluna ticket_panels, sem tocar no resto
+  const { error } = await supabase
+    .from('configs')
+    .update({ ticket_panels: panels, updated_at: new Date().toISOString() })
+    .eq('guild_id', gid);
+  if (error) {
+    // Se não existe ainda, cria a linha
+    await supabase.from('configs').upsert(
+      { guild_id: gid, ticket_panels: panels, updated_at: new Date().toISOString() },
+      { onConflict: 'guild_id' }
+    ).catch(() => {});
+  }
   return panels;
 }
 async function getTicketPanel(gid, panelId) {

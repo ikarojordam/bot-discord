@@ -4284,3 +4284,24 @@ client.on('interactionCreate', async (i) => {
 // ═══════════════════════════════════════════════════════════
 // CONTINUA NA PARTE 8-B (buttons + modais + callback + login)
 // ═══════════════════════════════════════════════════════════
+// Tratamento global de erros
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled promise rejection:', err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err);
+});
+
+// Login do bot
+const token = process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
+
+if (!token) {
+  console.error('❌ DISCORD_TOKEN não configurado nas variáveis do Render.');
+  process.exit(1);
+}
+
+client.login(token).catch((err) => {
+  console.error('❌ Falha ao conectar no Discord:', err);
+  process.exit(1);
+});

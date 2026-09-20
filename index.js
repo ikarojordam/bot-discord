@@ -4280,11 +4280,37 @@ client.on('interactionCreate', async (i) => {
     if (i.isChannelSelectMenu() && i.customId.startsWith('setup_ch:')) { const key = i.customId.replace('setup_ch:', ''); await patchSettings(guild.id, { [key]: i.values[0] }); return i.update(setupHome(await getSettings(guild.id))); }
     if (i.isRoleSelectMenu() && i.customId.startsWith('setup_role:')) { const key = i.customId.replace('setup_role:', ''); await patchSettings(guild.id, { [key]: i.values[0] }); return i.update(setupHome(await getSettings(guild.id))); }
     if (i.isUserSelectMenu() && i.customId === 'client:pick') { const uid = i.values[0]; const { data: c } = await supabase.from('customers').select('*').eq('guild_id', guild.id).eq('user_id', uid).maybeSingle(); const { data: ords } = await supabase.from('orders').select('*').eq('guild_id', guild.id).eq('user_id', uid).order('id', { ascending: false }).limit(5); const e = baseEmbed(await getSettings(guild.id), '👤 Cliente', `<@${uid}>`); e.addFields({ name: 'Gasto', value: brl(c?.total_spent || 0), inline: true }, { name: 'Compras', value: String(c?.total_orders || 0), inline: true }, { name: 'Saldo', value: brl(c?.balance || 0), inline: true }); for (const o of ords || []) e.addFields({ name: `#${o.id}`, value: `${brl(o.total)} • ${o.status}` }); return i.update({ embeds: [e], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`client:baladd:${uid}`).setLabel('Adicionar saldo').setEmoji('💰').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('panel:clients').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))] }); }
+    // Resposta padrão para interações ainda não tratadas
+    if (i.isRepliable() && !i.replied && !i.deferred) {
+      await i.reply({
+        content: '⚠️ Esta função ainda não está disponível.',
+        flags: EPHEMERAL
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error('❌ Erro em interactionCreate:', err);
+
+    await logError(
+      'interactionCreate',
+      err,
+      i?.user?.id || null,
+      i?.guild?.id || null
+    ).catch(() => {});
+
+    if (i?.isRepliable?.() && !i.replied && !i.deferred) {
+      await i.reply({
+        content: '❌ Ocorreu um erro ao processar essa interação.',
+        flags: EPHEMERAL
+      }).catch(() => {});
+    }
+  }
+});
 
 // ═══════════════════════════════════════════════════════════
 // CONTINUA NA PARTE 8-B (buttons + modais + callback + login)
 // ═══════════════════════════════════════════════════════════
 // Tratamento global de erros
+
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled promise rejection:', err);
 });

@@ -3940,22 +3940,32 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
           { c: '💻・3x3-emu', f: '3x3_emu' }, { c: '💻・4x4-emu', f: '4x4_emu' },
           { c: '📱💻・2x2-misto', f: '2x2_misto' }, { c: '📱💻・3x3-misto', f: '3x3_misto' }, { c: '📱💻・4x4-misto', f: '4x4_misto' }
         ];
-        const betPromises = [];
+                // 🔧 FIX: cria sequencialmente pra garantir ORDEM
+        let totalBet = 0;
         for (const it of qChsFF2) {
           const fmt = FF_FORMATS.find(x => x.id === it.f);
           let ch = created[it.c] || guild.channels.cache.find(c => c.name === it.c);
           if (!ch) { try { const all = await guild.channels.fetch(); ch = all.find(c => c && c.name === it.c); } catch {} }
           if (!fmt || !ch) continue;
+
           for (const value of orderedFF2) {
-            betPromises.push((async () => {
-              try {
-                const { data: bet, error } = await supabase.from('ff_bets').insert({ guild_id: guild.id, channel_id: ch.id, format: fmt.label, value }).select().single();
-                if (error) throw error;
-                const msg = await ch.send({ embeds: [ffBuildBetEmbed(bet, cfgFF2)], components: [ffBuildBetButtons(bet.id, cfgFF2)] });
-                await ffPatchBet(bet.id, { message_id: msg.id });
-                await sleep(800);
-              } catch (e) { console.error(`Erro aposta ${fmt.label} ${value}:`, e.message); }
-            })());
+            try {
+              const { data: bet, error } = await supabase.from('ff_bets').insert({
+                guild_id: guild.id, channel_id: ch.id, format: fmt.label, value,
+              }).select().single();
+              if (error) throw error;
+              const msg = await ch.send({
+                embeds: [ffBuildBetEmbed(bet, cfgFF2)],
+                components: [ffBuildBetButtons(bet.id, cfgFF2)],
+              });
+              await ffPatchBet(bet.id, { message_id: msg.id });
+              totalBet++;
+              await sleep(500);
+            } catch (e) {
+              console.error(`Erro aposta ${fmt.label} ${value}:`, e.message);
+            }
+          }
+        }
           }
         }
         await Promise.allSettled(betPromises);

@@ -3969,8 +3969,8 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
           }
         }
         await Promise.allSettled(betPromises);
-        await report(`✅ ${betPromises.length} embeds de aposta postados!`);
-        await ffLog(guild, 'queue', 'BETS_AUTO_ON_SETUP', null, { total: betPromises.length });
+                await report(`✅ ${totalBet} embeds de aposta postados!`);
+        await ffLog(guild, 'queue', 'BETS_AUTO_ON_SETUP', null, { total: totalBet });
       } catch (e) { console.error('Erro postando apostas no setup:', e); }
     }
     await report('✅ Organização criada!');

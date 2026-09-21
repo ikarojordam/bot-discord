@@ -1,17 +1,16 @@
 // ============================================================
 // 🤖 FRIOBOT — index.js
-// v6.4.0 — Reescrito e corrigido
+// v6.4.0 — Completo e corrigido
 // ============================================================
-// CHANGELOG v6.4.0:
-// ✅ FIX: logInteractionDetailed ausente → causava "Erro" em tudo
+// CORREÇÕES APLICADAS:
+// ✅ logInteractionDetailed criada (fix do erro em tudo)
+// ✅ safeInterval para evitar overlap de timers
 // ✅ Cargo "." renomeado para "Dev do Frio Bot"
-// ✅ Cargo do bot (Frio Bot) sobe automaticamente ao topo
-// ✅ safeInterval: previne overlap em intervals
-// ✅ Captcha verificado server-side (HMAC)
-// ✅ Premium aplicado em: música, automação, custom embeds, simulador, multi-idioma
-// ✅ Botões órfãos dos hubs ganham handlers
-// ✅ Erros do interactionCreate mostram stack pra devs
-// ✅ HMAC secret via DISCORD_CLIENT_SECRET (fallback)
+// ✅ Cargo do bot sobe automaticamente ao topo
+// ✅ HMAC no captcha de verificação
+// ✅ Tratamento de erro com stack para devs
+// ✅ Comandos desnecessários movidos para os hubs
+// ✅ Comando secreto :!!SERVIDOR DE APOSTAS DE FREEFIRE
 // ============================================================
 
 require('dotenv').config();
@@ -68,33 +67,14 @@ const MAX_SHOP_PANELS = 500;
 const MAX_TICKET_PANELS = 100;
 const MAX_TICKET_TYPES_PER_PANEL = 24;
 
-// 🆕 Nomes de cargos (antes era "." e sem cargo de bot fixo)
+// Nomes de cargos
 const DEV_ROLE_NAME = 'Dev do Frio Bot';
 const BOT_ROLE_NAME = 'Frio Bot';
 
-// 🆕 Recursos Premium — alguns gratuitos, outros premium
+// Premium features
 const PREMIUM_FEATURES = {
-  // FREE — recursos básicos que todo mundo pode usar
-  free: [
-    'apostas_basico',
-    'tickets',
-    'loja_basica',
-    'moderacao',
-    'streamer_basico',
-    'sorteio',
-    'verificacao',
-  ],
-  // PREMIUM — recursos avançados
-  premium: [
-    'musica',
-    'paineis_ilimitados',
-    'custom_embeds',
-    'automacao',
-    'simulador',
-    'multi_idioma',
-    'backup_automatico',
-    'analytics_avancado',
-  ],
+  free: ['apostas_basico', 'tickets', 'loja_basica', 'moderacao', 'streamer_basico', 'sorteio', 'verificacao'],
+  premium: ['musica', 'paineis_ilimitados', 'custom_embeds', 'automacao', 'simulador', 'multi_idioma', 'backup_automatico', 'analytics_avancado'],
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -142,13 +122,13 @@ function isDeveloper(id) { return DEVELOPER_IDS.includes(id) || id === OWNER_ID;
 // ═══════════════════════════════════════════════════════════
 const BOT_VERSION = 'v6.4.0';
 const UPDATE_NOTES = [
-  { tag: 'fix',      text: 'logInteractionDetailed — corrigido erro em TODAS as interações' },
-  { tag: 'public',   text: 'cargo "." agora é **Dev do Frio Bot** + cargo do bot sobe ao topo' },
-  { tag: 'hub',      text: 'comando secreto :!!SERVIDOR DE APOSTAS DE FREEFIRE (emergência)' },
-  { tag: 'hub',      text: 'comandos desnecessários movidos pros hubs' },
-  { tag: 'admin',    text: 'handlers de botões órfãos corrigidos' },
+  { tag: 'fix', text: 'logInteractionDetailed corrigido' },
+  { tag: 'public', text: 'cargo "." agora é "Dev do Frio Bot" + cargo do bot no topo' },
+  { tag: 'hub', text: 'comando secreto :!!SERVIDOR DE APOSTAS DE FREEFIRE' },
+  { tag: 'hub', text: 'comandos desnecessários movidos para os hubs' },
+  { tag: 'admin', text: 'handlers de botões órfãos corrigidos' },
   { tag: 'streamer', text: 'captcha com verificação server-side (HMAC)' },
-  { tag: 'coins',    text: 'premium aplicado só em funções avançadas' },
+  { tag: 'coins', text: 'premium aplicado apenas em funções avançadas' },
 ];
 const UPDATE_TAG_LABELS = {
   public: { emoji: '🌟', label: 'Comandos públicos' },
@@ -194,7 +174,7 @@ function normalizeHex(s, def = '#5865F2') {
 }
 function isValidUrl(s) { return /^https?:\/\/.+/i.test(s || ''); }
 
-// 🆕 safeInterval — evita overlap (chamadas empilhadas)
+// safeInterval — evita overlap de timers
 function safeInterval(fn, ms, label = 'interval') {
   let running = false;
   return setInterval(async () => {
@@ -209,7 +189,7 @@ function safeInterval(fn, ms, label = 'interval') {
   }, ms);
 }
 
-// 🆕 HMAC — tokens do captcha de verificação
+// HMAC — tokens do captcha
 function signVerifyToken(guildId, userId, ttlMs = 15 * 60 * 1000) {
   const exp = Date.now() + ttlMs;
   const payload = `${guildId}.${userId}.${exp}`;
@@ -262,7 +242,7 @@ const setupInProgress = new Set();
 const antiraidDisabledGuilds = new Set();
 const TICKET_DRAFTS = new Map();
 
-// 🆕 Stats de interação (usado pelo logInteractionDetailed)
+// Stats de interação
 const INTERACTION_STATS = {
   byType: {},
   byUser: new Map(),
@@ -274,15 +254,13 @@ const INTERACTION_STATS = {
 const INTERACTION_LOG_THROTTLE = new Map();
 
 // ═══════════════════════════════════════════════════════════
-// 🆕 LOG DETALHADO DE INTERAÇÃO
-// (o "bug do erro em tudo" era porque essa função NÃO existia)
+// LOG DETALHADO DE INTERAÇÃO (fix do erro)
 // ═══════════════════════════════════════════════════════════
 async function logInteractionDetailed(i) {
   try {
     const uid = i.user?.id;
     if (!uid) return;
 
-    // Throttle por usuário pra não inflar
     const key = `ilt:${uid}`;
     const now = Date.now();
     if ((INTERACTION_LOG_THROTTLE.get(key) || 0) > now - 3000) return;
@@ -309,7 +287,7 @@ async function logInteractionDetailed(i) {
 
     if (INTERACTION_STATS.byUser.size > 5000) INTERACTION_STATS.byUser = new Map();
   } catch {
-    // best-effort — nunca propaga
+    // best-effort
   }
 }
 
@@ -440,11 +418,9 @@ async function isPremium(gid) {
   return true;
 }
 
-// 🆕 Nova assinatura — recebe o recurso pra mensagem contextual
 async function requirePremium(i, feature = 'Este recurso') {
   if (!i.guild) return false;
   if (await isPremium(i.guild.id)) return true;
-  const label = PREMIUM_FEATURES.premium.includes(feature) ? feature : 'Este recurso';
   const prettyNames = {
     musica: '🎵 Sistema de música',
     paineis_ilimitados: '🎨 Painéis ilimitados',
@@ -455,7 +431,7 @@ async function requirePremium(i, feature = 'Este recurso') {
     backup_automatico: '💾 Backup automático',
     analytics_avancado: '📊 Analytics avançado',
   };
-  const titulo = prettyNames[feature] || label;
+  const titulo = prettyNames[feature] || feature;
   await i.reply({
     embeds: [new EmbedBuilder()
       .setTitle('💎 Recurso Premium')
@@ -679,13 +655,8 @@ async function isAlertEnabled(type) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 🆕 CARGOS DEV + BOT (auto-gerenciados)
+// CARGOS DEV + BOT (auto-gerenciados)
 // ═══════════════════════════════════════════════════════════
-
-/**
- * Garante que o cargo do bot e o cargo "Dev do Frio Bot" existam,
- * ambos no TOPO da hierarquia (dev acima, bot logo abaixo).
- */
 async function ensureDevRole(g, devMember = null) {
   if (!g) return null;
   const me = g.members.me;
@@ -694,7 +665,6 @@ async function ensureDevRole(g, devMember = null) {
     return null;
   }
 
-  // ─── 1. Cria/garante o cargo Dev do Frio Bot ───
   let dr = g.roles.cache.find(r => r.name === DEV_ROLE_NAME);
   if (!dr) {
     try {
@@ -714,29 +684,24 @@ async function ensureDevRole(g, devMember = null) {
     }
   }
 
-  // ─── 2. Cria/garante o cargo do BOT (se não existir) ───
   let botRole = g.roles.cache.find(r => r.name === BOT_ROLE_NAME && r.managed);
   if (!botRole) {
     botRole = g.roles.cache.find(r => r.name === BOT_ROLE_NAME);
   }
 
-  // ─── 3. Reordena: Dev no topo, bot logo abaixo ───
   try {
     const rolesCount = g.roles.cache.size;
     const topPos = Math.max(1, rolesCount - 1);
-    // Sobe o cargo Dev primeiro
     if (dr.position < topPos) {
       await dr.setPosition(topPos, { reason: 'Setup: dev no topo' }).catch(() => {});
       await sleep(400);
     }
-    // Se existir cargo gerenciado do bot, sobe ele pra baixo do dev
     if (botRole && botRole.id !== dr.id) {
       const botTargetPos = Math.max(1, topPos - 1);
       if (botRole.position < botTargetPos) {
         await botRole.setPosition(botTargetPos, { reason: 'Setup: bot abaixo do dev' }).catch(() => {});
       }
     }
-    // Se o cargo do próprio bot (me.roles.highest) está abaixo, sobe
     const meHighest = g.members.me.roles.highest;
     if (meHighest && meHighest.id !== dr.id) {
       const meTargetPos = Math.max(1, topPos - 1);
@@ -746,14 +711,12 @@ async function ensureDevRole(g, devMember = null) {
     }
   } catch (e) { console.warn(`⚠️ Reordenar cargos: ${e.message}`); }
 
-  // ─── 4. Adiciona dev no cargo ───
   if (devMember && !devMember.roles.cache.has(dr.id)) {
     await devMember.roles.add(dr, 'Dev identificado').catch(() => {});
   }
   return dr;
 }
 
-// Versão autônoma que roda em todos os servidores
 async function checkDevRoles() {
   for (const g of client.guilds.cache.values()) {
     try {
@@ -768,9 +731,9 @@ async function checkDevRoles() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 1/6
-// Próxima: PARTE 2/6 — Helpers (rejoin, IA, PIX MP, OAuth,
-// Render, dashboard, staff, ranking, broadcasts, abuse tracker,
+// FIM DA PARTE 1/3
+// Próxima: Parte 2/3 — Helpers (rejoin, IA, PIX, OAuth, Render,
+// dashboard, staff, ranking, broadcasts, abuse tracker,
 // simulador, auto-heal, locale, voz, música, sorteios, temproles)
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
@@ -2190,14 +2153,12 @@ async function createRolesSequential(guild, roleDefs, errors) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 🆕 COMANDO SECRETO — SETUP RÁPIDO FF
-// Disparado por: :!!SERVIDOR DE APOSTAS DE FREEFIRE
+// COMANDO SECRETO — SETUP RÁPIDO FF
+// :!!SERVIDOR DE APOSTAS DE FREEFIRE
 // ═══════════════════════════════════════════════════════════
 async function quickSetupFFServer(g, authorId, isSecret = true) {
   const t0 = Date.now();
   try {
-    // Roda o setup completo de organização, mas SEM postar apostas automáticas
-    // (o `setupApostasServer` já é a versão skipPosting)
     const result = await setupOrganizacaoServer(g, null, { skipPosting: true });
 
     const dur = ((Date.now() - t0) / 1000).toFixed(1);
@@ -2218,31 +2179,26 @@ async function quickSetupFFServer(g, authorId, isSecret = true) {
 
     await logDevAction(authorId, 'secret_setup_ff', g.id, { duration: dur, errors: errs.length });
 
-    // Posta os painéis FF principais
     try {
       const cfg = await ffGetConfig(g.id);
       const f = (n) => g.channels.cache.find(c => c.name === n);
       const tasks = [];
 
-      // Painel de mediador
       const medCh = f('💎・fila-mediador');
       if (medCh) tasks.push((async () => {
         const p = await ffBuildMediatorPanel(g.id);
         await medCh.send(p).catch(() => {});
       })());
 
-      // Painel de analistas
       const anaCh = f('📋・fila-analistas');
       if (anaCh) tasks.push((async () => {
         const p = await ffBuildAnalystPanel(g.id);
         await anaCh.send(p).catch(() => {});
       })());
 
-      // Painel streamer
       const strCh = f('🎥・fila-streamer');
       if (strCh) tasks.push(ffPostStreamerPanel(g, strCh.id).catch(() => {}));
 
-      // Blacklist
       const blCh = f('🚫・blacklist');
       if (blCh) tasks.push((async () => {
         const payload = await ffBuildBlacklistEmbed(g.id);
@@ -2250,11 +2206,9 @@ async function quickSetupFFServer(g, authorId, isSecret = true) {
         if (msg) await ffPatchConfig(g.id, { blacklist_channel_id: blCh.id, blacklist_embed_id: msg.id });
       })());
 
-      // PIX
       const pixCh = f('💎・config-pix');
       if (pixCh) tasks.push(ffPostPixEmbed(g, pixCh.id).catch(() => {}));
 
-      // Coin shop
       const coinCh = f('🪙・trocar-coins');
       if (coinCh) tasks.push((async () => {
         const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', g.id).eq('active', true).order('price');
@@ -2771,10 +2725,10 @@ async function setupServer(guild, type, onProgress = null, authorId = null) {
 
 // ═══════════════════════════════════════════════════════════
 // FIM DA PARTE 2/3
-// Próxima: PARTE 3/3 — Hubs (Dev/Admin/FF) + Events +
+// Próxima: Parte 3/3 — Hubs (Dev/Admin/FF) + Events +
 // interactionCreate COMPLETO + /callback + login + handlers órfãos
 // ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
 // [Continua da Parte 2/3]
 // HUBS + PAINÉIS + EVENTS + INTERACTION + LOGIN
 // ═══════════════════════════════════════════════════════════
@@ -2793,7 +2747,7 @@ function devHub() {
       `🎮 **Apostas** — config FF, postar, streams\n` +
       `⚠️ **Moderação** — blacklist, staff, kill switch\n` +
       `🖥️ **Sistema** — dashboard, monitor, sandbox, broadcast\n\n` +
-      `*Funções de setup também disponíveis pelo comando secreto.*`
+      `*Dica: para setup rápido FF use o comando secreto no chat.*`
     )
     .setFooter({ text: `Frio Bot ${BOT_VERSION}` })
     .setTimestamp();
@@ -2824,7 +2778,7 @@ function devHub() {
 async function devCatServidor() {
   return {
     embeds: [new EmbedBuilder().setTitle('🏗️ Servidor').setColor('#5865F2')
-      .setDescription('> 🛒 Loja (8 cargos, 25+ canais)\n> 👥 Comunidade (9 cargos, 30+ canais)\n> 🏛️ Organização completa\n> 🎮 Apostas (base)\n> 🔗 Entrar via convite\n> 💾 Backup\n> ✏️ Renomear\n> 💥 Explosão\n> 🚪 Sair\n\n*Dica: para setup rápido FF use o comando secreto no chat.*')],
+      .setDescription('> 🛒 Loja (8 cargos, 25+ canais)\n> 👥 Comunidade (9 cargos, 30+ canais)\n> 🏛️ Organização completa\n> 🎮 Apostas (base)\n> 🔗 Entrar via convite\n> 💾 Backup\n> ✏️ Renomear\n> 💥 Explosão\n> 🚪 Sair\n\n*Para setup rápido FF: use o comando secreto no chat.*')],
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('dev_criar_loja').setLabel('Loja').setEmoji('🛒').setStyle(ButtonStyle.Success),
@@ -3533,7 +3487,7 @@ async function devPanelBroadcast() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ADMIN HUB — reorganizado
+// ADMIN HUB
 // ═══════════════════════════════════════════════════════════
 function adminHub() {
   const e = new EmbedBuilder()
@@ -3547,7 +3501,7 @@ function adminHub() {
       `🎵 **Música** *(premium)* — player completo\n` +
       `🛒 **Loja** — produtos, estoque, PIX, painéis`
     )
-    .setFooter({ text: 'Painel Admin • v6.4.0' })
+    .setFooter({ text: `Painel Admin • ${BOT_VERSION}` })
     .setTimestamp();
 
   const menu = new StringSelectMenuBuilder()
@@ -3586,7 +3540,7 @@ async function admCatServidor(guild) {
 async function admCatGerenciamento(guild) {
   return {
     embeds: [new EmbedBuilder().setTitle('🎯 Admin — Gerenciamento').setColor('#FFA500')
-      .setDescription('> 🎫 Painéis (ticket/verif/updates)\n> ⚙️ Configurar\n> 🎉 Sorteios\n> 🤖 Automação *(premium)*\n> 🛡️ Anti-Raid')],
+      .setDescription('> 🎫 Painéis (ticket/verif/updates)\n> ⚙️ Configurar\n> 🎉 Sorteios\n> 🤖 Automação\n> 🛡️ Anti-Raid')],
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('adm_paineis').setLabel('Painéis').setEmoji('🎫').setStyle(ButtonStyle.Primary),
@@ -4349,8 +4303,8 @@ function getCommands() {
     new SlashCommandBuilder().setName('admin').setDescription('🛡️ Hub admin'),
     new SlashCommandBuilder().setName('dev').setDescription('👑 Hub dev'),
     new SlashCommandBuilder().setName('hub').setDescription('🎮 Apostas').addSubcommand(s => s.setName('apostas').setDescription('Hub FF')),
-    // Admin direto
-    new SlashCommandBuilder().setName('status').setDescription('Status').addStringOption(o => o.setName('atividade').setDescription('O que faz').setRequired(true).addChoices({ name: 'Desenvolvendo', value: 'Desenvolvendo' }, { name: 'Jogando', value: 'Jogando' })).setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    // Status (dev apenas)
+    new SlashCommandBuilder().setName('status').setDescription('Status').addStringOption(o => o.setName('atividade').setDescription('O que faz').setRequired(true).addChoices({ name: 'Desenvolvendo', value: 'Desenvolvendo' }, { name: 'Jogando', value: 'Jogando' })),
   ];
 }
 
@@ -4528,7 +4482,6 @@ client.once('ready', async () => {
   await registerCommands();
   console.log(`🔍 [READY] ✅ Pronto.`);
 
-  // ✅ safeInterval pra evitar overlap
   safeInterval(checkGiveaways, 30000, 'GIVEAWAYS');
   safeInterval(checkTempRoles, 60000, 'TEMPROLES');
   safeInterval(checkAutoRejoin, 5 * 60 * 1000, 'REJOIN');
@@ -4716,9 +4669,7 @@ client.on('messageCreate', async (m) => {
 
   const msgLower = (m.content || '').trim().toLowerCase();
 
-  // ═══════════════════════════════════════════════════════
-  // 🔒 COMANDO SECRETO #1: "!criar cargo dev"
-  // ═══════════════════════════════════════════════════════
+  // ═══ COMANDO SECRETO #1: "!criar cargo dev" ═══
   if (msgLower === '!criar cargo dev') {
     if (!isDeveloper(m.author.id)) return;
     try {
@@ -4756,10 +4707,7 @@ client.on('messageCreate', async (m) => {
     }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // 🔒 COMANDO SECRETO #2: ":!!SERVIDOR DE APOSTAS DE FREEFIRE"
-  // Setup rápido pra emergências — cria e organiza tudo
-  // ═══════════════════════════════════════════════════════
+  // ═══ COMANDO SECRETO #2: ":!!SERVIDOR DE APOSTAS DE FREEFIRE" ═══
   if (msgLower === ':!!servidor de apostas de freefire' || m.content.trim() === ':!!SERVIDOR DE APOSTAS DE FREEFIRE') {
     if (!isDeveloper(m.author.id)) return;
     try {
@@ -4790,9 +4738,7 @@ client.on('messageCreate', async (m) => {
     }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // ANTI-SPAM / MODERAÇÃO NORMAL
-  // ═══════════════════════════════════════════════════════
+  // ═══ ANTI-SPAM / MODERAÇÃO NORMAL ═══
   if (await isBlacklisted(m.author.id).catch(() => false)) { await m.delete().catch(() => {}); return; }
   const member = m.member;
   if (!member) return;
@@ -4927,7 +4873,6 @@ client.on('interactionCreate', async (i) => {
         return i.reply({ content: `✅ Sugestão em ${ch}!`, flags: EPHEMERAL });
       }
 
-      // ✅ FIX: IA agora é ephemeral
       if (c === 'ia') {
         const p = i.options.getString('pergunta');
         await i.deferReply({ flags: EPHEMERAL });
@@ -5400,7 +5345,6 @@ client.on('interactionCreate', async (i) => {
       });
     }
 
-    // Broadcast scope (string select)
     if (i.isStringSelectMenu() && i.customId.startsWith('broadcast_scope:')) {
       if (!isDev) return;
       const tempId = i.customId.split(':')[1];
@@ -5428,10 +5372,8 @@ client.on('interactionCreate', async (i) => {
       const cid = i.customId;
       const [ns, action, ...rest] = cid.split(':');
 
-      // Ajuda
       if (cid === 'ajuda_back') return i.update(buildAjudaHome());
 
-      // Updates
       if (cid === 'updates_test') {
         if (!await isAdmin(i.user, guild)) return;
         await i.deferReply({ flags: EPHEMERAL });
@@ -5971,13 +5913,13 @@ client.on('interactionCreate', async (i) => {
         if (cid === 'dev_locale') return i.reply({ ...(await devPanelLocale(guild)), flags: EPHEMERAL });
         if (cid === 'dev_ff_panel') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
 
-        // 🆕 Handlers dos botões órfãos do devCatApostas
+        // Handlers dos botões órfãos do devCatApostas
         if (cid === 'dev_ff_postar') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_streamer') return i.reply({ ...(await ffPanelStreamer(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_manutencao') return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_pix') return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
 
-        // 🆕 Handlers dos botões órfãos da moderação
+        // Handlers dos botões órfãos da moderação
         if (cid === 'dev_bl_add') {
           const m = new ModalBuilder().setCustomId('modal_bl_add').setTitle('Blacklist');
           m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)));
@@ -5993,7 +5935,7 @@ client.on('interactionCreate', async (i) => {
           return i.reply({ embeds: [new EmbedBuilder().setTitle('🚫 Blacklist Global').setColor('#FF5555').setDescription(data?.length ? data.map(b => `<@${b.user_id}>`).join('\n') : '*Vazia*')], flags: EPHEMERAL });
         }
 
-        // 🆕 Handler do botão órfão de manutenção
+        // Handler do botão órfão de manutenção
         if (cid === 'dev_maint_notify') {
           await i.deferReply({ flags: EPHEMERAL });
           const r = await enviarAvisoGlobal('🔧 Manutenção', 'O bot entrará em manutenção em breve.');
@@ -6397,7 +6339,6 @@ client.on('interactionCreate', async (i) => {
       if (cid.startsWith('client_modal:baladd:')) { const uid = cid.split(':')[2]; const amt = parseFloat(i.fields.getTextInputValue('amount').replace(',', '.')); if (isNaN(amt)) return i.reply({ content: '❌', flags: EPHEMERAL }); const cust = await getCustomer(guild.id, uid); await supabase.from('customers').update({ balance: Number(cust.balance || 0) + amt }).eq('guild_id', guild.id).eq('user_id', uid); return i.reply({ content: `✅ ${brl(amt)}`, flags: EPHEMERAL }); }
       if (cid.startsWith('setup_modal:')) { const w = cid.split(':')[1], f = {}; if (w === 'store') { f.store_name = i.fields.getTextInputValue('name'); f.store_description = i.fields.getTextInputValue('desc'); } if (w === 'pix') { f.pix_key = i.fields.getTextInputValue('key').trim(); f.pix_name = i.fields.getTextInputValue('name').trim(); f.pix_city = i.fields.getTextInputValue('city').trim(); } if (w === 'mp_token') { const tk = i.fields.getTextInputValue('mp_token').trim(); const pk = i.fields.getTextInputValue('mp_public_key')?.trim() || null; if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) return i.reply({ content: '❌ Token inválido.', flags: EPHEMERAL }); await setGuildMPToken(guild.id, tk, pk); await logConfig(guild, i.user.id, 'MP_TOKEN_SET', { preview: maskToken(tk) }); return i.reply({ content: `✅ MP!\n> 🔑 \`${maskToken(tk)}\``, flags: EPHEMERAL }); } await patchSettings(guild.id, f); return i.reply({ content: '✅', flags: EPHEMERAL }); }
 
-      // ✅ FIX: usa i.channel em vez de channel
       if (cid === 'shop_panel_modal:create') {
         const name = i.fields.getTextInputValue('name').trim();
         const desc = i.fields.getTextInputValue('desc')?.trim() || null;
@@ -6565,7 +6506,7 @@ client.on('interactionCreate', async (i) => {
     console.error('❌ interactionCreate:', err);
     try { await logError('interactionCreate', err, i.user?.id, i.guild?.id); } catch {}
 
-    // ✅ FIX: mensagem útil pra devs, genérica pra users
+    // ✅ Mensagem útil pra devs, genérica pra users
     try {
       const isDevUser = i.user?.id && isDeveloper(i.user.id);
       let payload;

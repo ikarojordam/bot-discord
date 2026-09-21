@@ -6745,11 +6745,16 @@ process.on('uncaughtException', e => {
 console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);
 console.log('🔑 [LOGIN] Token começa com:', (process.env.DISCORD_TOKEN || '').substring(0, 10) + '...');
 console.log('🔑 [LOGIN] Tentando conectar...');
-
+client.on('error', e => console.error('🔴 [CLIENT ERROR]', e.message));
+client.on('shardError', e => console.error('🔴 [SHARD ERROR]', e.message));
+client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, e?.code, e?.reason));
+client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
+client.on('invalidated', () => console.error('⚠️ [INVALIDATED] Sessão invalidada pelo Discord'));
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
   .catch(e => {
     console.error('🔑 [LOGIN] ❌ FALHOU:', e.message);
+    console.error('🔑 [LOGIN] Código:', e.code);
     console.error('🔑 [LOGIN] Stack:', e.stack);
   });
 // ═══════════════════════════════════════════════════════════

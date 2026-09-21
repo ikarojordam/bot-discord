@@ -6742,8 +6742,16 @@ process.on('uncaughtException', e => {
 // ═══════════════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════════════
-client.login(process.env.DISCORD_TOKEN);
+console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);
+console.log('🔑 [LOGIN] Token começa com:', (process.env.DISCORD_TOKEN || '').substring(0, 10) + '...');
+console.log('🔑 [LOGIN] Tentando conectar...');
 
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
+  .catch(e => {
+    console.error('🔑 [LOGIN] ❌ FALHOU:', e.message);
+    console.error('🔑 [LOGIN] Stack:', e.stack);
+  });
 // ═══════════════════════════════════════════════════════════
 // ✅ FIM DO ARQUIVO — 3 PARTES COMPLETAS — v6.4.0
 // ═══════════════════════════════════════════════════════════

@@ -6750,13 +6750,36 @@ client.on('shardError', e => console.error('🔴 [SHARD ERROR]', e.message));
 client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, e?.code, e?.reason));
 client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
 client.on('invalidated', () => console.error('⚠️ [INVALIDATED] Sessão invalidada pelo Discord'));
+// ═══ DEBUG DE CONEXÃO ═══
+console.log('🔧 [DEBUG] Intents solicitadas:', client.options.intents.bitfield.toString());
+console.log('🔧 [DEBUG] Shard count:', client.options.shardCount ?? 'auto');
+
+client.on('error', e => console.error('🔴 [ERROR]', e.message));
+client.on('shardError', (e, id) => console.error('🔴 [SHARD-ERR]', id, e.message, e.code));
+client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'code:', e?.code, 'reason:', e?.reason));
+client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
+client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
+client.on('invalidated', () => console.error('⚠️ [INVALIDATED]'));
+client.on('warn', m => console.warn('⚠️ [WARN]', m));
+
+setTimeout(() => {
+  console.log('⏰ [TIMEOUT 30s] isReady:', client.isReady());
+  console.log('⏰ [TIMEOUT 30s] WS status:', client.ws.status);
+  console.log('⏰ [TIMEOUT 30s] WS ping:', client.ws.ping);
+}, 30000);
+
+setInterval(() => {
+  console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | isReady=${client.isReady()} | ws.status=${client.ws.status}`);
+}, 60000);
+// ═══ FIM DEBUG ═══
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
   .catch(e => {
-    console.error('🔑 [LOGIN] ❌ FALHOU:', e.message);
-    console.error('🔑 [LOGIN] Código:', e.code);
-    console.error('🔑 [LOGIN] Stack:', e.stack);
+    console.error('🔑 [LOGIN] ❌ FALHOU');
+    console.error('🔑 [LOGIN] message:', e.message);
+    console.error('🔑 [LOGIN] code:', e.code);
   });
+
 // ═══════════════════════════════════════════════════════════
 // ✅ FIM DO ARQUIVO — 3 PARTES COMPLETAS — v6.4.0
 // ═══════════════════════════════════════════════════════════

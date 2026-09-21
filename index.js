@@ -6771,7 +6771,10 @@ setTimeout(() => {
 setInterval(() => {
   console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | isReady=${client.isReady()} | ws.status=${client.ws.status}`);
 }, 60000);
+
 // ═══ FIM DEBUG ═══
+// Força o uso do WebSocket nativo em vez da biblioteca 'ws'
+process.env.DISCORD_FORCE_NATIVE_WS = 'true';
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
   .catch(e => {

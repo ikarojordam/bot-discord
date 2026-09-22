@@ -1,0 +1,154 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #0f1115;
+  color: #e8eaed;
+  min-height: 100vh;
+}
+a { color: #5865F2; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Auth */
+.auth-page {
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: linear-gradient(135deg, #5865F2 0%, #8B5CF6 100%);
+}
+.auth-card {
+  background: #1e1f22; border-radius: 20px; padding: 40px;
+  width: 100%; max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.auth-card .logo { font-size: 56px; text-align: center; margin-bottom: 16px; }
+.auth-card h1 { text-align: center; margin-bottom: 8px; }
+.auth-card .sub { text-align: center; color: #949BA4; margin-bottom: 32px; font-size: 14px; }
+
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: #b5bac1; margin-bottom: 6px; }
+.field input, .field select {
+  width: 100%; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid #3f4147; background: #2b2d31; color: #fff;
+  font-size: 15px; outline: none; transition: border-color .2s;
+}
+.field input:focus, .field select:focus { border-color: #5865F2; }
+.field.checkbox label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.field.checkbox input { width: auto; }
+
+button {
+  padding: 12px 20px; border-radius: 10px; border: none;
+  background: #5865F2; color: #fff; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all .2s;
+}
+button:hover { background: #4752C4; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.btn-secondary { background: #2b2d31; border: 1px solid #3f4147; }
+.btn-secondary:hover { background: #36393f; }
+.btn-ghost { background: transparent; padding: 8px 14px; font-size: 14px; }
+.btn-ghost:hover { background: rgba(255,255,255,.08); }
+form button[type=submit] { width: 100%; margin-top: 8px; }
+
+.links { text-align: center; margin-top: 16px; }
+.links a { font-size: 13px; }
+
+.divider {
+  text-align: center; color: #6d6f78; font-size: 12px;
+  margin: 24px 0; position: relative;
+}
+.divider::before, .divider::after {
+  content: ''; position: absolute; top: 50%;
+  width: 40%; height: 1px; background: #3f4147;
+}
+.divider::before { left: 0; } .divider::after { right: 0; }
+
+.register-block { text-align: center; }
+.register-block p { font-size: 13px; color: #949BA4; margin-bottom: 8px; }
+.register-block button { width: 100%; }
+
+.msg { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 13px; display: none; }
+.msg.error { background: #ef444422; color: #f87171; display: block; }
+.msg.ok { background: #22c55e22; color: #4ade80; display: block; }
+
+/* Modal */
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; z-index: 100;
+}
+.modal-content { background: #1e1f22; border-radius: 16px; padding: 32px; max-width: 400px; width: 100%; }
+.modal-content h2 { margin-bottom: 8px; }
+.modal-content p { color: #949BA4; font-size: 14px; margin-bottom: 20px; }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.modal-actions button { flex: 1; }
+
+/* App */
+.app-page { background: #0f1115; }
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 24px; background: #1e1f22; border-bottom: 1px solid #2b2d31;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.logo-sm { font-size: 24px; }
+.user-email { color: #949BA4; font-size: 14px; }
+
+.tabs {
+  display: flex; gap: 4px; padding: 16px 24px 0;
+  border-bottom: 1px solid #2b2d31; overflow-x: auto;
+}
+.tab {
+  background: transparent; color: #949BA4; border: none;
+  padding: 12px 18px; border-radius: 8px 8px 0 0;
+  font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.tab:hover { background: rgba(255,255,255,.04); color: #e8eaed; }
+.tab.active { background: #1e1f22; color: #fff; border-bottom: 2px solid #5865F2; }
+
+.content { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.tab-panel h2 { margin-bottom: 20px; font-size: 22px; }
+
+.card {
+  background: #1e1f22; border-radius: 14px; padding: 24px;
+  margin-bottom: 20px; border: 1px solid #2b2d31;
+}
+.card h3 { margin-bottom: 8px; font-size: 16px; }
+.hint { color: #949BA4; font-size: 13px; margin-bottom: 16px; }
+
+.grid-2 {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px; margin-bottom: 16px;
+}
+
+.filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filters select {
+  padding: 10px 14px; border-radius: 8px; border: 1px solid #3f4147;
+  background: #2b2d31; color: #fff; font-size: 14px;
+}
+
+.result-box { margin-top: 16px; }
+.result-box .key-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #0f1115; padding: 10px 14px; border-radius: 8px;
+  margin-bottom: 8px; font-family: monospace; border: 1px solid #2b2d31;
+}
+.result-box .key-row button { padding: 6px 12px; font-size: 12px; background: #2b2d31; }
+
+.table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid #2b2d31; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #2b2d31; }
+th { background: #1e1f22; color: #949BA4; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,.02); }
+code { font-family: monospace; background: #0f1115; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+}
+.badge.basic { background: #92400e22; color: #fbbf24; }
+.badge.premium { background: #6b728022; color: #cbd5e1; }
+.badge.ultra { background: #b4530922; color: #fbbf24; }
+.badge.unlimited { background: #7c3aed22; color: #a78bfa; }
+.badge.active { background: #22c55e22; color: #4ade80; }
+.badge.used { background: #ef444422; color: #f87171; }

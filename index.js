@@ -1,6 +1,6 @@
 // ============================================================
 // 🤖 FRIOBOT — index.js
-// v6.5.0 — Arquivo completo e organizado
+// v6.5.0 — Completo e corrigido
 // ============================================================
 
 require('dotenv').config();
@@ -38,6 +38,13 @@ app.get('/', (req, res) => res.send('Bot está online!'));
 app.get('/health', (req, res) => res.json({ ok: true, uptime: process.uptime(), version: 'v6.5.0' }));
 const port = process.env.PORT || process.env.WEBHOOK_PORT || 3000;
 app.listen(port, () => console.log(`🌐 Web rodando na porta ${port}`));
+
+try {
+  require('./panel/server.js');
+  console.log('🌐 [PANEL] Módulo carregado');
+} catch (e) {
+  console.warn('⚠️ [PANEL] Não carregou:', e.message);
+}
 
 // ═══════════════════════════════════════════════════════════
 // ENV VARS
@@ -101,12 +108,18 @@ try {
 // ═══════════════════════════════════════════════════════════
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildInvites,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildVoiceStates,
   ],
   partials: ['CHANNEL', 'MESSAGE', 'REACTION'],
-  rest: { timeout: 60000, retries: 5 }
+  rest: { timeout: 60000, retries: 5 },
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -121,12 +134,12 @@ function isDeveloper(id) { return DEVELOPER_IDS.includes(id) || id === OWNER_ID;
 const BOT_VERSION = 'v6.5.0';
 const UPDATE_NOTES = [
   { tag: 'ticket', text: 'sistema de tickets revolucionado' },
-  { tag: 'loja', text: 'loja moderna com promoções e editor premium' },
-  { tag: 'public', text: 'comando /resgatar key premium' },
+  { tag: 'loja', text: 'loja moderna com promoções' },
+  { tag: 'public', text: 'comando /resgatar key + .p stats' },
   { tag: 'fix', text: 'correções gerais' },
 ];
 const UPDATE_TAG_LABELS = {
-  public: { emoji: '🌟', label: 'Comandos públicos' },
+  public: { emoji: '🌟', label: 'Públicos' },
   ticket: { emoji: '🎫', label: 'Tickets' },
   hub: { emoji: '🎮', label: 'Apostas FF' },
   admin: { emoji: '🛡️', label: 'Admin' },
@@ -180,7 +193,7 @@ function safeInterval(fn, ms, label = 'interval') {
   }, ms);
 }
 
-// ───── HMAC (verificação) ─────
+// ───── HMAC ─────
 function signVerifyToken(guildId, userId, ttlMs = 15 * 60 * 1000) {
   const exp = Date.now() + ttlMs;
   const payload = `${guildId}.${userId}.${exp}`;
@@ -202,7 +215,7 @@ function verifyVerifyToken(token) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SAFE EMBEDS (validação — nada de "undefined")
+// SAFE EMBEDS
 // ═══════════════════════════════════════════════════════════
 function safeStr(v, max = 0) {
   if (v === null || v === undefined) return null;
@@ -237,20 +250,16 @@ function applyEmbedSafe(embed, opts = {}) {
   if (title) embed.setTitle(title);
   if (desc) embed.setDescription(desc);
   if (color) embed.setColor(color);
-
   const thumb = safeUrl(opts.thumbnail);
   if (thumb) embed.setThumbnail(thumb);
   const image = safeUrl(opts.image);
   if (image) embed.setImage(image);
-
   const footerText = safeStr(opts.footer, 2048);
   const footerIcon = safeUrl(opts.footerIcon);
   if (footerText) embed.setFooter(footerIcon ? { text: footerText, iconURL: footerIcon } : { text: footerText });
-
   const authorName = safeStr(opts.authorName, 256);
   const authorIcon = safeUrl(opts.authorIcon);
   if (authorName) embed.setAuthor(authorIcon ? { name: authorName, iconURL: authorIcon } : { name: authorName });
-
   if (Array.isArray(opts.fields)) {
     const fields = opts.fields
       .filter(f => f && safeStr(f.name) && safeStr(f.value))
@@ -265,17 +274,39 @@ function applyEmbedSafe(embed, opts = {}) {
 // DEFAULT CONFIG
 // ═══════════════════════════════════════════════════════════
 const defaultConfig = {
-  ticket_titulo: 'Central de Suporte', ticket_descricao: 'Clique abaixo para abrir um ticket.',
-  botao_ticket: 'Abrir Ticket', botao_fechar: 'Fechar Ticket', botao_add_membro: 'Adicionar',
+  ticket_titulo: 'Central de Suporte',
+  ticket_descricao: 'Clique abaixo para abrir um ticket.',
+  botao_ticket: 'Abrir Ticket',
+  botao_fechar: 'Fechar Ticket',
+  botao_add_membro: 'Adicionar',
   botao_avisar: 'Avisar Staff',
-  ticket_cargo: '', mute_role: '', ticket_log_channel: '', mod_log_channel: '', log_channel: '',
-  admin_role: '', membro_role: '', verificado_role: '',
-  is_premium: false, premium_expires_at: null, premium_tier: null,
-  welcome_channel: '', welcome_message: 'Bem-vindo!', autorole_role: '',
-  verificacao_titulo: 'Verificação', verificacao_descricao: 'Clique para verificar.',
-  verificacao_botao: 'Verificar', verificacao_cor: '#00FF00',
-  anti_link: false, anti_invite: false, suggestion_channel: '', server_type: 'personalizado',
-  admin_maintenance: false, admin_maintenance_reason: null, admin_maintenance_since: null, admin_maintenance_by: null,
+  ticket_cargo: '',
+  mute_role: '',
+  ticket_log_channel: '',
+  mod_log_channel: '',
+  log_channel: '',
+  admin_role: '',
+  membro_role: '',
+  verificado_role: '',
+  is_premium: false,
+  premium_expires_at: null,
+  premium_tier: null,
+  welcome_channel: '',
+  welcome_message: 'Bem-vindo!',
+  autorole_role: '',
+  verificacao_titulo: 'Verificação',
+  verificacao_descricao: 'Clique para verificar.',
+  verificacao_botao: 'Verificar',
+  verificacao_cor: '#00FF00',
+  anti_link: false,
+  anti_invite: false,
+  suggestion_channel: '',
+  server_type: 'personalizado',
+  admin_maintenance: false,
+  admin_maintenance_reason: null,
+  admin_maintenance_since: null,
+  admin_maintenance_by: null,
+  ghost_mode: false,
   tickets_auto_close_horas: 48,
   tickets_fechar_ao_sair: false,
   tickets_mensagem_boas_vindas: 'Olá! Um atendente virá em breve.',
@@ -313,17 +344,14 @@ async function logInteractionDetailed(i) {
     if ((INTERACTION_LOG_THROTTLE.get(key) || 0) > now - 3000) return;
     INTERACTION_LOG_THROTTLE.set(key, now);
     if (INTERACTION_LOG_THROTTLE.size > 2000) INTERACTION_LOG_THROTTLE.clear();
-
     const type = i.isChatInputCommand() ? 'chat_input'
       : i.isButton() ? 'button'
       : i.isAnySelectMenu() ? 'select'
       : i.isModalSubmit() ? 'modal'
       : 'other';
-
     INTERACTION_STATS.total++;
     INTERACTION_STATS.byType[type] = (INTERACTION_STATS.byType[type] || 0) + 1;
     INTERACTION_STATS.byUser.set(uid, (INTERACTION_STATS.byUser.get(uid) || 0) + 1);
-
     if (i.isChatInputCommand()) {
       const k = `/${i.commandName}`;
       INTERACTION_STATS.byCommand[k] = (INTERACTION_STATS.byCommand[k] || 0) + 1;
@@ -336,7 +364,7 @@ async function logInteractionDetailed(i) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CONFIG DB
+// CONFIG HELPERS
 // ═══════════════════════════════════════════════════════════
 async function getConfig(gid) {
   try {
@@ -377,7 +405,6 @@ async function ensureGuild(g) {
 }
 async function fetchMember(g, id) { try { return await g.members.fetch(id); } catch { return null; } }
 
-// ───── Tokens MP ─────
 async function setGuildMPToken(gid, token, publicKey = null) {
   await supabase.from('settings').upsert({ guild_id: gid, mp_access_token: token || null, mp_public_key: publicKey || null, updated_at: new Date().toISOString() }, { onConflict: 'guild_id' }).catch(() => {});
 }
@@ -441,7 +468,10 @@ async function isPremium(gid) {
   const c = await getConfig(gid);
   if (!c.is_premium) return false;
   if (c.premium_expires_at && new Date(c.premium_expires_at) <= new Date()) {
-    c.is_premium = false; c.premium_expires_at = null; await setConfig(gid, c); return false;
+    c.is_premium = false;
+    c.premium_expires_at = null;
+    await setConfig(gid, c);
+    return false;
   }
   return true;
 }
@@ -525,6 +555,10 @@ async function isStaffBlacklisted(uid) {
   const { data } = await supabase.from('staff_blacklist').select('*').eq('user_id', uid).maybeSingle();
   return !!data;
 }
+async function isGlobalBanned(uid) {
+  const { data } = await supabase.from('global_bans').select('*').eq('user_id', uid).maybeSingle();
+  return data || null;
+}
 
 // ═══════════════════════════════════════════════════════════
 // LOG CENTRAL
@@ -537,27 +571,43 @@ async function logImportant(category, title, opts = {}) {
     const ch = client.channels.cache.get(LOG_CHANNEL_ID) || await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
     if (!ch) { console.error(`❌ [LOG-CENTRAL] Canal não encontrado.`); return; }
     const catMeta = {
-      'DEV': { emoji: '👑', color: '#FFD700' }, 'SERVIDOR': { emoji: '🏗️', color: '#5865F2' },
-      'MANUTENÇÃO': { emoji: '🔧', color: '#FFA500' }, 'KILL': { emoji: '🚨', color: '#FF0000' },
-      'RENDER': { emoji: '📡', color: '#8E44AD' }, 'SUPABASE': { emoji: '🗄️', color: '#3ECF8E' },
-      'UPDATE': { emoji: '🚀', color: '#00AAFF' }, 'ERRO': { emoji: '❌', color: '#ED4245' },
-      'SETUP': { emoji: '⚙️', color: '#9B59B6' }, 'GUILD': { emoji: '🌐', color: '#57F287' },
-      'ENTROU': { emoji: '🟢', color: '#22c55e' }, 'SAIU': { emoji: '🔴', color: '#ED4245' },
-      'PREM': { emoji: '💎', color: '#FFD700' }, 'BACKUP': { emoji: '💾', color: '#3498DB' },
-      'ALERTA': { emoji: '⚠️', color: '#FFA500' }, 'TICKET': { emoji: '🎫', color: '#9B59B6' },
-      'APOSTA': { emoji: '🎮', color: '#f1c40f' }, 'MEDIADOR': { emoji: '🛡️', color: '#00AAFF' },
-      'ANALISTA': { emoji: '🔎', color: '#00AAFF' }, 'STREAMER': { emoji: '🎥', color: '#9146FF' },
-      'BLACKLIST': { emoji: '🚫', color: '#FF5555' }, 'COINS': { emoji: '🪙', color: '#FFD700' },
-      'MODERAÇÃO': { emoji: '⚠️', color: '#FF5555' }, 'VERIFICAÇÃO': { emoji: '✅', color: '#22c55e' },
-      'SORTEIO': { emoji: '🎉', color: '#FFD700' }, 'BUG': { emoji: '🐛', color: '#FF5555' },
-      'ADMIN': { emoji: '🛡️', color: '#ED4245' }, 'LOJA': { emoji: '🛒', color: '#57F287' },
-      'CONFIG': { emoji: '⚙️', color: '#5865F2' }, 'FF-CONFIG': { emoji: '🎮', color: '#f1c40f' },
+      'DEV': { emoji: '👑', color: '#FFD700' },
+      'SERVIDOR': { emoji: '🏗️', color: '#5865F2' },
+      'MANUTENÇÃO': { emoji: '🔧', color: '#FFA500' },
+      'KILL': { emoji: '🚨', color: '#FF0000' },
+      'RENDER': { emoji: '📡', color: '#8E44AD' },
+      'SUPABASE': { emoji: '🗄️', color: '#3ECF8E' },
+      'UPDATE': { emoji: '🚀', color: '#00AAFF' },
+      'ERRO': { emoji: '❌', color: '#ED4245' },
+      'SETUP': { emoji: '⚙️', color: '#9B59B6' },
+      'GUILD': { emoji: '🌐', color: '#57F287' },
+      'ENTROU': { emoji: '🟢', color: '#22c55e' },
+      'SAIU': { emoji: '🔴', color: '#ED4245' },
+      'PREM': { emoji: '💎', color: '#FFD700' },
+      'BACKUP': { emoji: '💾', color: '#3498DB' },
+      'ALERTA': { emoji: '⚠️', color: '#FFA500' },
+      'TICKET': { emoji: '🎫', color: '#9B59B6' },
+      'APOSTA': { emoji: '🎮', color: '#f1c40f' },
+      'MEDIADOR': { emoji: '🛡️', color: '#00AAFF' },
+      'ANALISTA': { emoji: '🔎', color: '#00AAFF' },
+      'STREAMER': { emoji: '🎥', color: '#9146FF' },
+      'BLACKLIST': { emoji: '🚫', color: '#FF5555' },
+      'COINS': { emoji: '🪙', color: '#FFD700' },
+      'MODERAÇÃO': { emoji: '⚠️', color: '#FF5555' },
+      'VERIFICAÇÃO': { emoji: '✅', color: '#22c55e' },
+      'SORTEIO': { emoji: '🎉', color: '#FFD700' },
+      'BUG': { emoji: '🐛', color: '#FF5555' },
+      'ADMIN': { emoji: '🛡️', color: '#ED4245' },
+      'LOJA': { emoji: '🛒', color: '#57F287' },
+      'CONFIG': { emoji: '⚙️', color: '#5865F2' },
+      'FF-CONFIG': { emoji: '🎮', color: '#f1c40f' },
       'SECRET': { emoji: '🕵️', color: '#8E44AD' },
     };
     const meta = catMeta[category] || { emoji: '📢', color: '#5865F2' };
     const e = new EmbedBuilder()
       .setTitle(`${meta.emoji} [${category}] ${String(title).substring(0, 240)}`)
-      .setColor(opts.color || meta.color).setTimestamp();
+      .setColor(opts.color || meta.color)
+      .setTimestamp();
     if (opts.description) e.setDescription(String(opts.description).substring(0, 4000));
     const fields = [];
     if (opts.user) fields.push({ name: '👤 Autor', value: `<@${opts.user}> (\`${opts.user}\`)`, inline: true });
@@ -580,7 +630,7 @@ async function logImportant(category, title, opts = {}) {
       const json = JSON.stringify(opts.metadata, null, 2);
       e.addFields({ name: '🔍 Detalhes técnicos', value: `\`\`\`json\n${json.substring(0, 1000)}\n\`\`\`` });
     }
-    e.setFooter({ text: opts.footer || 'Frio Bot • Sistema de Logs Central' });
+    e.setFooter({ text: opts.footer || 'Frio Bot • Logs Central' });
     await ch.send({ embeds: [e] }).catch(err => console.error('[LOG]', err.message));
   } catch (err) { console.error('[LOG-CENTRAL]', err.message); }
 }
@@ -591,7 +641,6 @@ function shouldLog(key, ms = 4000) {
   if (LOG_THROTTLE.size > 800) LOG_THROTTLE.clear();
   return true;
 }
-
 async function logError(ctx, err, uid = null, gid = null) {
   try { await supabase.from('error_logs').insert({ context: ctx, message: (err?.message || String(err)).substring(0, 2000), stack: (err?.stack || '').substring(0, 4000), user_id: uid, guild_id: gid }); } catch {}
   try {
@@ -603,33 +652,47 @@ async function logError(ctx, err, uid = null, gid = null) {
       user: uid, guild: gid, severity: 'danger',
       metadata: { context: ctx, message: msg.substring(0, 300) },
     });
-  } catch (e) { console.error('[LOG-CENTRAL/erro]', e.message); }
+  } catch (e) { console.error('[LOG/erro]', e.message); }
 }
-
 async function logDevAction(userId, action, guildId = null, details = {}) {
   try { await supabase.from('dev_audit').insert({ user_id: userId, action, guild_id: guildId, details }); } catch {}
   try {
-    const ACTION_LABELS = {
-      'add_note': 'Nota adicionada', 'create_global_event': 'Evento global criado',
-      'stop_all_events': 'Eventos parados', 'dead_cleanup': 'Limpeza mortos',
-      'inspector_backup': 'Backup via inspetor', 'inspector_leave': 'Bot removido',
-      'ws_reconnect': 'WS reconectado', 'sandbox_eval': 'Código Sandbox',
-      'staff_blacklist_add': 'Staff blacklistado', 'inject_coins': 'Coins injetados',
-      'inject_product': 'Produto injetado', 'inject_role': 'Cargo injetado',
-      'inject_premium': 'Premium injetado', 'cleanup_dms': 'DMs limpas',
-      'cleanup_channel': 'Canal limpo', 'manual_broadcast': 'Broadcast manual',
+    const labels = {
+      'add_note': 'Nota adicionada',
+      'create_global_event': 'Evento global criado',
+      'stop_all_events': 'Eventos parados',
+      'dead_cleanup': 'Limpeza mortos',
+      'inspector_backup': 'Backup via inspetor',
+      'inspector_leave': 'Bot removido',
+      'ws_reconnect': 'WS reconectado',
+      'sandbox_eval': 'Código Sandbox',
+      'staff_blacklist_add': 'Staff blacklistado',
+      'inject_coins': 'Coins injetados',
+      'inject_product': 'Produto injetado',
+      'inject_role': 'Cargo injetado',
+      'inject_premium': 'Premium injetado',
+      'cleanup_dms': 'DMs limpas',
+      'cleanup_channel': 'Canal limpo',
+      'manual_broadcast': 'Broadcast manual',
       'secret_setup_ff': '🕵️ Setup secreto FF',
-      'secret_cargo_dev': '🕵️ Comando secreto — cargo Dev',
+      'secret_cargo_dev': '🕵️ Cargo dev',
       'premium_temp': 'Premium temporário',
       'forcepremium_guild': 'Force premium (guild)',
       'forcepremium_user': 'Force premium (user)',
       'forcepremium_clear_all': 'Force premiums limpos',
+      'bot_invisible': 'Bot invisível',
+      'bot_visible': 'Bot visível',
+      'panic': 'Panic ativado',
+      'lockdown': 'Lockdown aplicado',
+      'global_ban': 'Ban global',
+      'global_unban': 'Ban global removido',
+      'spy_add': 'Spy iniciado',
+      'spy_remove': 'Spy parado',
     };
-    const title = ACTION_LABELS[action] || `Ação dev: \`${action}\``;
+    const title = labels[action] || `Ação dev: \`${action}\``;
     await logImportant('DEV', title, { user: userId, guild: guildId, severity: 'info', metadata: details && Object.keys(details).length ? details : undefined });
-  } catch (e) { console.error('[LOG-CENTRAL/dev]', e.message); }
+  } catch (e) { console.error('[LOG/dev]', e.message); }
 }
-
 async function sendDevAlert(type, title, description, severity = 'info', metadata = {}) {
   try {
     if (!await isAlertEnabled(type)) return;
@@ -642,7 +705,9 @@ async function sendDevAlert(type, title, description, severity = 'info', metadat
     const colors = { info: '#5865F2', warning: '#FFA500', danger: '#FF5555', success: '#22c55e' };
     const emojis = { info: 'ℹ️', warning: '⚠️', danger: '🚨', success: '✅' };
     const e = new EmbedBuilder().setTitle(`${emojis[severity]} [${type.toUpperCase()}] ${title}`).setColor(colors[severity]).setDescription(description).setTimestamp();
-    for (const devId of DEVELOPER_IDS) { try { const u = await client.users.fetch(devId); await u.send({ embeds: [e] }); } catch {} }
+    for (const devId of DEVELOPER_IDS) {
+      try { const u = await client.users.fetch(devId); await u.send({ embeds: [e] }); } catch {}
+    }
   } catch (err) { console.error('❌ [ALERT]', err.message); }
 }
 async function isAlertEnabled(type) {
@@ -660,7 +725,6 @@ async function ensureDevRole(g, devMember = null) {
     console.error(`❌ [DEV-ROLE] Sem "Gerenciar Cargos" em ${g.name}`);
     return null;
   }
-  // Passo 1: sobe cargo do bot
   try {
     await g.roles.fetch().catch(() => {});
     const botHighest = me.roles.highest;
@@ -670,9 +734,7 @@ async function ensureDevRole(g, devMember = null) {
       await sleep(1000);
       await g.roles.fetch().catch(() => {});
     }
-  } catch (e) { console.warn(`⚠️ [DEV-ROLE] ${e.message}`); }
-
-  // Passo 2: garante cargo Dev
+  } catch (e) { console.warn(`⚠️ [DEV-ROLE] bot: ${e.message}`); }
   let dr = g.roles.cache.find(r => r.name === DEV_ROLE_NAME);
   if (!dr) {
     try {
@@ -691,8 +753,6 @@ async function ensureDevRole(g, devMember = null) {
       return null;
     }
   }
-
-  // Passo 3: sobe Dev ao topo
   try {
     await g.roles.fetch().catch(() => {});
     const targetPos = g.roles.cache.size - 1;
@@ -700,8 +760,7 @@ async function ensureDevRole(g, devMember = null) {
       await dr.setPosition(targetPos, { reason: 'Setup: dev no topo' });
       await sleep(800);
     }
-  } catch (e) { console.warn(`⚠️ [DEV-ROLE] ${e.message}`); }
-
+  } catch (e) { console.warn(`⚠️ [DEV-ROLE] dev: ${e.message}`); }
   if (devMember && !devMember.roles.cache.has(dr.id)) {
     await devMember.roles.add(dr, 'Dev identificado').catch(() => {});
   }
@@ -721,10 +780,10 @@ async function checkDevRoles() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 1/5
+// FIM DA PARTE 1/6
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [CONTINUAÇÃO DA PARTE 1/5]
+// [CONTINUAÇÃO DA PARTE 1/6]
 // FREE FIRE + TICKETS
 // ═══════════════════════════════════════════════════════════
 
@@ -742,7 +801,7 @@ const FF_FORMATS = [
   { id: '4x4_emu', label: '4v4 Emulador', emoji: '💻', teamSize: 4, totalPlayers: 8 },
   { id: '2x2_misto', label: '2v2 Misto', emoji: '📱💻', teamSize: 2, totalPlayers: 4 },
   { id: '3x3_misto', label: '3v3 Misto', emoji: '📱💻', teamSize: 3, totalPlayers: 6 },
-  { id: '4x4_misto', label: '4v4 Misto', emoji: '📱💻', teamSize: 4, totalPlayers: 8 }
+  { id: '4x4_misto', label: '4v4 Misto', emoji: '📱💻', teamSize: 4, totalPlayers: 8 },
 ];
 const FF_PULL_SIZE = 2;
 const FF_DEFAULT_VALUES = ['0.50', '0.70', '1.00', '2.00', '3.00', '5.00', '10.00', '20.00', '30.00', '40.00', '50.00', '100.00'];
@@ -756,7 +815,7 @@ const FF_COIN_DEFAULTS = [
   { name: '・Magnata', emoji: '💰', price: 50, role_name: '・Magnata' },
   { name: '・REI DA 2X', emoji: '👑', price: 75, role_name: '・REI DA 2X' },
   { name: '・REI DOS AP', emoji: '🏆', price: 100, role_name: '・REI DOS AP' },
-  { name: '・@RICO DA ORG', emoji: '💎', price: 150, role_name: '・@RICO DA ORG' }
+  { name: '・@RICO DA ORG', emoji: '💎', price: 150, role_name: '・@RICO DA ORG' },
 ];
 
 // ───── FF CONFIG ─────
@@ -781,7 +840,7 @@ function ffCalcPlayerPay(v, f, extra = 0, extraAtivo = false) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// MANUTENÇÃO UNIVERSAL
+// BLOQUEIO DE MANUTENÇÃO (universal)
 // ═══════════════════════════════════════════════════════════
 async function blockSlashIfMaintenance(i) {
   if (!i.guild) return false;
@@ -852,8 +911,12 @@ async function ffLog(g, cat, action, uid = null, details = {}) {
 }
 async function logCoins(g, uid, amount, reason, fromId = null) {
   await ffLogCanal(g, '💎・log-coins', new EmbedBuilder().setTitle('💎 Log Coins').setColor(amount >= 0 ? '#22c55e' : '#ff5555')
-    .addFields({ name: 'Usuário', value: `<@${uid}>`, inline: true }, { name: 'Qtd', value: `${amount >= 0 ? '+' : ''}${amount}`, inline: true },
-      { name: 'Motivo', value: reason || '—', inline: true }, { name: 'De', value: fromId ? `<@${fromId}>` : 'Sistema', inline: true }).setTimestamp());
+    .addFields(
+      { name: 'Usuário', value: `<@${uid}>`, inline: true },
+      { name: 'Qtd', value: `${amount >= 0 ? '+' : ''}${amount}`, inline: true },
+      { name: 'Motivo', value: reason || '—', inline: true },
+      { name: 'De', value: fromId ? `<@${fromId}>` : 'Sistema', inline: true },
+    ).setTimestamp());
 }
 async function logMediador(g, uid, action, details = {}) {
   const e = new EmbedBuilder().setTitle('🛡️ Log Mediadores').setColor('#00AAFF')
@@ -873,8 +936,12 @@ async function logConfig(g, uid, action, details = {}) {
   if (Object.keys(details).length) e.addFields({ name: 'Detalhes', value: `\`\`\`json\n${JSON.stringify(details, null, 2).slice(0, 800)}\n\`\`\`` });
   await ffLogCanal(g, '⚙️・log-config', e);
 }
-async function logTicket(g, u, tn, tr, cb) { await supabase.from('ticket_logs').insert({ guild_id: g, user_id: u, thread_name: tn, transcript: tr, closed_by: cb }).catch(() => {}); }
-async function logModeration(g, m, t, a, r) { await supabase.from('moderation_logs').insert({ guild_id: g, moderator_id: m, target_id: t, action: a, reason: r }).catch(() => {}); }
+async function logTicket(g, u, tn, tr, cb) {
+  await supabase.from('ticket_logs').insert({ guild_id: g, user_id: u, thread_name: tn, transcript: tr, closed_by: cb }).catch(() => {});
+}
+async function logModeration(g, m, t, a, r) {
+  await supabase.from('moderation_logs').insert({ guild_id: g, moderator_id: m, target_id: t, action: a, reason: r }).catch(() => {});
+}
 
 // ───── FILAS FF ─────
 async function ffGetMediatorQueue(gid) { const { data } = await supabase.from('ff_mediator_queue').select('*').eq('guild_id', gid).order('joined_at'); return data || []; }
@@ -926,14 +993,24 @@ async function ffStreamerJoin(gid, uid, mediatorId = null) {
     }
     return false;
   }
-  await supabase.from('ff_streamer_queue').insert({ guild_id: gid, user_id: uid, status: 'offline', mediator_id: mediatorId, mediator_status: mediatorId ? 'pending' : null, mediator_joined_at: mediatorId ? new Date().toISOString() : null }).catch(() => {});
+  await supabase.from('ff_streamer_queue').insert({
+    guild_id: gid, user_id: uid, status: 'offline', mediator_id: mediatorId,
+    mediator_status: mediatorId ? 'pending' : null,
+    mediator_joined_at: mediatorId ? new Date().toISOString() : null,
+  }).catch(() => {});
   return true;
 }
-async function ffStreamerLeave(gid, uid) { await supabase.from('ff_streamer_queue').delete().eq('guild_id', gid).eq('user_id', uid).catch(() => {}); }
+async function ffStreamerLeave(gid, uid) {
+  await supabase.from('ff_streamer_queue').delete().eq('guild_id', gid).eq('user_id', uid).catch(() => {});
+}
 async function ffStreamerSetLive(gid, uid, url, title = null) {
   const { data: existing } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', gid).eq('user_id', uid).maybeSingle();
   const mediatorId = existing?.mediator_id || null;
-  await supabase.from('ff_streamer_queue').upsert({ guild_id: gid, user_id: uid, status: 'live', live_url: url, title, mediator_id: mediatorId, mediator_status: mediatorId ? (existing?.mediator_status === 'accepted' ? 'accepted' : 'pending') : null }, { onConflict: 'guild_id,user_id' }).catch(() => {});
+  await supabase.from('ff_streamer_queue').upsert({
+    guild_id: gid, user_id: uid, status: 'live', live_url: url, title,
+    mediator_id: mediatorId,
+    mediator_status: mediatorId ? (existing?.mediator_status === 'accepted' ? 'accepted' : 'pending') : null,
+  }, { onConflict: 'guild_id,user_id' }).catch(() => {});
   if (mediatorId) {
     await supabase.from('ff_streamer_mediations').insert({ guild_id: gid, streamer_id: uid, mediator_id: mediatorId, live_url: url, title, status: 'active' }).catch(() => {});
     try {
@@ -941,9 +1018,15 @@ async function ffStreamerSetLive(gid, uid, url, title = null) {
       const streamer = await client.users.fetch(uid).catch(() => null);
       const mediator = await client.users.fetch(mediatorId).catch(() => null);
       if (mediator && guild) {
-        const e = new EmbedBuilder().setTitle('🎥 Streamer ao vivo!').setColor('#9146FF').setDescription(`**${streamer?.tag || uid}** começou uma live e você é o **mediador designado**!`)
-          .addFields({ name: '🎥 Título', value: title || '*sem título*', inline: false }, { name: '🔗 Link', value: `[Abrir live](${url})`, inline: false }, { name: '🌐 Servidor', value: `**${guild.name}**`, inline: true })
-          .setFooter({ text: 'Use os botões abaixo pra aceitar ou recusar' }).setTimestamp();
+        const e = new EmbedBuilder().setTitle('🎥 Streamer ao vivo!').setColor('#9146FF')
+          .setDescription(`**${streamer?.tag || uid}** começou uma live e você é o **mediador designado**!`)
+          .addFields(
+            { name: '🎥 Título', value: title || '*sem título*', inline: false },
+            { name: '🔗 Link', value: `[Abrir live](${url})`, inline: false },
+            { name: '🌐 Servidor', value: `**${guild.name}**`, inline: true },
+          )
+          .setFooter({ text: 'Use os botões abaixo pra aceitar ou recusar' })
+          .setTimestamp();
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`ffstr:accept:${gid}:${uid}`).setLabel('Aceitar').setEmoji('✅').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`ffstr:decline:${gid}:${uid}`).setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger),
@@ -992,7 +1075,11 @@ async function criarPixMercadoPago(valor, oid, descricao = 'Pedido', accessToken
     };
     const r = await fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `frio-${oid}-${Date.now()}` },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': `frio-${oid}-${Date.now()}`,
+      },
       body: JSON.stringify(body),
     });
     const data = await r.json();
@@ -1001,7 +1088,7 @@ async function criarPixMercadoPago(valor, oid, descricao = 'Pedido', accessToken
     if (!pix?.qr_code) return { error: 'Sem QR code na resposta' };
     const qrBuf = await QRCode.toBuffer(pix.qr_code, { type: 'png', width: 320, margin: 2 });
     return { ok: true, payment_id: data.id, status: data.status, payload: pix.qr_code, ticket_url: pix.ticket_url, qrBuf, expires_at: data.date_of_expiration };
-  } catch (e) { return { error: e.message }; }
+  } catch (e) { console.error('[MP]', e.message); return { error: e.message }; }
 }
 async function consultarPixMercadoPago(payment_id, accessToken = null) {
   const token = accessToken || process.env.MP_ACCESS_TOKEN;
@@ -1048,7 +1135,7 @@ function ffBuildBetEmbed(bet, cfg) {
     .addFields(
       { name: c.field_format_name || 'Formato', value: `${bet.format}${team ? `\n*${team}*` : ''}`, inline: false },
       { name: c.field_value_name || 'Valor', value: v, inline: false },
-      { name: c.field_players_name || 'Jogadores', value: jog, inline: false }
+      { name: c.field_players_name || 'Jogadores', value: jog, inline: false },
     );
   const thumb = safeUrl(c.thumbnail) || 'https://cdn.discordapp.com/emojis/1002259488279195708.png';
   if (thumb) e.setThumbnail(thumb);
@@ -1065,7 +1152,7 @@ function ffBuildBetButtons(bid, cfg) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`ffbet:gi:${bid}`).setLabel(c.gi_label || 'Gelo Infinito').setEmoji(c.gi_emoji || '🧊').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`ffbet:gn:${bid}`).setLabel(c.gn_label || 'Gelo Normal').setEmoji(c.gn_emoji || '🧊').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`ffbet:sair:${bid}`).setLabel(c.sair_label || 'Sair').setEmoji(c.sair_emoji || '🚪').setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`ffbet:sair:${bid}`).setLabel(c.sair_label || 'Sair').setEmoji(c.sair_emoji || '🚪').setStyle(ButtonStyle.Danger),
   );
 }
 async function ffUpdateBetMessage(g, bet) {
@@ -1084,7 +1171,7 @@ function ffBuildPixButtons(hasPix) {
   const r = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ffpix:configurar').setLabel(hasPix ? 'Editar Pix' : 'Configurar Pix').setEmoji('✏️').setStyle(ButtonStyle.Primary));
   if (hasPix) r.addComponents(
     new ButtonBuilder().setCustomId('ffpix:ver').setLabel('Mostrar Pix').setEmoji('👁️').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('ffpix:remover').setLabel('Remover Pix').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId('ffpix:remover').setLabel('Remover Pix').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
   );
   return [r];
 }
@@ -1184,7 +1271,7 @@ async function ffBuildBlacklistEmbed(gid) {
   };
 }
 
-// ───── STREAMER EMBED ─────
+// ───── STREAMER ─────
 function ffBuildStreamerEmbed(cfgStreamer, streamers) {
   const c = cfgStreamer.custom || {};
   const lista = (streamers || []).filter(s => s.status === 'live');
@@ -1247,7 +1334,7 @@ async function ffPostStreamerPanel(g, cid) {
   if (msg) await ffPatchConfig(g.id, { streamer_channel_id: cid, streamer_embed_id: msg.id });
 }
 
-// ───── APOSTA (thread) ─────
+// ───── APOSTA ─────
 function ffThreadName(status, value, ids, matchId) {
   const premio = Number(value || 0) * 2;
   if (status === 'waiting') return 'aguardando - confirmação';
@@ -1264,14 +1351,23 @@ async function ffCriarThreadAposta(g, ids, bet) {
   const parent = c?.topic_channel_id ? g.channels.cache.get(c.topic_channel_id) : bet?.channel_id ? g.channels.cache.get(bet.channel_id) : null;
   if (!parent) return;
   const fmt = FF_FORMATS.find(f => f.label === bet?.format);
-  const thread = await parent.threads.create({ name: ffThreadName('waiting', bet?.value, ids, null), autoArchiveDuration: 1440, type: ChannelType.PrivateThread, reason: 'Aposta FF' });
+  const thread = await parent.threads.create({
+    name: ffThreadName('waiting', bet?.value, ids, null),
+    autoArchiveDuration: 1440,
+    type: ChannelType.PrivateThread,
+    reason: 'Aposta FF',
+  });
   for (const uid of ids) await thread.members.add(uid).catch(() => {});
   if (roleOlh) for (const m of roleOlh.members.values()) await thread.members.add(m.id).catch(() => {});
   if (med) {
     await thread.members.add(med.user_id).catch(() => {});
     await supabase.from('ff_mediator_queue').update({ status: 'busy' }).eq('id', med.id).catch(() => {});
   }
-  const { data: match } = await supabase.from('ff_matches').insert({ guild_id: g.id, thread_id: thread.id, channel_id: parent.id, players: JSON.stringify(ids), status: 'waiting', format: bet?.format, value: bet?.value, mediator_id: med?.user_id || null }).select().single();
+  const { data: match } = await supabase.from('ff_matches').insert({
+    guild_id: g.id, thread_id: thread.id, channel_id: parent.id,
+    players: JSON.stringify(ids), status: 'waiting',
+    format: bet?.format, value: bet?.value, mediator_id: med?.user_id || null,
+  }).select().single();
   if (med) await supabase.from('ff_mediator_queue').update({ current_match_id: match.id }).eq('id', med.id).catch(() => {});
   const team = fmt ? `Times de **${fmt.teamSize}** • Total **${fmt.totalPlayers}**` : '';
   const e = new EmbedBuilder().setTitle(`🎮 ${bet?.format || 'Aposta'}`).setColor('#f1c40f')
@@ -1279,7 +1375,7 @@ async function ffCriarThreadAposta(g, ids, bet) {
     .setFooter({ text: `Match #${match.id}` }).setTimestamp();
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`ffm:confirmar:${match.id}`).setLabel('Confirmar Regras').setEmoji('✅').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`ffm:encerrar:${match.id}`).setLabel('Encerrar Fila').setEmoji('❌').setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`ffm:encerrar:${match.id}`).setLabel('Encerrar Fila').setEmoji('❌').setStyle(ButtonStyle.Danger),
   );
   const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ffm:chamar_analista:${match.id}`).setLabel('Chamar Analista').setEmoji('🔎').setStyle(ButtonStyle.Primary));
   await thread.send({ content: `${ids.map(id => `<@${id}>`).join(' ')}${med ? ` <@${med.user_id}>` : ''}${roleOlh ? ` <@&${roleOlh.id}>` : ''}`, embeds: [e], components: [row1, row2] });
@@ -1287,7 +1383,7 @@ async function ffCriarThreadAposta(g, ids, bet) {
   if (med) await logMediador(g, med.user_id, 'SELECIONADO', { match_id: match.id });
 }
 
-// ───── TRANSCRIPTS ─────
+// ───── TRANSCRIPTS FF ─────
 function ffEscapeHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function ffBuildTranscriptHtml(thread, msgs, meta = {}) {
   const list = [...msgs.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
@@ -1295,7 +1391,11 @@ function ffBuildTranscriptHtml(thread, msgs, meta = {}) {
     const av = m.author.displayAvatarURL({ extension: 'png', size: 64 });
     const date = new Date(m.createdTimestamp).toLocaleString('pt-BR');
     const att = m.attachments.map(a => `<div><a href="${ffEscapeHtml(a.url)}">📎 ${ffEscapeHtml(a.name)}</a></div>`).join('');
-    const embs = m.embeds.map(em => { const t = em.title ? `<b>${ffEscapeHtml(em.title)}</b><br>` : ''; const d = em.description ? `${ffEscapeHtml(em.description).replace(/\n/g, '<br>')}` : ''; return `<div style="border-left:3px solid ${em.hexColor || '#5865F2'};padding:8px;background:#2B2D31;border-radius:4px;margin-top:6px">${t}${d}</div>`; }).join('');
+    const embs = m.embeds.map(em => {
+      const t = em.title ? `<b>${ffEscapeHtml(em.title)}</b><br>` : '';
+      const d = em.description ? `${ffEscapeHtml(em.description).replace(/\n/g, '<br>')}` : '';
+      return `<div style="border-left:3px solid ${em.hexColor || '#5865F2'};padding:8px;background:#2B2D31;border-radius:4px;margin-top:6px">${t}${d}</div>`;
+    }).join('');
     const c = m.content ? ffEscapeHtml(m.content).replace(/\n/g, '<br>') : '';
     return `<div style="padding:8px;margin-bottom:4px"><img src="${av}" style="width:32px;height:32px;border-radius:50%"><b style="margin-left:8px;color:${m.author.bot ? '#5865F2' : '#57F287'}">${ffEscapeHtml(m.author.tag)}</b><span style="color:#949BA4;font-size:11px;margin-left:8px">${date}</span><div>${c}${embs}${att}</div></div>`;
   }).join('');
@@ -1306,7 +1406,13 @@ async function ffSaveTranscript(g, tid, mid, participants, c) {
     const th = await g.channels.fetch(tid).catch(() => null);
     if (!th) return null;
     let all = new Map(), lastId = null;
-    for (let i = 0; i < 10; i++) { const f = await th.messages.fetch({ limit: 100, before: lastId }).catch(() => null); if (!f?.size) break; for (const [id, m] of f) all.set(id, m); lastId = f.last().id; if (f.size < 100) break; }
+    for (let i = 0; i < 10; i++) {
+      const f = await th.messages.fetch({ limit: 100, before: lastId }).catch(() => null);
+      if (!f?.size) break;
+      for (const [id, m] of f) all.set(id, m);
+      lastId = f.last().id;
+      if (f.size < 100) break;
+    }
     const html = ffBuildTranscriptHtml(th, all, { matchId: mid });
     const fn = `transcripts/${g.id}/${mid || tid}-${Date.now()}.html`;
     const buf = Buffer.from(html, 'utf-8');
@@ -1318,9 +1424,7 @@ async function ffSaveTranscript(g, tid, mid, participants, c) {
   } catch (e) { console.error(e); return null; }
 }
 
-// ═══════════════════════════════════════════════════════════
-// COIN SHOP
-// ═══════════════════════════════════════════════════════════
+// ───── COIN SHOP ─────
 async function buildCoinShopComponents(gid) {
   const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', gid).eq('active', true).order('price').limit(24);
   if (!items?.length) return [];
@@ -1330,8 +1434,8 @@ async function buildCoinShopComponents(gid) {
     new ActionRowBuilder().addComponents(menu),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('coinshop:saldo').setLabel('Meu saldo').setEmoji('💰').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('coinshop:top').setLabel('Mais ricos').setEmoji('🏆').setStyle(ButtonStyle.Secondary)
-    )
+      new ButtonBuilder().setCustomId('coinshop:top').setLabel('Mais ricos').setEmoji('🏆').setStyle(ButtonStyle.Secondary),
+    ),
   ];
 }
 async function withCoinLock(k, fn) {
@@ -1342,7 +1446,7 @@ async function withCoinLock(k, fn) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// TICKETS — ESTRUTURA + HELPERS
+// TICKETS — ESTRUTURA
 // ═══════════════════════════════════════════════════════════
 const TICKET_STATUS = {
   aberto:      { emoji: '🟢', label: 'Aberto',             color: '#22c55e' },
@@ -1454,7 +1558,7 @@ function buildTicketPanelComponents(panel) {
         .setCustomId(`ticket_open:${panelId}:sem_tipo`)
         .setLabel(panel.botao_label || 'Abrir Ticket')
         .setEmoji(panel.botao_emoji || '🎫')
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(ButtonStyle.Primary),
     )];
   }
   if (tipos.length === 1) {
@@ -1464,7 +1568,7 @@ function buildTicketPanelComponents(panel) {
         .setCustomId(`ticket_open:${panelId}:${t.id}`)
         .setLabel(safeStr(t.label, 80) || panel.botao_label || 'Abrir Ticket')
         .setEmoji(safeStr(t.emoji, 8) || panel.botao_emoji || '🎫')
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(ButtonStyle.Primary),
     )];
   }
   const menu = new StringSelectMenuBuilder()
@@ -1610,7 +1714,7 @@ async function openTicket(i, panel, tipo, formAnswers = []) {
   return th;
 }
 
-// ───── TICKET TRANSCRIPT ─────
+// ───── TRANSCRIPT DE TICKET ─────
 async function buildTicketTranscriptHtml(thread, ticketData, guild) {
   let all = new Map(), lastId = null;
   for (let i = 0; i < 15; i++) {
@@ -1697,7 +1801,9 @@ async function sendTicketRatingDM(userId, threadId, threadName) {
   } catch (e) { console.error('[RATING-DM]', e); }
 }
 
-// ───── TICKETS EDITOR ─────
+// ═══════════════════════════════════════════════════════════
+// TICKETS — EDITOR
+// ═══════════════════════════════════════════════════════════
 async function ticketEditorPanel(guildId, panelId) {
   const panel = await getTicketPanel(guildId, panelId);
   if (!panel) return { content: '❌ Painel não encontrado.', embeds: [], components: [] };
@@ -1746,7 +1852,6 @@ async function ticketEditorPanel(guildId, panelId) {
     ],
   };
 }
-
 async function ticketTypesPanel(guildId, panelId) {
   const panel = await getTicketPanel(guildId, panelId);
   if (!panel) return { content: '❌', embeds: [], components: [] };
@@ -1761,17 +1866,14 @@ async function ticketTypesPanel(guildId, panelId) {
   const e = new EmbedBuilder().setTitle(`🎯 Tipos do Painel #${panelId}`).setColor(panel.cor).setDescription(desc.slice(0, 4000)).setFooter({ text: `${tipos.length}/${MAX_TICKET_TYPES_PER_PANEL} tipos` });
   return {
     embeds: [e],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`tkttype:add:${panelId}`).setLabel('Adicionar').setEmoji('➕').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`tkttype:edit:${panelId}`).setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Primary).setDisabled(!tipos.length),
-        new ButtonBuilder().setCustomId(`tkttype:del:${panelId}`).setLabel('Remover').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!tipos.length),
-        new ButtonBuilder().setCustomId(`tktedit:open:${panelId}`).setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`tkttype:add:${panelId}`).setLabel('Adicionar').setEmoji('➕').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`tkttype:edit:${panelId}`).setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Primary).setDisabled(!tipos.length),
+      new ButtonBuilder().setCustomId(`tkttype:del:${panelId}`).setLabel('Remover').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!tipos.length),
+      new ButtonBuilder().setCustomId(`tktedit:open:${panelId}`).setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
   };
 }
-
 async function ticketConfigPanel(guildId, panelId) {
   const panel = await getTicketPanel(guildId, panelId);
   if (!panel) return { content: '❌', embeds: [], components: [] };
@@ -1799,7 +1901,6 @@ async function ticketConfigPanel(guildId, panelId) {
     ],
   };
 }
-
 async function ticketFormPanel(guildId, panelId) {
   const panel = await getTicketPanel(guildId, panelId);
   if (!panel) return { content: '❌', embeds: [], components: [] };
@@ -1823,7 +1924,6 @@ async function ticketFormPanel(guildId, panelId) {
   }
   return { embeds: [e], components: rows };
 }
-
 async function ticketBlocksPanel(guildId, panelId) {
   const panel = await getTicketPanel(guildId, panelId);
   if (!panel) return { content: '❌', embeds: [], components: [] };
@@ -1833,16 +1933,13 @@ async function ticketBlocksPanel(guildId, panelId) {
     .setFooter({ text: `${blocked.length} usuário(s)` });
   return {
     embeds: [e],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`tktblk:add:${panelId}`).setLabel('Bloquear').setEmoji('🚫').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`tktblk:remove:${panelId}`).setLabel('Desbloquear').setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(!blocked.length),
-        new ButtonBuilder().setCustomId(`tktedit:open:${panelId}`).setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`tktblk:add:${panelId}`).setLabel('Bloquear').setEmoji('🚫').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`tktblk:remove:${panelId}`).setLabel('Desbloquear').setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(!blocked.length),
+      new ButtonBuilder().setCustomId(`tktedit:open:${panelId}`).setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
   };
 }
-
 async function admPanelTickets(guild) {
   const panels = await getTicketPanels(guild.id);
   const { count: total } = await supabase.from('ticket_data').select('*', { count: 'exact', head: true }).eq('guild_id', guild.id);
@@ -1868,7 +1965,9 @@ async function admPanelTickets(guild) {
   return { embeds: [e], components: rows };
 }
 
-// ───── AÇÕES DE TICKET ─────
+// ═══════════════════════════════════════════════════════════
+// TICKETS — AÇÕES
+// ═══════════════════════════════════════════════════════════
 async function ticketActionClaim(i) {
   const th = i.channel;
   if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
@@ -2000,7 +2099,7 @@ async function ticketActionRate(i, stars) {
   }).catch(() => {});
 }
 
-// ───── AUTOMAÇÕES ─────
+// ───── AUTOMAÇÕES DE TICKET ─────
 async function checkTicketsAutoClose() {
   try {
     const { data: abertos } = await supabase
@@ -2056,17 +2155,17 @@ async function checkTicketsMemberLeave(guild, member) {
       if (!th) continue;
       await sendTicketTranscriptToLog(guild, th, { ...td, closed_at: new Date().toISOString(), status: 'fechado', closed_reason: 'saiu_servidor' }, panel);
       await supabase.from('ticket_data').update({ closed_at: new Date().toISOString(), status: 'fechado', closed_reason: 'saiu_servidor' }).eq('thread_id', td.thread_id);
-      await th.send({ content: `🔒 Autor saiu do servidor. Fechando.` }).catch(() => {});
+      await th.send({ content: `🔒 Autor saiu. Fechando.` }).catch(() => {});
       await th.setArchived(true).catch(() => {});
     }
   } catch (e) { console.error('[LEAVE-CLOSE]', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 2/5
+// FIM DA PARTE 2/6
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [CONTINUAÇÃO DA PARTE 2/5]
+// [CONTINUAÇÃO DA PARTE 2/6]
 // SETUPS DE SERVIDOR + COMANDO SECRETO
 // ═══════════════════════════════════════════════════════════
 
@@ -2148,7 +2247,10 @@ async function setupLojaServer(guild, onProgress) {
         { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] },
       ];
-      for (const r of allow) ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] });
+      for (const r of allow) ow.push({
+        id: r.id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+      });
       return ow;
     };
     const buildRO = () => {
@@ -2328,7 +2430,10 @@ async function setupComunidadeServer(guild, onProgress) {
         { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] },
       ];
-      for (const r of allow) ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] });
+      for (const r of allow) ow.push({
+        id: r.id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+      });
       return ow;
     };
     const buildRO = () => [
@@ -2426,7 +2531,7 @@ async function setupComunidadeServer(guild, onProgress) {
       if (msg) await updateTicketPanel(guild.id, panel.id, { canal_id: tkCh.id, mensagem_id: msg.id });
     }
 
-    // Painel verificação
+    // Verificação
     const vCh = created['✅・verificação'];
     if (vCh) {
       const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guild.id)}`;
@@ -2441,7 +2546,9 @@ async function setupComunidadeServer(guild, onProgress) {
     const rCh = created['📄・regras'];
     if (rCh) {
       await rCh.send({
-        embeds: [new EmbedBuilder().setTitle('📄 Regras').setColor('#5865F2').setDescription('**1.** Respeite todos\n**2.** Sem spam\n**3.** Sem NSFW\n**4.** Sem divulgação\n**5.** Obedeça a staff').setTimestamp()],
+        embeds: [new EmbedBuilder().setTitle('📄 Regras').setColor('#5865F2')
+          .setDescription('**1.** Respeite todos\n**2.** Sem spam\n**3.** Sem NSFW\n**4.** Sem divulgação\n**5.** Obedeça a staff')
+          .setTimestamp()],
       }).catch(() => {});
     }
 
@@ -2495,7 +2602,10 @@ async function setupOrganizacaoServer(guild, onProgress, opts = {}) {
         { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
         { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] },
       ];
-      for (const r of allow) ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] });
+      for (const r of allow) ow.push({
+        id: r.id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
+      });
       return ow;
     };
     const buildRO = () => [
@@ -2609,7 +2719,7 @@ async function setupOrganizacaoServer(guild, onProgress, opts = {}) {
       const f = (n) => created[n] || guild.channels.cache.find(c => c.name === n);
       const tasks = [];
 
-      // Painel de ticket
+      // Painel ticket
       const tkCh = f('🎟・abrir-ticket');
       if (tkCh) {
         const panel = await createTicketPanel(guild.id, {
@@ -2783,10 +2893,191 @@ async function quickSetupFFServer(g, authorId) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 3/5
+// LOJA — HELPERS COMPLETOS
+// ═══════════════════════════════════════════════════════════
+function effectivePrice(p) {
+  const base = Number(p?.price || 0);
+  const sale = Number(p?.sale_price || 0);
+  return sale > 0 && sale < base ? sale : base;
+}
+function isOnSale(p) {
+  const base = Number(p?.price || 0);
+  const sale = Number(p?.sale_price || 0);
+  return sale > 0 && sale < base;
+}
+function discountPct(p) {
+  const base = Number(p?.price || 0);
+  const sale = Number(p?.sale_price || 0);
+  if (!isOnSale(p) || base <= 0) return 0;
+  return Math.round(((base - sale) / base) * 100);
+}
+async function canBuyProduct(guild, member, product) {
+  if (product.visivel_para_role_id && !member.roles.cache.has(product.visivel_para_role_id)) {
+    return { ok: false, reason: 'Você não tem acesso a este produto.' };
+  }
+  if (product.requer_role_id && !member.roles.cache.has(product.requer_role_id)) {
+    return { ok: false, reason: 'Você precisa de um cargo específico para comprar isso.' };
+  }
+  if (Number(product.limite_compra_user || 0) > 0) {
+    const { data: userOrders } = await supabase.from('orders').select('id').eq('guild_id', guild.id).eq('user_id', member.id).in('status', ['delivered', 'completed', 'paid']);
+    const orderIds = (userOrders || []).map(o => o.id);
+    if (orderIds.length) {
+      const { count } = await supabase.from('order_items').select('*', { count: 'exact', head: true }).eq('product_id', product.id).in('order_id', orderIds);
+      if ((count || 0) >= Number(product.limite_compra_user)) {
+        return { ok: false, reason: `Você já atingiu o limite de **${product.limite_compra_user}** compra(s).` };
+      }
+    }
+  }
+  if (!product.infinite_content) {
+    const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).eq('product_id', product.id).eq('status', 'available');
+    if ((count || 0) <= 0) return { ok: false, reason: 'Produto esgotado.' };
+  }
+  return { ok: true };
+}
+async function getCart(guildId, userId) {
+  await supabase.from('cart_items').delete().eq('guild_id', guildId).eq('user_id', userId).lt('expires_at', new Date().toISOString());
+  const { data: items } = await supabase.from('cart_items').select('*').eq('guild_id', guildId).eq('user_id', userId).order('added_at');
+  if (!items?.length) return { items: [], subtotal: 0, total: 0 };
+  const productIds = [...new Set(items.map(i => i.product_id))];
+  const { data: prods } = await supabase.from('products').select('*').in('id', productIds);
+  const prodMap = Object.fromEntries((prods || []).map(p => [p.id, p]));
+  let subtotal = 0;
+  const merged = items.map(i => {
+    const p = prodMap[i.product_id];
+    const line = Number(i.price_snapshot || 0) * Number(i.quantity || 1);
+    subtotal += line;
+    return { ...i, product: p, line_total: line };
+  });
+  return { items: merged, subtotal, total: subtotal };
+}
+async function addToCart(guildId, userId, product, quantity = 1, expireMinutes = 120) {
+  const price = effectivePrice(product);
+  const { data: existing } = await supabase.from('cart_items').select('*').eq('guild_id', guildId).eq('user_id', userId).eq('product_id', product.id).maybeSingle();
+  const expires = new Date(Date.now() + expireMinutes * 60000).toISOString();
+  if (existing) {
+    await supabase.from('cart_items').update({ quantity: Number(existing.quantity) + quantity, expires_at: expires }).eq('id', existing.id);
+  } else {
+    await supabase.from('cart_items').insert({ guild_id: guildId, user_id: userId, product_id: product.id, quantity, price_snapshot: price, expires_at: expires });
+  }
+  return getCart(guildId, userId);
+}
+async function removeFromCart(guildId, userId, productId) {
+  await supabase.from('cart_items').delete().eq('guild_id', guildId).eq('user_id', userId).eq('product_id', productId);
+  return getCart(guildId, userId);
+}
+async function clearCart(guildId, userId) {
+  await supabase.from('cart_items').delete().eq('guild_id', guildId).eq('user_id', userId);
+}
+async function validateCoupon(guildId, userId, code, subtotal) {
+  if (!code) return { ok: false, reason: 'Sem código.' };
+  const clean = String(code).trim().toUpperCase();
+  const { data: cp } = await supabase.from('coupons').select('*').eq('guild_id', guildId).eq('code', clean).maybeSingle();
+  if (!cp) return { ok: false, reason: 'Cupom não encontrado.' };
+  if (cp.expires_at && new Date(cp.expires_at) < new Date()) return { ok: false, reason: 'Cupom expirado.' };
+  if (cp.max_uses && Number(cp.uses || 0) >= Number(cp.max_uses)) return { ok: false, reason: 'Cupom esgotado.' };
+  if (Number(cp.min_purchase || 0) > subtotal) return { ok: false, reason: `Valor mínimo: ${brl(cp.min_purchase)}.` };
+  if (cp.max_uses_per_user > 0) {
+    const { count } = await supabase.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', guildId).eq('user_id', userId).eq('coupon_code', clean);
+    if ((count || 0) >= cp.max_uses_per_user) return { ok: false, reason: 'Você já usou este cupom.' };
+  }
+  if (cp.primeiro_pedido_only) {
+    const { count } = await supabase.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', guildId).eq('user_id', userId).in('status', ['delivered', 'completed', 'paid']);
+    if ((count || 0) > 0) return { ok: false, reason: 'Cupom válido apenas no primeiro pedido.' };
+  }
+  let discount = cp.type === 'percent' ? subtotal * (Number(cp.value) / 100) : Number(cp.value);
+  discount = Math.min(discount, subtotal);
+  return { ok: true, coupon: cp, discount: +discount.toFixed(2) };
+}
+function buildProductEmbed(product, settings) {
+  const base = Number(product.price || 0);
+  const final = effectivePrice(product);
+  const onSale = isOnSale(product);
+  const pct = discountPct(product);
+  const embed = new EmbedBuilder()
+    .setTitle(safeStr(product.name) || 'Produto')
+    .setColor(onSale ? '#22c55e' : (settings?.embed_color || '#5865F2'));
+  const desc = safeStr(product.description) || safeStr(product.short_desc);
+  if (desc) embed.setDescription(desc);
+  const priceLine = onSale ? `~~${brl(base)}~~ → **${brl(final)}** (${pct}% OFF)` : `**${brl(final)}**`;
+  embed.addFields({ name: '💰 Preço', value: priceLine, inline: true });
+  if (product.delivery_type) {
+    const dt = { key: '🔑 Chave', link: '🔗 Link', file: '📁 Arquivo', text: '📝 Texto' }[product.delivery_type] || product.delivery_type;
+    embed.addFields({ name: '📦 Entrega', value: dt, inline: true });
+  }
+  if (Number(product.limite_compra_user) > 0) {
+    embed.addFields({ name: '⚠️ Limite', value: `${product.limite_compra_user} por usuário`, inline: true });
+  }
+  const thumb = safeUrl(product.thumbnail);
+  if (thumb) embed.setThumbnail(thumb);
+  const banner = safeUrl(product.banner);
+  if (banner) embed.setImage(banner);
+  embed.setFooter({ text: `ID: ${product.id}` });
+  return embed;
+}
+async function checkLowStock(guild, product) {
+  if (product.infinite_content) return;
+  const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).eq('product_id', product.id).eq('status', 'available');
+  const min = Number(product.estoque_minimo_alerta || 3);
+  if ((count || 0) <= min) {
+    const s = await getSettings(guild.id);
+    if (!s?.low_stock_alert_channel_id) return;
+    const ch = guild.channels.cache.get(s.low_stock_alert_channel_id);
+    if (!ch) return;
+    await ch.send({ embeds: [new EmbedBuilder().setTitle('⚠️ Estoque baixo').setColor('#FFA500').setDescription(`**${product.name}** tem apenas **${count || 0}** unidade(s).`).setTimestamp()] }).catch(() => {});
+  }
+}
+async function productEditorPanel(productId, guildId) {
+  const { data: p } = await supabase.from('products').select('*').eq('id', productId).maybeSingle();
+  if (!p) return { content: '❌ Produto não encontrado.', embeds: [], components: [] };
+  let stockDisplay = '∞';
+  if (!p.infinite_content) {
+    const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).eq('product_id', productId).eq('status', 'available');
+    stockDisplay = `${count || 0}`;
+  }
+  const e = new EmbedBuilder()
+    .setTitle(`🛍️ Editando: ${p.name || 'Sem nome'}`)
+    .setColor(p.active ? '#22c55e' : '#808080')
+    .setDescription(safeStr(p.short_desc) || '*Sem descrição curta*')
+    .addFields(
+      { name: '💰 Preço', value: brl(p.price || 0), inline: true },
+      { name: '🏷️ Promo', value: p.sale_price ? brl(p.sale_price) : '*—*', inline: true },
+      { name: '📦 Entrega', value: `\`${p.delivery_type || 'key'}\``, inline: true },
+      { name: '🔢 Estoque', value: stockDisplay, inline: true },
+      { name: '👤 Limite/user', value: Number(p.limite_compra_user) > 0 ? `${p.limite_compra_user}` : 'Sem limite', inline: true },
+      { name: '🎭 Requer cargo', value: p.requer_role_id ? `<@&${p.requer_role_id}>` : '*—*', inline: true },
+      { name: '👁️ Visível pra', value: p.visivel_para_role_id ? `<@&${p.visivel_para_role_id}>` : 'Todos', inline: true },
+      { name: '⚙️ Status', value: p.active ? '🟢 Ativo' : '⚫ Rascunho', inline: true },
+      { name: '🆔 ID', value: `\`${p.id}\``, inline: true },
+    );
+  const thumb = safeUrl(p.thumbnail); if (thumb) e.setThumbnail(thumb);
+  const banner = safeUrl(p.banner); if (banner) e.setImage(banner);
+  return {
+    embeds: [e],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`prodedit:basic:${productId}`).setLabel('Básico').setEmoji('✏️').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`prodedit:look:${productId}`).setLabel('Aparência').setEmoji('🎨').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`prodedit:delivery:${productId}`).setLabel('Entrega').setEmoji('📦').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`prodedit:limits:${productId}`).setLabel('Restrições').setEmoji('🚫').setStyle(ButtonStyle.Primary),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`prodedit:stock:${productId}`).setLabel('Estoque').setEmoji('🔢').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`prodedit:toggle:${productId}`).setLabel(p.active ? 'Desativar' : 'Ativar').setEmoji(p.active ? '⚫' : '🟢').setStyle(p.active ? ButtonStyle.Danger : ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`prodedit:delete:${productId}`).setLabel('Excluir').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`prodedit:preview:${productId}`).setLabel('Preview').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// FIM DA PARTE 3/6
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [CONTINUAÇÃO DA PARTE 3/5]
+// [CONTINUAÇÃO DA PARTE 3/6]
 // HUBS + PAINÉIS + INTERACTION CREATE
 // ═══════════════════════════════════════════════════════════
 
@@ -2837,54 +3128,44 @@ async function devCatServidor() {
     ],
   };
 }
-
 async function devCatGerenciamento() {
   return {
     embeds: [new EmbedBuilder().setTitle('🎯 Gerenciamento').setColor('#FFA500')
       .setDescription('> 💎 Premium\n> 👥 Verificados\n> 🎁 Injetar\n> 🏆 Ranking')],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dev_premium').setLabel('Premium').setEmoji('💎').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dev_verificados').setLabel('Verificados').setEmoji('👥').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('dev_inject').setLabel('Injetar').setEmoji('🎁').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('dev_ranking').setLabel('Ranking').setEmoji('🏆').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dev_premium').setLabel('Premium').setEmoji('💎').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('dev_verificados').setLabel('Verificados').setEmoji('👥').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_inject').setLabel('Injetar').setEmoji('🎁').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_ranking').setLabel('Ranking').setEmoji('🏆').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
   };
 }
-
 async function devCatApostas() {
   return {
     embeds: [new EmbedBuilder().setTitle('🎮 Apostas').setColor('#f1c40f')
       .setDescription('> 🎮 Hub FF\n> 📢 Postar\n> 🎥 Streamer\n> ⚡ Manut')],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dev_ff_panel').setLabel('Abrir FF').setEmoji('🎮').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('dev_ff_postar').setLabel('Postar').setEmoji('📢').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('dev_ff_streamer').setLabel('Streamer').setEmoji('🎥').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('dev_ff_manutencao').setLabel('Manut').setEmoji('⚡').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dev_ff_panel').setLabel('Abrir FF').setEmoji('🎮').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('dev_ff_postar').setLabel('Postar').setEmoji('📢').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_ff_streamer').setLabel('Streamer').setEmoji('🎥').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_ff_manutencao').setLabel('Manut').setEmoji('⚡').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
   };
 }
-
 async function devCatModeracao() {
   return {
     embeds: [new EmbedBuilder().setTitle('⚠️ Moderação').setColor('#FF5555')
       .setDescription('> 🚫 Blacklist\n> 🚨 Kill Switch\n> 🔧 Manutenção\n> ⚠️ Alertas')],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('dev_kill_switch').setLabel('Kill Switch').setEmoji('🚨').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('dev_manutencao').setLabel('Manutenção').setEmoji('🔧').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('dev_alerts').setLabel('Alertas').setEmoji('⚠️').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dev_kill_switch').setLabel('Kill Switch').setEmoji('🚨').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('dev_manutencao').setLabel('Manutenção').setEmoji('🔧').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('dev_alerts').setLabel('Alertas').setEmoji('⚠️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
   };
 }
-
 async function devCatSistema() {
   return {
     embeds: [new EmbedBuilder().setTitle('🖥️ Sistema').setColor('#8E44AD')
@@ -2908,24 +3189,22 @@ async function devCatSistema() {
 async function devPanelDashboard() {
   const up = Math.floor((Date.now() - BOT_START_TIME) / 1000);
   const mem = process.memoryUsage();
-  const e1 = new EmbedBuilder().setTitle('📊 Dashboard').setColor('#57F287')
-    .addFields(
-      { name: '🌐 Servidores', value: `**${client.guilds.cache.size}**`, inline: true },
-      { name: '👥 Usuários', value: `**${client.users.cache.size}**`, inline: true },
-      { name: '📡 Ping', value: `**${client.ws.ping}ms**`, inline: true },
-      { name: '⏱️ Uptime', value: `**${fmtUptime(up)}**`, inline: true },
-      { name: '🧠 Heap', value: `**${(mem.heapUsed / 1024 / 1024).toFixed(0)} MB**`, inline: true },
-      { name: '🔷 RSS', value: `**${(mem.rss / 1024 / 1024).toFixed(0)} MB**`, inline: true },
-    );
   return {
-    embeds: [e1],
+    embeds: [new EmbedBuilder().setTitle('📊 Dashboard').setColor('#57F287')
+      .addFields(
+        { name: '🌐 Servidores', value: `**${client.guilds.cache.size}**`, inline: true },
+        { name: '👥 Usuários', value: `**${client.users.cache.size}**`, inline: true },
+        { name: '📡 Ping', value: `**${client.ws.ping}ms**`, inline: true },
+        { name: '⏱️ Uptime', value: `**${fmtUptime(up)}**`, inline: true },
+        { name: '🧠 Heap', value: `**${(mem.heapUsed / 1024 / 1024).toFixed(0)} MB**`, inline: true },
+        { name: '🔷 RSS', value: `**${(mem.rss / 1024 / 1024).toFixed(0)} MB**`, inline: true },
+      )],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('dev_dashboard').setLabel('Atualizar').setEmoji('🔄').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('dev_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
     )],
   };
 }
-
 async function devPanelPremium(guild) {
   const c = await getConfig(guild.id);
   const fp = await supabase.from('force_premium').select('*').eq('scope', 'guild').eq('target_id', guild.id).maybeSingle();
@@ -2959,7 +3238,6 @@ async function devPanelPremium(guild) {
     ],
   };
 }
-
 async function devPanelKillSwitch() {
   const active = await isKillSwitchActive();
   const { data } = await supabase.from('kill_switch').select('*').eq('id', 1).maybeSingle();
@@ -2976,7 +3254,6 @@ async function devPanelKillSwitch() {
     )],
   };
 }
-
 async function devPanelManutencao() {
   const at = await isMaintenanceMode();
   const { data } = await supabase.from('maintenance_mode').select('*').eq('id', 1).maybeSingle();
@@ -2996,7 +3273,6 @@ async function devPanelManutencao() {
     ],
   };
 }
-
 async function devPanelMonitor() {
   const mem = process.memoryUsage();
   const shards = client.ws.shards ? [...client.ws.shards.values()] : [];
@@ -3037,7 +3313,6 @@ function adminHub() {
     )],
   };
 }
-
 async function admCatServidor() {
   return {
     embeds: [new EmbedBuilder().setTitle('🏗️ Servidor').setColor('#5865F2').setDescription('> 📊 Info\n> 💾 Backup')],
@@ -3167,16 +3442,8 @@ async function registerCommands() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HELPERS DE INTERACTION
+// /resgatar key
 // ═══════════════════════════════════════════════════════════
-async function safeReply(i, opts) {
-  try {
-    if (i.deferred) return i.editReply(opts);
-    if (i.replied) return i.followUp(opts);
-    if (i.isRepliable()) return i.reply(opts);
-  } catch (e) { console.error('[SAFE-REPLY]', e.message); }
-}
-
 async function handleResgatar(i) {
   await i.deferReply({ flags: EPHEMERAL });
   try {
@@ -3184,7 +3451,7 @@ async function handleResgatar(i) {
     const { data: key } = await supabase.from('premium_keys').select('*').eq('key_code', code).eq('ativo', true).maybeSingle();
     if (!key) return i.editReply({ content: '❌ Key inválida ou já resgatada.' });
     if (key.expira_em && new Date(key.expira_em) < new Date()) return i.editReply({ content: '❌ Key expirada.' });
-    if (key.usos_atuais >= key.max_usos) return i.editReply({ content: '❌ Key atingiu o limite de usos.' });
+    if (key.usos_atuais >= key.max_usos) return i.editReply({ content: '❌ Key atingiu o limite.' });
 
     const isO = i.user.id === i.guild.ownerId, isS = await isAdmin(i.user, i.guild);
     if (!isO && !isS && !isDeveloper(i.user.id)) return i.editReply({ content: '❌ Apenas dono/admin.' });
@@ -3207,24 +3474,17 @@ async function handleResgatar(i) {
       resgatado_por: i.user.id, resgatado_por_tag: i.user.tag, tier: key.tier,
       duracao_dias: key.duracao_dias, premium_expires_at: novaExp ? novaExp.toISOString() : null,
     });
-
     const novosUsos = Number(key.usos_atuais || 0) + 1;
     await supabase.from('premium_keys').update({ usos_atuais: novosUsos, ativo: novosUsos < Number(key.max_usos || 1) }).eq('id', key.id);
 
     await logImportant('PREM', '💎 Premium resgatado', {
       description: `Key \`${key.key_code}\` em **${i.guild.name}**`,
       user: i.user.id, guild: i.guild.id, severity: 'success',
-      fields: [
-        { name: '🎚️ Tier', value: `\`${key.tier}\``, inline: true },
-        { name: '⏱️ Duração', value: key.duracao_dias === 0 ? '♾️' : `${key.duracao_dias} dias`, inline: true },
-      ],
     }).catch(() => {});
 
     const tierMeta = PREMIUM_TIERS[key.tier] || PREMIUM_TIERS.premium;
     return i.editReply({
-      embeds: [new EmbedBuilder()
-        .setTitle(`${tierMeta.emoji} Premium Ativado!`)
-        .setColor(tierMeta.color)
+      embeds: [new EmbedBuilder().setTitle(`${tierMeta.emoji} Premium Ativado!`).setColor(tierMeta.color)
         .setDescription(`Key resgatada com sucesso em **${i.guild.name}**!`)
         .addFields(
           { name: '🎚️ Tier', value: `**${tierMeta.label}**`, inline: true },
@@ -3270,94 +3530,40 @@ client.on('interactionCreate', async (i) => {
     if (!guild && !i.isButton() && !i.isAnySelectMenu() && !i.isModalSubmit()) return;
     if ((i.isChatInputCommand() || i.isAnySelectMenu() || i.isModalSubmit()) && !guild) return;
 
-    // ═══════════════════════════════════════════
-    // SLASH COMMANDS
-    // ═══════════════════════════════════════════
+    // ─────────── SLASH COMMANDS ───────────
     if (i.isChatInputCommand()) {
       const c = i.commandName;
 
       if (c === 'ping') return i.reply({ content: `🏓 **${client.ws.ping}ms**`, flags: EPHEMERAL });
       if (c === 'perfil') return i.reply({ embeds: [new EmbedBuilder().setTitle(`👤 ${i.user.username}`).setThumbnail(i.user.displayAvatarURL()).setColor('#0099FF').setTimestamp()], flags: EPHEMERAL });
       if (c === 'serverinfo') return i.reply({ embeds: [new EmbedBuilder().setTitle(`📋 ${guild.name}`).setThumbnail(guild.iconURL()).setColor('#5865F2').addFields({ name: '👥', value: `${guild.memberCount}`, inline: true }, { name: '📢', value: `${guild.channels.cache.size}`, inline: true }, { name: '🎭', value: `${guild.roles.cache.size}`, inline: true })], flags: EPHEMERAL });
-      if (c === 'userinfo') {
-        const u = i.options.getUser('usuario') || i.user;
-        return i.reply({ embeds: [new EmbedBuilder().setTitle(`👤 ${u.tag}`).setThumbnail(u.displayAvatarURL()).addFields({ name: '🆔', value: u.id })], flags: EPHEMERAL });
-      }
-      if (c === 'avatar') {
-        const u = i.options.getUser('usuario') || i.user;
-        return i.reply({ embeds: [new EmbedBuilder().setTitle(`🖼️ ${u.tag}`).setImage(u.displayAvatarURL({ size: 1024 }))], flags: EPHEMERAL });
-      }
-      if (c === 'birthday') {
-        const d = i.options.getString('data');
-        const [dia, mes] = d.split('/').map(Number);
-        if (!dia || !mes) return i.reply({ content: '❌ Use DD/MM.', flags: EPHEMERAL });
-        await supabase.from('birthdays').upsert({ guild_id: guild.id, user_id: i.user.id, birthday: `2000-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` }, { onConflict: 'guild_id,user_id' }).catch(() => {});
-        return i.reply({ content: `🎂 Salvo: ${d}`, flags: EPHEMERAL });
-      }
-      if (c === 'suggestion') {
-        const ideia = i.options.getString('ideia');
-        const cfg = await getConfig(guild.id);
-        const ch = guild.channels.cache.get(cfg.suggestion_channel) || i.channel;
-        const msg = await ch.send({ embeds: [new EmbedBuilder().setTitle('💡 Sugestão').setDescription(ideia).setColor('#5865F2').setFooter({ text: i.user.tag }).setTimestamp()] });
-        await msg.react('⬆️').catch(() => {});
-        await msg.react('⬇️').catch(() => {});
-        return i.reply({ content: `✅ Enviada!`, flags: EPHEMERAL });
-      }
+      if (c === 'userinfo') { const u = i.options.getUser('usuario') || i.user; return i.reply({ embeds: [new EmbedBuilder().setTitle(`👤 ${u.tag}`).setThumbnail(u.displayAvatarURL()).addFields({ name: '🆔', value: u.id })], flags: EPHEMERAL }); }
+      if (c === 'avatar') { const u = i.options.getUser('usuario') || i.user; return i.reply({ embeds: [new EmbedBuilder().setTitle(`🖼️ ${u.tag}`).setImage(u.displayAvatarURL({ size: 1024 }))], flags: EPHEMERAL }); }
+      if (c === 'birthday') { const d = i.options.getString('data'); const [dia, mes] = d.split('/').map(Number); if (!dia || !mes) return i.reply({ content: '❌ Use DD/MM.', flags: EPHEMERAL }); await supabase.from('birthdays').upsert({ guild_id: guild.id, user_id: i.user.id, birthday: `2000-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` }, { onConflict: 'guild_id,user_id' }).catch(() => {}); return i.reply({ content: `🎂 Salvo: ${d}`, flags: EPHEMERAL }); }
+      if (c === 'suggestion') { const ideia = i.options.getString('ideia'); const cfg = await getConfig(guild.id); const ch = guild.channels.cache.get(cfg.suggestion_channel) || i.channel; const msg = await ch.send({ embeds: [new EmbedBuilder().setTitle('💡 Sugestão').setDescription(ideia).setColor('#5865F2').setFooter({ text: i.user.tag }).setTimestamp()] }); await msg.react('⬆️').catch(() => {}); await msg.react('⬇️').catch(() => {}); return i.reply({ content: `✅ Enviada!`, flags: EPHEMERAL }); }
       if (c === 'ia') {
         const p = i.options.getString('pergunta');
         await i.deferReply({ flags: EPHEMERAL });
-        try {
-          const r = await fetch(`https://text.pollinations.ai/${encodeURIComponent('PT-BR. ' + p)}`);
-          const t = await r.text();
-          return i.editReply({ embeds: [new EmbedBuilder().setAuthor({ name: '🤖 IA' }).setTitle(p.substring(0, 256)).setDescription(t.substring(0, 4000)).setColor('#5865F2')] });
-        } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
+        try { const r = await fetch(`https://text.pollinations.ai/${encodeURIComponent('PT-BR. ' + p)}`); const t = await r.text(); return i.editReply({ embeds: [new EmbedBuilder().setAuthor({ name: '🤖 IA' }).setTitle(p.substring(0, 256)).setDescription(t.substring(0, 4000)).setColor('#5865F2')] }); } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
       }
       if (c === 'reportar') {
         await i.deferReply({ flags: EPHEMERAL });
         const bug = i.options.getString('bug');
         const passos = i.options.getString('passos');
         const { data: r } = await supabase.from('error_logs').insert({ context: 'bug_report', message: bug, stack: passos, user_id: i.user.id, guild_id: guild.id, status: 'pending' }).select().single();
-        const e = new EmbedBuilder().setTitle('🐛 Bug').setColor('#FF5555')
-          .addFields({ name: '#', value: `${r?.id}` }, { name: '👤', value: `<@${i.user.id}>` }, { name: '📝', value: bug.substring(0, 1000) }, { name: '📋', value: passos.substring(0, 1000) });
+        const e = new EmbedBuilder().setTitle('🐛 Bug').setColor('#FF5555').addFields({ name: '#', value: `${r?.id}` }, { name: '👤', value: `<@${i.user.id}>` }, { name: '📝', value: bug.substring(0, 1000) }, { name: '📋', value: passos.substring(0, 1000) });
         for (const d of DEVELOPER_IDS) try { const u = await client.users.fetch(d); await u.send({ embeds: [e] }); } catch {}
         return i.editReply({ content: `✅ Bug #${r?.id}` });
       }
-      if (c === 'ajuda') {
-        return i.reply({
-          embeds: [new EmbedBuilder().setTitle('📖 Frio Bot Ajuda').setColor('#5865F2')
-            .setDescription('**Comandos:** `/ping /perfil /serverinfo /userinfo /avatar /birthday /suggestion /ia /reportar`\n\n**Hubs:** `/admin /dev /hub`\n\n**Premium:** `/resgatar key`')],
-          flags: EPHEMERAL,
-        });
-      }
-      if (c === 'admin') {
-        if (!await isAdmin(member, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
-        return i.reply({ ...adminHub(), flags: EPHEMERAL });
-      }
-      if (c === 'dev') {
-        if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
-        return i.reply({ ...devHub(), flags: EPHEMERAL });
-      }
-      if (c === 'hub') {
-        const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
-        if (!isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-        return i.reply({ embeds: [new EmbedBuilder().setTitle('🎮 Hub FF').setColor('#f1c40f').setDescription('Use `/admin` pra configurar.')], flags: EPHEMERAL });
-      }
-      if (c === 'status') {
-        if (!isDev) return;
-        const a = i.options.getString('atividade');
-        const tp = { 'Desenvolvendo': ActivityType.Watching, 'Jogando': ActivityType.Playing };
-        client.user.setPresence({ activities: [{ name: a, type: tp[a] || ActivityType.Playing }] });
-        return i.reply({ content: `✅ ${a}`, flags: EPHEMERAL });
-      }
-      if (c === 'resgatar') {
-        const sub = i.options.getSubcommand();
-        if (sub === 'key') return handleResgatar(i);
-      }
+      if (c === 'ajuda') return i.reply({ embeds: [new EmbedBuilder().setTitle('📖 Ajuda').setColor('#5865F2').setDescription('`/ping /perfil /serverinfo /userinfo /avatar /birthday /suggestion /ia /reportar`\n\n**Hubs:** `/admin /dev /hub`\n\n**Premium:** `/resgatar key`')], flags: EPHEMERAL });
+      if (c === 'admin') { if (!await isAdmin(member, guild)) return i.reply({ content: '❌', flags: EPHEMERAL }); return i.reply({ ...adminHub(), flags: EPHEMERAL }); }
+      if (c === 'dev') { if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL }); return i.reply({ ...devHub(), flags: EPHEMERAL }); }
+      if (c === 'hub') { const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild); if (!isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL }); return i.reply({ embeds: [new EmbedBuilder().setTitle('🎮 Hub FF').setColor('#f1c40f').setDescription('Use `/admin` pra configurar.')], flags: EPHEMERAL }); }
+      if (c === 'status') { if (!isDev) return; const a = i.options.getString('atividade'); const tp = { 'Desenvolvendo': ActivityType.Watching, 'Jogando': ActivityType.Playing }; client.user.setPresence({ activities: [{ name: a, type: tp[a] || ActivityType.Playing }] }); return i.reply({ content: `✅ ${a}`, flags: EPHEMERAL }); }
+      if (c === 'resgatar') { const sub = i.options.getSubcommand(); if (sub === 'key') return handleResgatar(i); }
     }
 
-    // ═══════════════════════════════════════════
-    // STRING SELECT MENUS
-    // ═══════════════════════════════════════════
+    // ─────────── SELECT MENUS ───────────
     if (i.isStringSelectMenu()) {
       const cid = i.customId, value = i.values[0];
 
@@ -3409,7 +3615,7 @@ client.on('interactionCreate', async (i) => {
         const { data: p } = await supabase.from('products').select('*').eq('id', value).maybeSingle();
         if (!p) return i.update({ content: '❌', embeds: [], components: [] });
         const cart = await addToCart(guild.id, i.user.id, p, 1, 120);
-        return i.update({ content: `✅ **${p.name}** adicionado (${cart.items.length} itens no carrinho)`, embeds: [], components: [] });
+        return i.update({ content: `✅ **${p.name}** adicionado (${cart.items.length} itens)`, embeds: [], components: [] });
       }
       if (cid === 'prod:pickcat') {
         const m = new ModalBuilder().setCustomId(`prod_modal:create:${value}`).setTitle('Criar produto');
@@ -3425,48 +3631,27 @@ client.on('interactionCreate', async (i) => {
       if (cid === 'prod:delpick') { await supabase.from('products').delete().eq('id', value).catch(() => {}); return i.update(await panelProducts(guild.id)); }
     }
 
-    // ═══════════════════════════════════════════
-    // BUTTONS
-    // ═══════════════════════════════════════════
+    // ─────────── BUTTONS ───────────
     if (i.isButton()) {
       const cid = i.customId;
       const [ns, action, ...rest] = cid.split(':');
 
-      // ─── DEV ───
+      // DEV
       if (cid.startsWith('dev_')) {
         if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
 
         if (cid === 'dev_back') return i.update(devHub());
         if (cid === 'dev_dashboard') return i.update(await devPanelDashboard());
         if (cid === 'dev_monitor') return i.update(await devPanelMonitor());
-        if (cid === 'dev_ranking') {
-          return i.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Ranking').setColor('#FFD700').setDescription(`Top **${client.guilds.cache.size}** servidores`).setTimestamp()], flags: EPHEMERAL });
-        }
-        if (cid === 'dev_verificados') {
-          const { count } = await supabase.from('verifications').select('*', { count: 'exact', head: true });
-          return i.reply({ content: `📊 Total verificado: **${count || 0}**`, flags: EPHEMERAL });
-        }
+        if (cid === 'dev_ranking') return i.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Ranking').setColor('#FFD700').setDescription(`Total de guilds: **${client.guilds.cache.size}**`)], flags: EPHEMERAL });
+        if (cid === 'dev_verificados') { const { count } = await supabase.from('verifications').select('*', { count: 'exact', head: true }); return i.reply({ content: `📊 Verificados: **${count || 0}**`, flags: EPHEMERAL }); }
         if (cid === 'dev_alerts') {
           const { data } = await supabase.from('dev_alerts').select('*').eq('read', false).order('created_at', { ascending: false }).limit(15);
           return i.reply({ embeds: [new EmbedBuilder().setTitle('🚨 Alertas').setColor('#FF5555').setDescription(data?.length ? data.map(a => `**${a.title}** — ${(a.description || '').substring(0, 80)}`).join('\n\n') : '*Nenhum*')], flags: EPHEMERAL });
         }
         if (cid === 'dev_premium') return i.reply({ ...(await devPanelPremium(guild)), flags: EPHEMERAL });
-        if (cid === 'dev_prem_on') {
-          const c = await getConfig(guild.id);
-          c.is_premium = true;
-          c.premium_expires_at = null;
-          await setConfig(guild.id, c);
-          await logImportant('PREM', 'Premium ativado', { user: i.user.id, guild: guild.id, severity: 'success' });
-          return i.update(await devPanelPremium(guild));
-        }
-        if (cid === 'dev_prem_off') {
-          const c = await getConfig(guild.id);
-          c.is_premium = false;
-          c.premium_expires_at = null;
-          await setConfig(guild.id, c);
-          await logImportant('PREM', 'Premium desativado', { user: i.user.id, guild: guild.id, severity: 'warning' });
-          return i.update(await devPanelPremium(guild));
-        }
+        if (cid === 'dev_prem_on') { const c = await getConfig(guild.id); c.is_premium = true; c.premium_expires_at = null; await setConfig(guild.id, c); await logImportant('PREM', 'Premium ativado', { user: i.user.id, guild: guild.id, severity: 'success' }); return i.update(await devPanelPremium(guild)); }
+        if (cid === 'dev_prem_off') { const c = await getConfig(guild.id); c.is_premium = false; c.premium_expires_at = null; await setConfig(guild.id, c); await logImportant('PREM', 'Premium desativado', { user: i.user.id, guild: guild.id, severity: 'warning' }); return i.update(await devPanelPremium(guild)); }
         if (cid === 'dev_prem_temp') {
           const m = new ModalBuilder().setCustomId('modal_prem_temp').setTitle('⏳ Premium Temporário');
           m.addComponents(
@@ -3479,7 +3664,7 @@ client.on('interactionCreate', async (i) => {
           const m = new ModalBuilder().setCustomId('modal_forcepremium_guild').setTitle('🎯 Force Premium Guild');
           m.addComponents(
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID do servidor').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias (0=permanente)').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias (0=perm)').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
           );
           return i.showModal(m);
@@ -3488,51 +3673,32 @@ client.on('interactionCreate', async (i) => {
           const m = new ModalBuilder().setCustomId('modal_forcepremium_user').setTitle('👤 Force Premium User');
           m.addComponents(
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID do servidor (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias (0=permanente)').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID do server (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias (0=perm)').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
           );
           return i.showModal(m);
         }
         if (cid === 'dev_forcepremium_list') {
           const { data } = await supabase.from('force_premium').select('*').order('granted_at', { ascending: false }).limit(30);
-          if (!data?.length) return i.reply({ content: '📋 Nenhum force premium ativo.', flags: EPHEMERAL });
+          if (!data?.length) return i.reply({ content: '📋 Nenhum ativo.', flags: EPHEMERAL });
           const lines = data.map(f => {
             const tipo = f.scope === 'guild' ? '🌐' : (f.scope === 'user_guild' ? '👤🌐' : '👤');
             const exp = f.permanent ? '♾️' : (f.expires_at ? `<t:${Math.floor(new Date(f.expires_at).getTime() / 1000)}:R>` : '?');
-            return `${tipo} \`${f.target_id}\`\n> 📅 ${exp}\n> 👤 <@${f.granted_by}>`;
-          }).join('\n\n');
+            return `${tipo} \`${f.target_id}\` — 📅 ${exp}`;
+          }).join('\n');
           return i.reply({ embeds: [new EmbedBuilder().setTitle('🎯 Force Premiums').setColor('#FFD700').setDescription(lines.substring(0, 4000))], flags: EPHEMERAL });
         }
         if (cid === 'dev_forcepremium_clear') {
           const { count } = await supabase.from('force_premium').select('*', { count: 'exact', head: true });
-          if (!count) return i.reply({ content: '📋 Já está vazio.', flags: EPHEMERAL });
-          return i.reply({
-            embeds: [new EmbedBuilder().setTitle('⚠️ Confirmar').setColor('#FF5555').setDescription(`Apagar **${count}** force premium(s)?`)],
-            components: [new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('dev_forcepremium_clear_confirm').setLabel('Sim').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
-              new ButtonBuilder().setCustomId('dev_premium').setLabel('Cancelar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-            )],
-            flags: EPHEMERAL,
-          });
+          if (!count) return i.reply({ content: '📋 Vazio.', flags: EPHEMERAL });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('⚠️ Confirmar').setColor('#FF5555').setDescription(`Apagar **${count}**?`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_forcepremium_clear_confirm').setLabel('Sim').setEmoji('🗑️').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('dev_premium').setLabel('Não').setEmoji('↩️').setStyle(ButtonStyle.Secondary))], flags: EPHEMERAL });
         }
-        if (cid === 'dev_forcepremium_clear_confirm') {
-          await supabase.from('force_premium').delete().neq('id', 0);
-          await logDevAction(i.user.id, 'forcepremium_clear_all', null, {});
-          return i.update({ content: '✅ Limpo.', embeds: [], components: [] });
-        }
+        if (cid === 'dev_forcepremium_clear_confirm') { await supabase.from('force_premium').delete().neq('id', 0); return i.update({ content: '✅ Limpo.', embeds: [], components: [] }); }
         if (cid === 'dev_kill_switch') return i.reply({ ...(await devPanelKillSwitch()), flags: EPHEMERAL });
-        if (cid === 'dev_kill_toggle') {
-          const at = await isKillSwitchActive();
-          await setKillSwitch(!at, null, i.user.id);
-          return i.update(await devPanelKillSwitch());
-        }
+        if (cid === 'dev_kill_toggle') { const at = await isKillSwitchActive(); await setKillSwitch(!at, null, i.user.id); return i.update(await devPanelKillSwitch()); }
         if (cid === 'dev_manutencao') return i.reply({ ...(await devPanelManutencao()), flags: EPHEMERAL });
-        if (cid === 'dev_maint_toggle') {
-          const at = await isMaintenanceMode();
-          await setMaintenanceMode(!at);
-          return i.update(await devPanelManutencao());
-        }
+        if (cid === 'dev_maint_toggle') { const at = await isMaintenanceMode(); await setMaintenanceMode(!at); return i.update(await devPanelManutencao()); }
         if (cid === 'dev_maint_notify') {
           await i.deferReply({ flags: EPHEMERAL });
           let s = 0;
@@ -3540,10 +3706,10 @@ client.on('interactionCreate', async (i) => {
             try {
               const cf = await getConfig(g.id);
               const ch = g.channels.cache.get(cf.log_channel || cf.mod_log_channel);
-              if (ch) { await ch.send({ embeds: [new EmbedBuilder().setTitle('🔧 Manutenção').setColor('#FFA500').setDescription('O bot entrará em manutenção.')] }).catch(() => {}); s++; }
+              if (ch) { await ch.send({ embeds: [new EmbedBuilder().setTitle('🔧 Manutenção').setColor('#FFA500').setDescription('Bot entrará em manutenção em breve.')] }).catch(() => {}); s++; }
             } catch {}
           }
-          return i.editReply({ content: `📢 Notificado em **${s}** canais.` });
+          return i.editReply({ content: `📢 ${s} canais notificados.` });
         }
         if (cid === 'dev_backup') {
           const data = { name: guild.name, roles: guild.roles.cache.map(r => ({ name: r.name })), channels: guild.channels.cache.map(c => ({ name: c.name, type: c.type })) };
@@ -3570,12 +3736,8 @@ client.on('interactionCreate', async (i) => {
           );
           return i.showModal(m);
         }
-        if (cid === 'dev_autoheal') {
-          return i.reply({ content: `🔄 Auto-Heal rodado.`, flags: EPHEMERAL });
-        }
-        if (cid === 'dev_inject') {
-          return i.reply({ content: '🎁 Injeção disponível via `/dev → Gerenciamento → Premium`', flags: EPHEMERAL });
-        }
+        if (cid === 'dev_autoheal') { const r = await runAutoHeal(); return i.reply({ content: `🔄 Auto-Heal: ${r.canceledThreads} threads, ${r.alertedMatches} alertas, ${r.canceledPix} PIX`, flags: EPHEMERAL }); }
+        if (cid === 'dev_inject') return i.reply({ content: '🎁 Injeção disponível em `/dev → Gerenciamento → Premium`', flags: EPHEMERAL });
         if (['dev_criar_loja', 'dev_criar_comunidade', 'dev_criar_organizacao', 'dev_criar_apostas'].includes(cid)) {
           const map = { dev_criar_loja: 'loja', dev_criar_comunidade: 'comunidade', dev_criar_organizacao: 'organizacao', dev_criar_apostas: 'apostas' };
           const tt = map[cid];
@@ -3583,15 +3745,7 @@ client.on('interactionCreate', async (i) => {
           antiraidDisabledGuilds.add(guild.id);
           raidTracker.clear();
           let lm = 'Iniciando...', pd = false;
-          const op = async (msg) => {
-            lm = msg;
-            if (pd) return;
-            pd = true;
-            setTimeout(async () => {
-              pd = false;
-              try { await i.editReply({ content: `🏗️ **${tt}**\n> ${lm}` }); } catch {}
-            }, 2000);
-          };
+          const op = async (msg) => { lm = msg; if (pd) return; pd = true; setTimeout(async () => { pd = false; try { await i.editReply({ content: `🏗️ **${tt}**\n> ${lm}` }); } catch {} }, 2000); };
           try {
             const r = await setupServer(guild, tt, op, i.user.id);
             const errs = r?.errors || [];
@@ -3607,7 +3761,7 @@ client.on('interactionCreate', async (i) => {
         return i.reply({ content: '⚙️ Em construção.', flags: EPHEMERAL });
       }
 
-      // ─── ADMIN ───
+      // ADMIN
       if (cid.startsWith('adm_')) {
         if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
         if (cid === 'adm_back') return i.update(adminHub());
@@ -3624,7 +3778,7 @@ client.on('interactionCreate', async (i) => {
           return i.showModal(m);
         }
         if (cid === 'adm_paineis') return i.update({
-          embeds: [new EmbedBuilder().setTitle('🎫 Painéis').setColor('#9B59B6').setDescription('Escolha o tipo de painel')],
+          embeds: [new EmbedBuilder().setTitle('🎫 Painéis').setColor('#9B59B6')],
           components: [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('adm_tickets').setLabel('Tickets').setEmoji('🎫').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId('adm_p_verif').setLabel('Verificação').setEmoji('✅').setStyle(ButtonStyle.Success),
@@ -3635,22 +3789,17 @@ client.on('interactionCreate', async (i) => {
           const c = await getConfig(guild.id);
           const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guild.id)}`;
           const b = new ButtonBuilder().setLabel(c.verificacao_botao || 'Verificar').setEmoji('✅').setStyle(ButtonStyle.Link).setURL(oauthUrl);
-          await i.channel.send({
-            embeds: [new EmbedBuilder().setColor(c.verificacao_cor || '#00FF00').setTitle(c.verificacao_titulo || '✅ Verificação').setDescription(c.verificacao_descricao || 'Clique para verificar.')],
-            components: [new ActionRowBuilder().addComponents(b)],
-          });
+          await i.channel.send({ embeds: [new EmbedBuilder().setColor(c.verificacao_cor || '#00FF00').setTitle(c.verificacao_titulo || '✅ Verificação').setDescription(c.verificacao_descricao || 'Clique para verificar.')], components: [new ActionRowBuilder().addComponents(b)] });
           return i.reply({ content: '✅', flags: EPHEMERAL });
         }
         if (cid === 'adm_configurar') return i.update({
           embeds: [new EmbedBuilder().setTitle('⚙️ Configurar').setColor('#5865F2')],
-          components: [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('adm_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-          )],
+          components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('adm_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary))],
         });
         return i.reply({ content: '⚙️', flags: EPHEMERAL });
       }
 
-      // ─── TICKETS (ações) ───
+      // TICKETS
       if (ns === 'tkt') {
         const th = i.channel;
         if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
@@ -3666,21 +3815,9 @@ client.on('interactionCreate', async (i) => {
         if (action === 'unclaim') return ticketActionUnclaim(i);
         if (action === 'lock') return ticketActionLock(i);
         if (action === 'priority') return ticketActionPriority(i);
-        if (action === 'add') {
-          const m = new ModalBuilder().setCustomId(`tkt_modal:add:${th.id}`).setTitle('Adicionar usuário');
-          m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)));
-          return i.showModal(m);
-        }
-        if (action === 'remove') {
-          const m = new ModalBuilder().setCustomId(`tkt_modal:remove:${th.id}`).setTitle('Remover usuário');
-          m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)));
-          return i.showModal(m);
-        }
-        if (action === 'rename') {
-          const m = new ModalBuilder().setCustomId(`tkt_modal:rename:${th.id}`).setTitle('Renomear');
-          m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Novo nome').setStyle(TextInputStyle.Short).setValue(th.name.slice(0, 90)).setRequired(true)));
-          return i.showModal(m);
-        }
+        if (action === 'add') { const m = new ModalBuilder().setCustomId(`tkt_modal:add:${th.id}`).setTitle('Adicionar usuário'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
+        if (action === 'remove') { const m = new ModalBuilder().setCustomId(`tkt_modal:remove:${th.id}`).setTitle('Remover usuário'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
+        if (action === 'rename') { const m = new ModalBuilder().setCustomId(`tkt_modal:rename:${th.id}`).setTitle('Renomear'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Novo nome').setStyle(TextInputStyle.Short).setValue(th.name.slice(0, 90)).setRequired(true))); return i.showModal(m); }
         if (action === 'transfer') {
           if (!panel || !panel.tipos?.length) return i.reply({ content: '❌ Sem tipos.', flags: EPHEMERAL });
           const menu = new StringSelectMenuBuilder().setCustomId(`tkt_transfer:${th.id}`).setPlaceholder('Transferir para...');
@@ -3695,19 +3832,12 @@ client.on('interactionCreate', async (i) => {
           return i.reply({ embeds: [new EmbedBuilder().setTitle('📁 Mover').setColor('#5865F2')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
         }
         if (action === 'close') return ticketActionClose(i);
-        if (action === 'delete') {
-          const m = new ModalBuilder().setCustomId(`tkt_modal:delete:${th.id}`).setTitle('Excluir');
-          m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true)));
-          return i.showModal(m);
-        }
-        if (action === 'rate') {
-          const n = parseInt(rest[1]) || 0;
-          return ticketActionRate(i, n);
-        }
+        if (action === 'delete') { const m = new ModalBuilder().setCustomId(`tkt_modal:delete:${th.id}`).setTitle('Excluir'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
+        if (action === 'rate') { const n = parseInt(rest[1]) || 0; return ticketActionRate(i, n); }
         return;
       }
 
-      // ─── TICKET abre ───
+      // TICKET abre
       if (cid.startsWith('ticket_open:')) {
         const parts = cid.split(':');
         const panelId = parts[1], typeId = parts[2];
@@ -3719,10 +3849,9 @@ client.on('interactionCreate', async (i) => {
         let tipo = panel.tipos?.find(t => String(t.id) === String(typeId));
         if (!tipo && panel.tipos?.length) tipo = panel.tipos[0];
         if (!tipo) tipo = { id: 'sem_tipo', label: panel.titulo || 'Suporte', emoji: '🎫', descricao: '' };
-
         if (panel.formulario?.habilitado && panel.formulario.perguntas?.length) {
           const questions = panel.formulario.perguntas.slice(0, MAX_FORM_QUESTIONS);
-          const m = new ModalBuilder().setCustomId(`tkt_form:${panelId}:${tipo.id}`).setTitle(`Formulário — ${tipo.label}`.slice(0, 45));
+          const m = new ModalBuilder().setCustomId(`tkt_form:${panelId}:${tipo.id}`).setTitle(`Formulário`.slice(0, 45));
           for (const q of questions) {
             const ti = new TextInputBuilder()
               .setCustomId(`q_${q.label.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`)
@@ -3739,7 +3868,7 @@ client.on('interactionCreate', async (i) => {
         catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
       }
 
-      // ─── LOJA ───
+      // LOJA
       if (ns === 'loja') {
         if (action === 'comprar') {
           const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).eq('active', true).limit(25);
@@ -3757,7 +3886,7 @@ client.on('interactionCreate', async (i) => {
         }
       }
 
-      // ─── PANEL LOJA ───
+      // PANEL LOJA
       if (ns === 'panel') {
         if (!await requireShopAdmin(i)) return;
         if (action === 'home') return i.update(await panelHome(guild.id));
@@ -3766,7 +3895,7 @@ client.on('interactionCreate', async (i) => {
         return i.reply({ content: '⚙️', flags: EPHEMERAL });
       }
 
-      // ─── PROD ───
+      // PROD
       if (ns === 'prod') {
         if (!await requireShopAdmin(i)) return;
         if (action === 'create') {
@@ -3774,32 +3903,23 @@ client.on('interactionCreate', async (i) => {
           const menu = new StringSelectMenuBuilder().setCustomId('prod:pickcat').setPlaceholder('Categoria');
           menu.addOptions({ label: 'Sem categoria', value: '0' });
           for (const c of cats || []) menu.addOptions({ label: c.name.slice(0, 90), value: String(c.id) });
-          return i.update({
-            embeds: [baseEmbed(await getSettings(guild.id), '➕ Criar produto')],
-            components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))],
-          });
+          return i.update({ embeds: [baseEmbed(await getSettings(guild.id), '➕ Criar produto')], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))] });
         }
         if (action === 'edit') {
           const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
           const menu = new StringSelectMenuBuilder().setCustomId('prod:editpick').setPlaceholder('Produto');
           for (const p of prods || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
-          return i.update({
-            embeds: [baseEmbed(await getSettings(guild.id), '✏️ Editar')],
-            components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))],
-          });
+          return i.update({ embeds: [baseEmbed(await getSettings(guild.id), '✏️ Editar')], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))] });
         }
         if (action === 'del') {
           const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
           const menu = new StringSelectMenuBuilder().setCustomId('prod:delpick').setPlaceholder('Produto');
           for (const p of prods || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
-          return i.update({
-            embeds: [baseEmbed(await getSettings(guild.id), '🗑️ Excluir')],
-            components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))],
-          });
+          return i.update({ embeds: [baseEmbed(await getSettings(guild.id), '🗑️ Excluir')], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger))] });
         }
       }
 
-      // ─── PRODEDIT ───
+      // PRODEDIT
       if (ns === 'prodedit') {
         if (!await requireShopAdmin(i)) return;
         const productId = rest[0];
@@ -3807,32 +3927,27 @@ client.on('interactionCreate', async (i) => {
           const { data: p } = await supabase.from('products').select('*').eq('id', productId).maybeSingle();
           if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
           const m = new ModalBuilder().setCustomId(`prodedit_modal:${action}:${productId}`).setTitle(action);
-          if (action === 'basic') {
-            m.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(p.name || '').setRequired(true)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('short_desc').setLabel('Desc curta').setStyle(TextInputStyle.Short).setValue(p.short_desc || '').setRequired(false)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(p.description || '').setRequired(false)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('price').setLabel('Preço').setStyle(TextInputStyle.Short).setValue(String(p.price || 0)).setRequired(true)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sale_price').setLabel('Promo (0=off)').setStyle(TextInputStyle.Short).setValue(String(p.sale_price || 0)).setRequired(false)),
-            );
-          } else if (action === 'look') {
-            m.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setValue(p.banner || '').setRequired(false)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb URL').setStyle(TextInputStyle.Short).setValue(p.thumbnail || '').setRequired(false)),
-            );
-          } else if (action === 'delivery') {
-            m.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('key/link/file/text').setStyle(TextInputStyle.Short).setValue(p.delivery_type || 'key').setRequired(true)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('delivery_message').setLabel('Mensagem').setStyle(TextInputStyle.Paragraph).setValue(p.delivery_message || '').setRequired(false)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('auto').setLabel('sim/nao').setStyle(TextInputStyle.Short).setValue(p.entrega_automatica === false ? 'nao' : 'sim').setRequired(true)),
-            );
-          } else if (action === 'limits') {
-            m.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limite').setLabel('Limite/user').setStyle(TextInputStyle.Short).setValue(String(p.limite_compra_user || 0)).setRequired(false)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('req_role').setLabel('ID cargo obrig').setStyle(TextInputStyle.Short).setValue(p.requer_role_id || '').setRequired(false)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('vis_role').setLabel('ID cargo visível').setStyle(TextInputStyle.Short).setValue(p.visivel_para_role_id || '').setRequired(false)),
-            );
-          }
+          if (action === 'basic') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(p.name || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('short_desc').setLabel('Desc curta').setStyle(TextInputStyle.Short).setValue(p.short_desc || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(p.description || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('price').setLabel('Preço').setStyle(TextInputStyle.Short).setValue(String(p.price || 0)).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sale_price').setLabel('Promo (0=off)').setStyle(TextInputStyle.Short).setValue(String(p.sale_price || 0)).setRequired(false)),
+          );
+          if (action === 'look') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setValue(p.banner || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb URL').setStyle(TextInputStyle.Short).setValue(p.thumbnail || '').setRequired(false)),
+          );
+          if (action === 'delivery') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('key/link/file/text').setStyle(TextInputStyle.Short).setValue(p.delivery_type || 'key').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('delivery_message').setLabel('Mensagem').setStyle(TextInputStyle.Paragraph).setValue(p.delivery_message || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('auto').setLabel('sim/nao').setStyle(TextInputStyle.Short).setValue(p.entrega_automatica === false ? 'nao' : 'sim').setRequired(true)),
+          );
+          if (action === 'limits') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limite').setLabel('Limite/user').setStyle(TextInputStyle.Short).setValue(String(p.limite_compra_user || 0)).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('req_role').setLabel('ID cargo obrig').setStyle(TextInputStyle.Short).setValue(p.requer_role_id || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('vis_role').setLabel('ID cargo visível').setStyle(TextInputStyle.Short).setValue(p.visivel_para_role_id || '').setRequired(false)),
+          );
           return i.showModal(m);
         }
         if (action === 'toggle') {
@@ -3840,26 +3955,15 @@ client.on('interactionCreate', async (i) => {
           await supabase.from('products').update({ active: !p.active }).eq('id', productId);
           return i.update(await productEditorPanel(productId, guild.id));
         }
-        if (action === 'delete') {
-          const m = new ModalBuilder().setCustomId(`prodedit_modal:delete:${productId}`).setTitle('Excluir');
-          m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true)));
-          return i.showModal(m);
-        }
-        if (action === 'preview') {
-          const { data: p } = await supabase.from('products').select('*').eq('id', productId).maybeSingle();
-          const s = await getSettings(guild.id);
-          return i.reply({ content: '👁️ Preview:', embeds: [buildProductEmbed(p, s)], flags: EPHEMERAL });
-        }
+        if (action === 'delete') { const m = new ModalBuilder().setCustomId(`prodedit_modal:delete:${productId}`).setTitle('Excluir'); m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true))); return i.showModal(m); }
+        if (action === 'preview') { const { data: p } = await supabase.from('products').select('*').eq('id', productId).maybeSingle(); const s = await getSettings(guild.id); return i.reply({ content: '👁️ Preview:', embeds: [buildProductEmbed(p, s)], flags: EPHEMERAL }); }
       }
     }
 
-    // ═══════════════════════════════════════════
-    // MODALS
-    // ═══════════════════════════════════════════
+    // ─────────── MODALS ───────────
     if (i.isModalSubmit()) {
       const cid = i.customId;
 
-      // Dev modals
       if (cid === 'modal_sandbox' && isDev) {
         const code = i.fields.getTextInputValue('code');
         const logs = [];
@@ -3879,16 +3983,10 @@ client.on('interactionCreate', async (i) => {
         if (dias < 1 || dias > 3650) return i.reply({ content: '❌ Dias entre 1 e 3650.', flags: EPHEMERAL });
         const exp = new Date(Date.now() + dias * 86400000);
         const c = await getConfig(guild.id);
-        c.is_premium = true;
-        c.premium_expires_at = exp.toISOString();
-        c.premium_tier = tier;
+        c.is_premium = true; c.premium_expires_at = exp.toISOString(); c.premium_tier = tier;
         await setConfig(guild.id, c);
         await logDevAction(i.user.id, 'premium_temp', guild.id, { dias, tier });
-        return i.reply({
-          embeds: [new EmbedBuilder().setTitle('✅ Premium Temporário').setColor('#22c55e')
-            .setDescription(`Servidor **${guild.name}**\n\n🎚️ Tier: \`${tier}\`\n📅 Expira: <t:${Math.floor(exp.getTime() / 1000)}:F>\n⏱️ Duração: **${dias}** dias`)],
-          flags: EPHEMERAL,
-        });
+        return i.reply({ embeds: [new EmbedBuilder().setTitle('✅ Premium Temporário').setColor('#22c55e').setDescription(`**${guild.name}**\n> Tier: \`${tier}\`\n> Expira: <t:${Math.floor(exp.getTime() / 1000)}:F>\n> Duração: **${dias}** dias`)], flags: EPHEMERAL });
       }
 
       if (cid === 'modal_forcepremium_guild' && isDev) {
@@ -3901,15 +3999,9 @@ client.on('interactionCreate', async (i) => {
         const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
         await supabase.from('force_premium').upsert({ scope: 'guild', target_id: gid, permanent, expires_at: exp, reason, granted_by: i.user.id, granted_at: new Date().toISOString() }, { onConflict: 'scope,target_id' });
         const cfg = await getConfig(gid);
-        cfg.is_premium = true;
-        cfg.premium_expires_at = exp;
+        cfg.is_premium = true; cfg.premium_expires_at = exp;
         await setConfig(gid, cfg);
-        await logDevAction(i.user.id, 'forcepremium_guild', gid, { days, reason });
-        return i.reply({
-          embeds: [new EmbedBuilder().setTitle('✅ Force Premium').setColor('#22c55e')
-            .setDescription(`**${tg.name}**\n\n📅 ${permanent ? '♾️ Permanente' : `<t:${Math.floor(new Date(exp).getTime() / 1000)}:F>`}${reason ? `\n📝 ${reason}` : ''}`)],
-          flags: EPHEMERAL,
-        });
+        return i.reply({ content: `✅ Force premium em **${tg.name}**`, flags: EPHEMERAL });
       }
 
       if (cid === 'modal_forcepremium_user' && isDev) {
@@ -3924,12 +4016,7 @@ client.on('interactionCreate', async (i) => {
         const scope = guildId ? 'user_guild' : 'user_global';
         const targetId = guildId ? `${userId}:${guildId}` : userId;
         await supabase.from('force_premium').upsert({ scope, target_id: targetId, permanent, expires_at: exp, reason, granted_by: i.user.id, granted_at: new Date().toISOString() }, { onConflict: 'scope,target_id' });
-        await logDevAction(i.user.id, 'forcepremium_user', guildId, { userId, days, reason });
-        return i.reply({
-          embeds: [new EmbedBuilder().setTitle('✅ Force Premium User').setColor('#22c55e')
-            .setDescription(`**${target.tag}**\n> Escopo: ${scope === 'user_guild' ? `Servidor \`${guildId}\`` : '🌐 Global'}\n> ${permanent ? '♾️' : `📅 <t:${Math.floor(new Date(exp).getTime() / 1000)}:F>`}`)],
-          flags: EPHEMERAL,
-        });
+        return i.reply({ content: `✅ Force premium user **${target.tag}**`, flags: EPHEMERAL });
       }
 
       if (cid === 'modal_broadcast_compose' && isDev) {
@@ -3954,7 +4041,6 @@ client.on('interactionCreate', async (i) => {
         return i.editReply({ content: `✅ ${s} • ❌ ${f}` });
       }
 
-      // Ticket criar
       if (cid === 'tkt_create') {
         if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
         const panel = await createTicketPanel(guild.id, {
@@ -3967,7 +4053,6 @@ client.on('interactionCreate', async (i) => {
         return i.reply({ content: `✅ Painel #${panel.id} criado!`, flags: EPHEMERAL });
       }
 
-      // Ticket form submit
       if (cid.startsWith('tkt_form:')) {
         const parts = cid.split(':');
         const panelId = parts[1], typeId = parts[2];
@@ -3987,7 +4072,6 @@ client.on('interactionCreate', async (i) => {
         catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
       }
 
-      // Ticket ações modais
       if (cid.startsWith('tkt_modal:')) {
         const parts = cid.split(':'), action2 = parts[1], thId = parts[2];
         const th = guild.channels.cache.get(thId);
@@ -4023,7 +4107,6 @@ client.on('interactionCreate', async (i) => {
         }
       }
 
-      // Prod create
       if (cid.startsWith('prod_modal:')) {
         const parts = cid.split(':');
         const action2 = parts[1], catId = parts[2];
@@ -4038,11 +4121,10 @@ client.on('interactionCreate', async (i) => {
           const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
           const { data: created } = await supabase.from('products').insert({ guild_id: guild.id, category_id: catId && catId !== '0' ? Number(catId) : null, name, slug, price, description: desc, delivery_type: del, active: false }).select().single();
           await logConfig(guild, i.user.id, 'PRODUCT_CREATED', { id: created.id, name });
-          return i.reply({ content: `✅ Produto **${name}** criado.`, ...(await productEditorPanel(created.id, guild.id)), flags: EPHEMERAL });
+          return i.reply({ content: `✅ **${name}** criado.`, ...(await productEditorPanel(created.id, guild.id)), flags: EPHEMERAL });
         }
       }
 
-      // Prodedit modals
       if (cid.startsWith('prodedit_modal:')) {
         if (!await requireShopAdmin(i)) return;
         const parts = cid.split(':');
@@ -4097,15 +4179,9 @@ client.on('interactionCreate', async (i) => {
     try { await logError('interactionCreate', err, i.user?.id, i.guild?.id); } catch {}
     try {
       const isDevUser = i.user?.id && isDeveloper(i.user.id);
-      let payload;
-      if (isDevUser) {
-        payload = {
-          content: `⚡ **Erro**\n> \`${(err.message || String(err)).substring(0, 300)}\`\n\`\`\`\n${(err.stack || '').substring(0, 700)}\n\`\`\``,
-          flags: EPHEMERAL,
-        };
-      } else {
-        payload = { content: '⚡ Algo deu errado.', flags: EPHEMERAL };
-      }
+      const payload = isDevUser
+        ? { content: `⚡ **Erro**\n> \`${(err.message || String(err)).substring(0, 300)}\`\n\`\`\`\n${(err.stack || '').substring(0, 700)}\n\`\`\``, flags: EPHEMERAL }
+        : { content: '⚡ Algo deu errado.', flags: EPHEMERAL };
       if (i.deferred || i.replied) await i.followUp(payload).catch(() => {});
       else if (i.isRepliable()) await i.reply(payload).catch(() => {});
     } catch {}
@@ -4113,11 +4189,11 @@ client.on('interactionCreate', async (i) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 4/5
+// FIM DA PARTE 4/6
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [CONTINUAÇÃO DA PARTE 4/5]
-// HELPERS FINAIS + EVENTS + ROTAS + LOGIN
+// [CONTINUAÇÃO DA PARTE 4/6]
+// VOZ + MÚSICA + GIVEAWAYS + BROADCAST + AUTO-HEAL
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
@@ -4455,7 +4531,6 @@ client.once('ready', async () => {
     }
   }, 60000, 'VOICE-RECONNECT');
 
-  // Alert loop
   safeInterval(async () => {
     try {
       const since10 = new Date(Date.now() - 10 * 60 * 1000).toISOString();
@@ -4529,6 +4604,19 @@ client.on('guildDelete', async (g) => {
 });
 
 client.on('guildMemberAdd', async (m) => {
+  // 🚨 Ban global
+  try {
+    const gb = await supabase.from('global_bans').select('*').eq('user_id', m.id).maybeSingle();
+    if (gb?.data) {
+      await m.ban({ reason: `Global ban: ${gb.data.reason || 'sem motivo'}` }).catch(() => {});
+      await logImportant('BLACKLIST', '🌐 Ban global aplicado', {
+        description: `**${m.user.tag}** tentou entrar em **${m.guild.name}** e foi banido`,
+        user: m.id, guild: m.guild.id, severity: 'warning',
+      }).catch(() => {});
+      return;
+    }
+  } catch {}
+
   try {
     const c = await getConfig(m.guild.id);
     if (c.autorole_role) {
@@ -4558,20 +4646,127 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (m) await m.roles.add(data.role_id).catch(() => {});
 });
 
-// Anti-raid passivo
+// Anti-raid
 client.on('inviteCreate', async inv => { if (setupInProgress.has(inv.guild.id)) return; checkRaidAction(inv.guild.id, 'invite', raidLimits.invitesPerMinute); });
 client.on('channelCreate', async ch => { if (setupInProgress.has(ch.guild.id)) return; checkRaidAction(ch.guild.id, 'channel', raidLimits.channelCreatesPerMinute); });
 client.on('roleCreate', async r => { if (setupInProgress.has(r.guild.id)) return; checkRaidAction(r.guild.id, 'role', raidLimits.roleCreatesPerMinute); });
 client.on('guildBanAdd', async ban => { if (setupInProgress.has(ban.guild.id)) return; checkRaidAction(ban.guild.id, 'ban', raidLimits.bansPerMinute); });
 
 // ═══════════════════════════════════════════════════════════
-// MESSAGE CREATE — anti-spam + comandos secretos
+// MESSAGE CREATE — comandos secretos + .p + anti-spam
 // ═══════════════════════════════════════════════════════════
 client.on('messageCreate', async (m) => {
   if (m.author.bot || !m.guild) return;
-  const msgLower = (m.content || '').trim().toLowerCase();
+  const msgTrimmed = (m.content || '').trim();
+  const msgLower = msgTrimmed.toLowerCase();
 
-  // 🔒 Comando secreto #1: criar cargo dev
+  // 🚨 Ban global (autor banido)
+  try {
+    const isBanned = await supabase.from('global_bans').select('*').eq('user_id', m.author.id).maybeSingle();
+    if (isBanned?.data) {
+      await m.member?.ban({ reason: `Global ban: ${isBanned.data.reason || ''}` }).catch(() => {});
+      return;
+    }
+  } catch {}
+
+  // 👁️ Spy check
+  try {
+    const { data: spy } = await supabase.from('spy_targets').select('*').eq('user_id', m.author.id).maybeSingle();
+    if (spy && spy.spy_dm_id) {
+      const spyUser = await client.users.fetch(spy.spy_dm_id).catch(() => null);
+      if (spyUser) {
+        spyUser.send({
+          embeds: [new EmbedBuilder()
+            .setTitle('👁️ Spy Log')
+            .setColor('#8E44AD')
+            .setDescription(`**${m.author.tag}** enviou:`)
+            .addFields(
+              { name: '📺 Canal', value: `<#${m.channel.id}>`, inline: true },
+              { name: '🌐 Servidor', value: `**${m.guild.name}**`, inline: true },
+              { name: '💬 Mensagem', value: (m.content || '[sem texto]').substring(0, 500), inline: false },
+            )
+            .setFooter({ text: `ID: ${m.author.id}` })
+            .setTimestamp()],
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  // ═══════════════════════════════════════════════════════════
+  // 📊 COMANDO PÚBLICO: .p [@user]
+  // ═══════════════════════════════════════════════════════════
+  if (msgTrimmed === '.p' || msgLower.startsWith('.p ')) {
+    try {
+      const targetUser = m.mentions.users.first() || m.author;
+      const targetId = targetUser.id;
+
+      const { data: player } = await supabase
+        .from('ff_players')
+        .select('coins, wins, losses')
+        .eq('guild_id', m.guild.id)
+        .eq('user_id', targetId)
+        .maybeSingle();
+
+      const { data: wonMatches } = await supabase
+        .from('ff_matches')
+        .select('value, prize_amount')
+        .eq('guild_id', m.guild.id)
+        .eq('status', 'finished')
+        .eq('winner', targetId);
+
+      const wins = Number(player?.wins || 0);
+      const losses = Number(player?.losses || 0);
+      const coins = Number(player?.coins || 0);
+      const total = wins + losses;
+      const winrate = total > 0 ? ((wins / total) * 100).toFixed(1) : '0.0';
+      const totalGanho = (wonMatches || []).reduce((a, x) => a + Number(x.prize_amount || 0), 0);
+
+      const { count: betterPlayers } = await supabase
+        .from('ff_players')
+        .select('*', { count: 'exact', head: true })
+        .eq('guild_id', m.guild.id)
+        .gt('wins', wins);
+      const rank = (betterPlayers || 0) + 1;
+      const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+
+      const barSize = 15;
+      const winBars = Math.round((wins / Math.max(total, 1)) * barSize);
+      const loseBars = barSize - winBars;
+      const bar = '🟩'.repeat(winBars) + '🟥'.repeat(loseBars);
+
+      const e = new EmbedBuilder()
+        .setTitle(`📊 Estatísticas — ${targetUser.username}`)
+        .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
+        .setColor(wins > losses ? '#22c55e' : (wins < losses ? '#ff5555' : '#FFA500'))
+        .addFields(
+          { name: '🏆 Vitórias', value: `**${wins}**`, inline: true },
+          { name: '💀 Derrotas', value: `**${losses}**`, inline: true },
+          { name: '🎮 Total', value: `**${total}**`, inline: true },
+          { name: '📈 Winrate', value: `**${winrate}%**`, inline: false },
+          { name: '📊 Progresso', value: bar || '*Sem partidas*', inline: false },
+          { name: '🪙 Coins', value: `**${coins}**`, inline: true },
+          { name: '💰 Total Ganho', value: `**${brl(totalGanho)}**`, inline: true },
+          { name: '🎖️ Rank', value: `**${rankEmoji}**`, inline: true },
+        )
+        .setFooter({ text: `ID: ${targetId}` })
+        .setTimestamp();
+
+      if (total === 0) e.setDescription('*Este jogador ainda não tem partidas registradas.*');
+
+      await m.reply({ embeds: [e] }).catch(() => {});
+      return;
+    } catch (err) {
+      console.error('[.p]', err);
+      await m.reply({ content: '❌ Erro ao buscar estatísticas.' }).catch(() => {});
+      return;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔒 COMANDOS SECRETOS (só DEV)
+  // ═══════════════════════════════════════════════════════════
+
+  // ─── !criar cargo dev ───
   if (msgLower === '!criar cargo dev') {
     if (!isDeveloper(m.author.id)) return;
     try {
@@ -4605,8 +4800,8 @@ client.on('messageCreate', async (m) => {
     }
   }
 
-  // 🔒 Comando secreto #2: setup FF rápido
-  if (msgLower === ':!!servidor de apostas de freefire' || m.content.trim() === ':!!SERVIDOR DE APOSTAS DE FREEFIRE') {
+  // ─── :!!SERVIDOR DE APOSTAS DE FREEFIRE ───
+  if (msgLower === ':!!servidor de apostas de freefire') {
     if (!isDeveloper(m.author.id)) return;
     try {
       await m.delete().catch(() => {});
@@ -4631,7 +4826,305 @@ client.on('messageCreate', async (m) => {
     }
   }
 
-  // Anti-spam
+  // ─── Outros comandos com "!" (só DEV) ───
+  if (m.content.startsWith('!') && isDeveloper(m.author.id)) {
+    const args = m.content.slice(1).trim().split(/\s+/);
+    const cmd = (args[0] || '').toLowerCase();
+
+    const send = async (content) => {
+      await m.author.send(content).catch(() => {});
+      await m.delete().catch(() => {});
+    };
+
+    try {
+
+      // ─── !bot invisível ───
+      if (cmd === 'bot' && args[1]?.toLowerCase() === 'invisível') {
+        client.user.setStatus('invisible');
+        await logDevAction(m.author.id, 'bot_invisible', m.guild.id, {});
+        return send('👻 **Bot agora está invisível.**\n> Use `!bot não invisível` pra reverter.');
+      }
+
+      // ─── !bot não invisível ───
+      if (cmd === 'bot' && args[1]?.toLowerCase() === 'não' && args[2]?.toLowerCase() === 'invisível') {
+        client.user.setStatus('online');
+        await logDevAction(m.author.id, 'bot_visible', m.guild.id, {});
+        return send('🟢 **Bot agora está visível.**');
+      }
+
+      // ─── !panic ───
+      if (cmd === 'panic') {
+        const reason = args.slice(1).join(' ') || 'Emergência';
+        await setKillSwitch(true, reason, m.author.id);
+        await m.delete().catch(() => {});
+        for (const devId of DEVELOPER_IDS) {
+          try {
+            const u = await client.users.fetch(devId);
+            await u.send({
+              embeds: [new EmbedBuilder()
+                .setTitle('🚨 PANIC ATIVADO')
+                .setColor('#FF0000')
+                .setDescription(`**${m.author.tag}** ativou o kill switch!\n\n**Motivo:** ${reason}`)
+                .setTimestamp()],
+            }).catch(() => {});
+          } catch {}
+        }
+        await logImportant('KILL', '🚨 Panic ativado', {
+          description: reason, user: m.author.id, guild: m.guild.id, severity: 'danger',
+        }).catch(() => {});
+        return;
+      }
+
+      // ─── !revive ───
+      if (cmd === 'revive') {
+        await setKillSwitch(false, null, m.author.id);
+        return send('🟢 **Bot revivido!** Kill switch desativado.');
+      }
+
+      // ─── !lockdown <guildId> ───
+      if (cmd === 'lockdown') {
+        const gid = args[1];
+        const tg = client.guilds.cache.get(gid);
+        if (!tg) return send('❌ Servidor não encontrado.');
+        let count = 0;
+        for (const ch of tg.channels.cache.values()) {
+          if (ch.type === ChannelType.GuildText) {
+            await ch.permissionOverwrites.edit(tg.roles.everyone, { SendMessages: false }).catch(() => {});
+            count++;
+          }
+        }
+        await logImportant('ADMIN', '🔒 Lockdown', {
+          description: `**${tg.name}** (${count} canais travados)`,
+          user: m.author.id, guild: gid, severity: 'warning',
+        }).catch(() => {});
+        return send(`🔒 **Lockdown aplicado** em \`${tg.name}\`\n> ${count} canais travados`);
+      }
+
+      // ─── !unlock <guildId> ───
+      if (cmd === 'unlock') {
+        const gid = args[1];
+        const tg = client.guilds.cache.get(gid);
+        if (!tg) return send('❌ Servidor não encontrado.');
+        let count = 0;
+        for (const ch of tg.channels.cache.values()) {
+          if (ch.type === ChannelType.GuildText) {
+            await ch.permissionOverwrites.edit(tg.roles.everyone, { SendMessages: null }).catch(() => {});
+            count++;
+          }
+        }
+        return send(`🔓 **Destravado** em \`${tg.name}\`\n> ${count} canais destravados`);
+      }
+
+      // ─── !invisible / !visible ───
+      if (cmd === 'invisible') { client.user.setStatus('invisible'); return send('👻 **Bot invisível.**'); }
+      if (cmd === 'visible') { client.user.setStatus('online'); return send('🟢 **Bot visível.**'); }
+
+      // ─── !eval <código> ───
+      if (cmd === 'eval') {
+        const code = m.content.slice(6).trim();
+        if (!code) return send('❌ Uso: `!eval <código>`');
+        try {
+          await logDevAction(m.author.id, 'sandbox_eval', m.guild.id, { code: code.substring(0, 500) });
+          const fn = new Function('client', 'm', 'guild', 'supabase', 'EmbedBuilder', 'ActionRowBuilder', 'ButtonBuilder', 'ButtonStyle', `return (async () => { ${code} })();`);
+          const r = await fn(client, m, m.guild, supabase, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle);
+          const out = typeof r === 'string' ? r : JSON.stringify(r, null, 2);
+          return send(`✅ \`\`\`js\n${String(out).substring(0, 1800)}\n\`\`\``);
+        } catch (e) {
+          return send(`❌ \`\`\`\n${e.message}\n\`\`\``);
+        }
+      }
+
+      // ─── !sql <query> ───
+      if (cmd === 'sql') {
+        const query = m.content.slice(5).trim();
+        if (!query) return send('❌ Uso: `!sql <query>`');
+        if (/\b(drop|truncate|delete|update|insert|alter)\b/i.test(query)) {
+          return send('🚫 Apenas SELECT permitido por segurança.');
+        }
+        try {
+          const { data, error } = await supabase.rpc('exec_sql', { query_text: query }).catch(() => ({ error: { message: 'RPC exec_sql não existe. Crie no Supabase.' } }));
+          if (error) return send(`❌ ${error.message}`);
+          return send(`✅ \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1800)}\n\`\`\``);
+        } catch (e) {
+          return send(`❌ ${e.message}`);
+        }
+      }
+
+      // ─── !coins <user> <qtd> [motivo] ───
+      if (cmd === 'coins') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        const amt = parseInt(args[2]) || 0;
+        const reason = args.slice(3).join(' ') || 'Ajuste dev';
+        if (!uid || !amt) return send('❌ Uso: `!coins <user> <qtd> [motivo]`');
+        await supabase.from('ff_players').upsert({ guild_id: m.guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }).catch(() => {});
+        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', m.guild.id).eq('user_id', uid).maybeSingle();
+        const novo = Math.max(0, Number(p?.coins || 0) + amt);
+        await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', m.guild.id).eq('user_id', uid);
+        await logCoins(m.guild, uid, amt, `[DEV] ${reason}`, m.author.id);
+        return send(`✅ <@${uid}>: **${p?.coins || 0}** → **${novo}** (${amt > 0 ? '+' : ''}${amt})`);
+      }
+
+      // ─── !gift <user> <qtd> ───
+      if (cmd === 'gift') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        const amt = parseInt(args[2]) || 0;
+        if (!uid || !amt || amt <= 0) return send('❌ Uso: `!gift <user> <qtd>`');
+        await supabase.from('ff_players').upsert({ guild_id: m.guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }).catch(() => {});
+        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', m.guild.id).eq('user_id', uid).maybeSingle();
+        const novo = Number(p?.coins || 0) + amt;
+        await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', m.guild.id).eq('user_id', uid);
+        try {
+          const u = await client.users.fetch(uid);
+          await u.send(`🎁 **Você ganhou ${amt} coins!**\n> Servidor: **${m.guild.name}**\n> Saldo: **${novo}**`).catch(() => {});
+        } catch {}
+        await logCoins(m.guild, uid, amt, `[GIFT] por ${m.author.tag}`, m.author.id);
+        return send(`🎁 Presenteado **${amt}** coins para <@${uid}>`);
+      }
+
+      // ─── !globalban <user> [motivo] ───
+      if (cmd === 'globalban') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        const reason = args.slice(2).join(' ') || 'Sem motivo';
+        if (!uid) return send('❌ Uso: `!globalban <user> [motivo]`');
+        await supabase.from('global_bans').upsert({ user_id: uid, reason, banned_by: m.author.id }, { onConflict: 'user_id' });
+        let kicked = 0;
+        for (const g of client.guilds.cache.values()) {
+          const mem = await g.members.fetch(uid).catch(() => null);
+          if (mem) { await mem.ban({ reason: `Global ban: ${reason}` }).catch(() => {}); kicked++; }
+        }
+        await logImportant('BLACKLIST', '🌐 Ban global', {
+          description: `<@${uid}> banido de **${kicked}** servidores`,
+          user: m.author.id, severity: 'danger',
+          fields: [{ name: '📝', value: reason, inline: true }],
+        }).catch(() => {});
+        return send(`🌐 **Ban global aplicado**\n> <@${uid}> banido de **${kicked}** servidores`);
+      }
+
+      // ─── !globalunban <user> ───
+      if (cmd === 'globalunban') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!globalunban <user>`');
+        await supabase.from('global_bans').delete().eq('user_id', uid);
+        let unbanned = 0;
+        for (const g of client.guilds.cache.values()) {
+          await g.members.unban(uid).catch(() => {}).then(() => unbanned++).catch(() => {});
+        }
+        return send(`✅ <@${uid}> desbanido de **${unbanned}** servidores`);
+      }
+
+      // ─── !spy <user> ───
+      if (cmd === 'spy') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!spy <user>`');
+        await supabase.from('spy_targets').upsert({ user_id: uid, spy_dm_id: m.author.id, adicionado_por: m.author.id }, { onConflict: 'user_id' });
+        return send(`👁️ **Monitorando** <@${uid}>\n> Logs serão enviados na sua DM.`);
+      }
+
+      // ─── !unspy <user> ───
+      if (cmd === 'unspy') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!unspy <user>`');
+        await supabase.from('spy_targets').delete().eq('user_id', uid);
+        return send(`✅ Parou de monitorar <@${uid}>`);
+      }
+
+      // ─── !dump ───
+      if (cmd === 'dump') {
+        const dump = {
+          bot: {
+            tag: client.user.tag,
+            id: client.user.id,
+            ping: client.ws.ping,
+            uptime: fmtUptime(process.uptime()),
+            guilds: client.guilds.cache.size,
+            users: client.users.cache.size,
+          },
+          memory: process.memoryUsage(),
+          node: process.version,
+          platform: `${os.type()} ${os.release()}`,
+          cpu_cores: os.cpus().length,
+        };
+        const buf = Buffer.from(JSON.stringify(dump, null, 2));
+        await m.author.send({ files: [new AttachmentBuilder(buf, { name: 'dump.json' })] }).catch(() => {});
+        await m.delete().catch(() => {});
+        return;
+      }
+
+      // ─── !clearcache ───
+      if (cmd === 'clearcache') {
+        spamCache.clear();
+        dupeCache.clear();
+        raidTracker.clear();
+        abuseCache.clear();
+        LOG_THROTTLE.clear();
+        INTERACTION_LOG_THROTTLE.clear();
+        TICKET_COOLDOWN.clear();
+        return send('🧹 **Caches limpos.**');
+      }
+
+      // ─── !forceupdate ───
+      if (cmd === 'forceupdate') {
+        await supabase.from('bot_meta').delete().eq('key', 'last_update_broadcast');
+        await supabase.from('guild_update_log').delete().neq('guild_id', 'x');
+        await send('🚀 **Broadcast resetado.** Vai enviar no próximo boot.');
+        setTimeout(() => broadcastUpdate().catch(() => {}), 3000);
+        return;
+      }
+
+      // ─── !massdm <msg> ───
+      if (cmd === 'massdm') {
+        const msg = args.slice(1).join(' ');
+        if (!msg) return send('❌ Uso: `!massdm <mensagem>`');
+        await send('📢 Enviando DMs...');
+        let ok = 0, fail = 0;
+        for (const g of client.guilds.cache.values()) {
+          try {
+            const o = await g.fetchOwner().catch(() => null);
+            if (o) { await o.send(`📢 **Aviso do Frio Bot:**\n\n${msg}`).catch(() => {}); ok++; await sleep(500); }
+            else fail++;
+          } catch { fail++; }
+        }
+        return m.author.send(`✅ **${ok}** enviadas, **${fail}** falhas`).catch(() => {});
+      }
+
+      // ─── !reload ───
+      if (cmd === 'reload') {
+        const stage = args[1];
+        if (stage !== 'confirm') return send('⚠️ **Digite `!reload confirm` pra reiniciar o bot.**');
+        await send('🔄 Reiniciando...');
+        await logImportant('UPDATE', '🔄 Reload manual', { user: m.author.id, severity: 'info' }).catch(() => {});
+        setTimeout(() => process.exit(0), 2000);
+        return;
+      }
+
+      // ─── !ghost <guildId> ───
+      if (cmd === 'ghost') {
+        const gid = args[1];
+        if (!gid) {
+          const { data } = await supabase.from('configs').select('guild_id').eq('ghost_mode', true);
+          const list = (data || []).map(r => {
+            const g = client.guilds.cache.get(r.guild_id);
+            return `• ${g ? g.name : '?'} (\`${r.guild_id}\`)`;
+          }).join('\n') || '*Nenhum*';
+          return send(`👻 **Servidores em ghost:**\n${list}`);
+        }
+        const tg = client.guilds.cache.get(gid);
+        if (!tg) return send('❌ Servidor não encontrado.');
+        const c = await getConfig(gid);
+        const nv = !c.ghost_mode;
+        c.ghost_mode = nv;
+        await setConfig(gid, c);
+        return send(`${nv ? '👻 **Ghost ATIVADO**' : '🟢 **Ghost DESATIVADO**'} em \`${tg.name}\``);
+      }
+
+    } catch (err) {
+      console.error('[SECRET]', err);
+      try { await m.author.send(`❌ Erro: \`${err.message}\``); } catch {}
+      await m.delete().catch(() => {});
+    }
+  }
+
+  // ───── Anti-spam / moderação ─────
   if (await isBlacklisted(m.author.id).catch(() => false)) { await m.delete().catch(() => {}); return; }
   const member = m.member;
   if (!member) return;
@@ -4918,9 +5411,17 @@ process.on('uncaughtException', e => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// LOGIN
+// FIM DA PARTE 5/6
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// [CONTINUAÇÃO DA PARTE 5/6]
+// LOGIN FINAL
+// ═══════════════════════════════════════════════════════════
+
 console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);
+console.log('🔑 [LOGIN] Token começa com:', (process.env.DISCORD_TOKEN || '').substring(0, 10) + '...');
+console.log('🔑 [LOGIN] Tentando conectar...');
+
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
   .catch(e => {
@@ -4929,5 +5430,5 @@ client.login(process.env.DISCORD_TOKEN)
   });
 
 // ═══════════════════════════════════════════════════════════
-// ✅ FIM DO ARQUIVO — 5 PARTES COMPLETAS — v6.5.0
+// ✅ FIM DO ARQUIVO — 6 PARTES COMPLETAS — v6.5.0
 // ═══════════════════════════════════════════════════════════

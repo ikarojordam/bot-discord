@@ -8044,7 +8044,7 @@ if (i.isButton()) {
 
   // ───── TKTCFG ─────
   if (ns === 'tktcfg') {
-    if (!await i.isAdmin?.() && !await isAdmin(i.user, guild)) return;
+    if (!await isAdmin(i.user, guild)) return;
     const panelId = rest[0];
     if (action === 'sair') {
       const p = await getTicketPanel(guild.id, panelId);

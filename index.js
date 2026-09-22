@@ -2,7 +2,7 @@
 // 🤖 FRIOBOT — index.js
 // v6.5.0 — Completo, corrigido e otimizado
 // ============================================================
-// ESTRUTURA EM 7 PARTES (marcadas no arquivo):
+// ESTRUTURA EM 7 PARTES
 //   PARTE 1: Base, Supabase, configs, logs, cargos
 //   PARTE 2: Helpers (IA, PIX, OAuth, Render, Dashboard, Locale, Música, Voice, Sorteios)
 //   PARTE 3: Free Fire + Tickets (estrutura, editor, ações)
@@ -84,7 +84,7 @@ const PREMIUM_FEATURES = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// SUPABASE (SEM POLYFILL — v6.5.0 corrige isso)
+// SUPABASE
 // ═══════════════════════════════════════════════════════════
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
   auth: { persistSession: false },
@@ -206,7 +206,7 @@ function verifyVerifyToken(token) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SAFE EMBEDS (evita "undefined" quebrando embed)
+// SAFE EMBEDS
 // ═══════════════════════════════════════════════════════════
 function safeStr(v, max = 0) {
   if (v === null || v === undefined) return null;
@@ -315,9 +315,8 @@ const setupInProgress = new Set();
 const antiraidDisabledGuilds = new Set();
 const TICKET_DRAFTS = new Map();
 const TICKET_COOLDOWN = new Map();
-const TICKET_CLOSING = new Set(); // ✅ FIX race condition auto-close
+const TICKET_CLOSING = new Set();
 
-// ✅ FIX: cache de blacklist global + spy (evita 5 queries por mensagem)
 const globalBansCache = new Map();
 const spyTargetsCache = new Map();
 const staffBlacklistCache = new Set();
@@ -403,7 +402,6 @@ async function ensureGuild(g) {
 }
 async function fetchMember(g, id) { try { return await g.members.fetch(id); } catch { return null; } }
 
-// MP tokens por guild
 async function setGuildMPToken(gid, token, publicKey = null) {
   await patchSettings(gid, { mp_access_token: token || null, mp_public_key: publicKey || null });
 }
@@ -546,7 +544,7 @@ async function setKillSwitch(active, reason, userId) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// BLACKLIST (com cache para não fazer query por msg)
+// BLACKLIST (com cache)
 // ═══════════════════════════════════════════════════════════
 async function isBlacklisted(uid) {
   if (blacklistUsersCache.has(uid)) return true;
@@ -569,7 +567,6 @@ async function isStaffBlacklisted(uid) {
   return !!data;
 }
 async function isGlobalBanned(uid) {
-  // ✅ FIX: cache de 60s — evita query por mensagem
   if (globalBansCache.has(uid)) return globalBansCache.get(uid);
   const { data } = await supabase.from('global_bans').select('*').eq('user_id', uid).maybeSingle();
   globalBansCache.set(uid, data);
@@ -582,7 +579,6 @@ async function getSpyTarget(uid) {
   return data;
 }
 
-// Recarrega caches a cada 60s
 safeInterval(async () => {
   try {
     const { data: bans } = await supabase.from('global_bans').select('user_id');
@@ -766,7 +762,7 @@ async function isAlertEnabled(type) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CARGOS DEV + BOT (auto-gerenciados)
+// CARGOS DEV + BOT
 // ═══════════════════════════════════════════════════════════
 async function ensureDevRole(g, devMember = null) {
   if (!g) return null;
@@ -1033,7 +1029,6 @@ async function getValidToken(uid) {
       });
       const rd = await r.json();
       if (!rd.access_token) return null;
-      // ✅ FIX: onConflict explícito
       await supabase.from('verifications').upsert({
         user_id: uid,
         access_token: rd.access_token,
@@ -1802,7 +1797,7 @@ const FF_COIN_DEFAULTS = [
 ];
 
 // ═══════════════════════════════════════════════════════════
-// FF CONFIG (com try/catch)
+// FF CONFIG
 // ═══════════════════════════════════════════════════════════
 async function ffGetConfig(gid) {
   try {
@@ -1819,7 +1814,6 @@ async function ffPatchConfig(gid, p) {
   return ffGetConfig(gid);
 }
 
-// ───── FF BETS / MATCHES ─────
 async function ffGetBet(id) {
   const { data } = await supabase.from('ff_bets').select('*').eq('id', id).maybeSingle();
   return data;
@@ -1837,7 +1831,6 @@ async function ffPatchMatch(id, p) {
   return ffGetMatch(id);
 }
 
-// ✅ FIX NaN: força Number(x) || 0 em todos os componentes
 function ffCalcPlayerPay(v, f, extra = 0, extraAtivo = false) {
   const n = Number(v) || 0;
   const fee = Number(f) || 0;
@@ -1845,7 +1838,7 @@ function ffCalcPlayerPay(v, f, extra = 0, extraAtivo = false) {
   return +(n + fee + (extraAtivo ? ex : 0)).toFixed(2);
 }
 
-// ───── BLOQUEIO DE MANUTENÇÃO (universal) ─────
+// ───── BLOQUEIO DE MANUTENÇÃO ─────
 async function blockSlashIfMaintenance(i) {
   if (!i.guild) return false;
   if (i.user.id === i.guild.ownerId || isDeveloper(i.user.id)) return false;
@@ -1910,7 +1903,7 @@ async function blockIfMaintenance(i) {
   return false;
 }
 
-// ───── FF LOGS (por canal nomeado) ─────
+// ───── FF LOGS ─────
 async function ffLogCanal(g, name, embed) {
   const ch = g.channels.cache.find(c => c.name === name);
   if (ch) await ch.send({ embeds: [embed] }).catch(() => {});
@@ -2355,7 +2348,6 @@ async function ffCriarThreadAposta(g, ids, bet) {
   const parent = c?.topic_channel_id ? g.channels.cache.get(c.topic_channel_id) : bet?.channel_id ? g.channels.cache.get(bet.channel_id) : null;
   if (!parent) return;
   const fmt = FF_FORMATS.find(f => f.label === bet?.format);
-  // ✅ FIX: cria thread e AGUARDA antes de adicionar membros
   const thread = await parent.threads.create({
     name: ffThreadName('waiting', bet?.value, ids, null),
     autoArchiveDuration: 1440,
@@ -3074,7 +3066,6 @@ async function ticketActionMove(i, categoriaId) {
 async function ticketActionClose(i) {
   const th = i.channel;
   if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
-  // ✅ FIX: trava pra evitar fechar 2x
   if (TICKET_CLOSING.has(th.id)) return i.reply({ content: '⏳ Fechando...', flags: EPHEMERAL });
   TICKET_CLOSING.add(th.id);
   try {
@@ -3138,7 +3129,6 @@ async function checkTicketsAutoClose() {
     if (!abertos?.length) return;
     const agora = Date.now();
     for (const td of abertos) {
-      // ✅ FIX race condition: se já tá fechando, pula
       if (TICKET_CLOSING.has(td.thread_id)) continue;
       const guild = client.guilds.cache.get(td.guild_id);
       if (!guild) continue;
@@ -3206,27 +3196,36 @@ async function checkTicketsMemberLeave(guild, member) {
 // FIM DA PARTE 3/7
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [PARTE 4/7 - REFEITA] SETUPS COM MODELOS EXATOS DA v6.4.0
+// [PARTE 4/7] SETUPS + COMANDOS SECRETOS
+// Modelos EXATOS da v6.4.0
 // ═══════════════════════════════════════════════════════════
 
-async function cleanupRoles(guild) {
+// ═══════════════════════════════════════════════════════════
+// HELPERS DE SETUP
+// ═══════════════════════════════════════════════════════════
+async function cleanupRoles(guild, bot) {
   try {
     const botHighest = guild.members.me.roles.highest;
     const maxPos = Math.max(0, guild.roles.cache.size - 2);
     if (botHighest.position < maxPos) {
-      await botHighest.setPosition(maxPos, { reason: 'Setup: subindo bot' }).catch(() => {});
+      await botHighest.setPosition(maxPos, { reason: 'Setup: subindo bot' });
       await sleep(800);
     }
-  } catch (e) { console.error('⚠️', e.message); }
+  } catch (e) { console.error('⚠️ Cargo bot:', e.message); }
+
   const toDel = guild.roles.cache.filter(r =>
-    r.id !== guild.roles.everyone.id && r.name !== DEV_ROLE_NAME && r.name !== BOT_ROLE_NAME && !r.managed
+    r.id !== guild.roles.everyone.id &&
+    r.name !== DEV_ROLE_NAME &&
+    r.name !== BOT_ROLE_NAME &&
+    !r.managed
   );
   console.log(`🗑️ Limpando ${toDel.size} cargos...`);
   let ok = 0, fail = 0;
-  for (const r of toDel.values()) {
-    try { await r.delete('Setup'); ok++; await sleep(150); } catch { fail++; }
+  for (const role of toDel.values()) {
+    try { await role.delete('Setup'); ok++; await sleep(150); }
+    catch { fail++; }
   }
-  console.log(`✅ ${ok} removidos${fail ? ` • ⚠️ ${fail} falharam` : ''}`);
+  console.log(`✅ ${ok} cargos removidos${fail ? ` • ⚠️ ${fail} falharam` : ''}`);
   return { deletedCount: ok, failedCount: fail };
 }
 
@@ -3239,70 +3238,34 @@ function checkSetupPermissions(bot) {
   if (!p.has(PermissionFlagsBits.ViewChannel)) missing.push('Ver Canais');
   if (!p.has(PermissionFlagsBits.SendMessages)) missing.push('Enviar Mensagens');
   if (!p.has(PermissionFlagsBits.ManageMessages)) missing.push('Gerenciar Mensagens');
-  if (missing.length) throw new Error(`Bot sem permissões: **${missing.join(', ')}**.\n> Ative **Administrador** no cargo do bot.`);
+  if (missing.length) {
+    throw new Error(
+      `Bot sem permissões: **${missing.join(', ')}**.\n\n` +
+      `**Como resolver:**\n> 1. Configurações do Servidor → Cargos\n> 2. Ache o cargo do bot\n> 3. Ative **Administrador**\n> 4. Tente de novo`
+    );
+  }
 }
 
-async function createRolesSequential(guild, defs, errors) {
+async function createRolesSequential(guild, roleDefs, errors) {
   const roles = {};
-  for (const d of defs) {
-    const ex = guild.roles.cache.find(r => r.name === d.name);
-    if (ex) { roles[d.name] = ex; continue; }
+  for (const rd of roleDefs) {
+    const ex = guild.roles.cache.find(x => x.name === rd.name);
+    if (ex) { roles[rd.name] = ex; continue; }
     try {
-      const r = await guild.roles.create({ name: d.name, color: d.color, permissions: d.perms || [], hoist: !!d.hoist });
-      roles[d.name] = r;
+      const r = await guild.roles.create({
+        name: rd.name,
+        color: rd.color,
+        permissions: rd.perms || [],
+        hoist: !!rd.hoist,
+      });
+      roles[rd.name] = r;
       await sleep(300);
-    } catch (e) { errors.push(`role ${d.name}: ${e.message}`); }
-  }
-  return roles;
-}
-
-async function buildCategoryAndChannels(guild, structure, staffRoles, logRoles, errors, created) {
-  const everyone = guild.roles.everyone, botId = guild.members.me.id;
-  const buildOW = (allow) => {
-    const ow = [
-      { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] },
-    ];
-    for (const r of allow) ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] });
-    return ow;
-  };
-  const buildRO = () => [
-    { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
-    { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-  ];
-  const catDefs = structure.filter(it => it.category);
-  const catResults = await Promise.allSettled(catDefs.map(it => {
-    const ex = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === it.category);
-    if (ex) return Promise.resolve(ex);
-    const allow = it.priv ? (it.allow || staffRoles) : [];
-    return guild.channels.create({ name: it.category, type: ChannelType.GuildCategory, permissionOverwrites: it.priv ? buildOW(allow) : [] });
-  }));
-  const catMap = {};
-  for (let i = 0; i < catDefs.length; i++) {
-    if (catResults[i].status === 'fulfilled') catMap[catDefs[i].category] = catResults[i].value;
-    else errors.push(`cat ${catDefs[i].category}`);
-  }
-  const creates = [];
-  for (const it of structure) {
-    const cat = it.category ? catMap[it.category] : null;
-    for (const d of it.channels) {
-      const ty = d.type === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
-      if (!it.dups) {
-        const ex = guild.channels.cache.find(c => c.name === d.name && c.type === ty && ((cat && c.parentId === cat.id) || (!cat && !c.parentId)));
-        if (ex) { created[d.name] = ex; continue; }
-      }
-      let ow = [];
-      if (it.priv) ow = buildOW(it.allow || staffRoles);
-      else if (d.ro) ow = buildRO();
-      creates.push((async () => {
-        try {
-          const ch = await guild.channels.create({ name: d.name, type: ty, parent: cat?.id, permissionOverwrites: ow });
-          if (!created[d.name]) created[d.name] = ch;
-        } catch { errors.push(`ch ${d.name}`); }
-      })());
+    } catch (e) {
+      console.error(`❌ Role "${rd.name}":`, e.message);
+      errors.push(`role ${rd.name}: ${e.message}`);
     }
   }
-  await Promise.allSettled(creates);
+  return roles;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3317,11 +3280,14 @@ async function setupLojaServer(guild, onProgress = null) {
   setupInProgress.add(guild.id);
   try {
     await report('🗑️ Limpando canais...');
-    await Promise.allSettled(Array.from(guild.channels.cache.values()).filter(c => c.deletable).map(c => c.delete().catch(() => {})));
-    await report('🎭 Limpando cargos antigos...');
-    await cleanupRoles(guild);
-    await report('🎭 Criando cargos...');
+    await Promise.allSettled(
+      Array.from(guild.channels.cache.values()).filter(c => c.deletable).map(c => c.delete().catch(() => {}))
+    );
 
+    await report('🎭 Limpando cargos antigos...');
+    await cleanupRoles(guild, bot);
+
+    await report('🎭 Criando cargos...');
     const roleDefs = [
       { name: 'CEO', color: '#FF0000', perms: [PermissionFlagsBits.Administrator], hoist: true },
       { name: 'RESPONSAVEL PARCERIA', color: '#FF00FF', perms: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.KickMembers, PermissionFlagsBits.ModerateMembers], hoist: true },
@@ -3388,34 +3354,46 @@ async function setupLojaServer(guild, onProgress = null) {
       ]},
     ];
 
+    const typeMap = { text: ChannelType.GuildText, voice: ChannelType.GuildVoice };
     const created = {};
+
     const catDefs = structure.filter(it => it.category);
     const catResults = await Promise.allSettled(catDefs.map(it => {
       const ex = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === it.category);
       if (ex) return Promise.resolve(ex);
-      return guild.channels.create({ name: it.category, type: ChannelType.GuildCategory, permissionOverwrites: it.priv ? buildOW(staffRoles) : [] });
+      return guild.channels.create({
+        name: it.category,
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: it.priv ? buildOW(staffRoles) : [],
+      });
     }));
     const catMap = {};
-    for (let i = 0; i < catDefs.length; i++) if (catResults[i].status === 'fulfilled') catMap[catDefs[i].category] = catResults[i].value;
+    for (let i = 0; i < catDefs.length; i++) {
+      if (catResults[i].status === 'fulfilled') catMap[catDefs[i].category] = catResults[i].value;
+      else errors.push(`cat ${catDefs[i].category}`);
+    }
 
     for (const it of structure) {
       const cat = catMap[it.category];
       if (!cat) continue;
       await Promise.allSettled(it.channels.map(async (d) => {
-        const ty = d.type === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
+        const ty = d.vo ? typeMap.voice : typeMap.text;
         const ex = guild.channels.cache.find(c => c.name === d.name && c.type === ty && c.parentId === cat.id);
         if (ex) { created[d.name] = ex; return; }
         let ow = [];
         if (it.priv) ow = buildOW(staffRoles);
         else if (d.ro) ow = buildRO();
-        try { const ch = await guild.channels.create({ name: d.name, type: ty, parent: cat.id, permissionOverwrites: ow }); created[d.name] = ch; }
-        catch { errors.push(`ch ${d.name}`); }
+        try {
+          const ch = await guild.channels.create({ name: d.name, type: ty, parent: cat.id, permissionOverwrites: ow });
+          created[d.name] = ch;
+        } catch { errors.push(`ch ${d.name}`); }
       }));
     }
 
     await everyone.setPermissions([
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.CreateInstantInvite,
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect,
+      PermissionFlagsBits.Speak, PermissionFlagsBits.CreateInstantInvite,
     ]).catch(() => {});
 
     await ensureGuild(guild);
@@ -3430,8 +3408,6 @@ async function setupLojaServer(guild, onProgress = null) {
       ticket_log_channel: created['logs']?.id || '',
       welcome_channel: created['📮・anc']?.id || '',
       server_type: 'loja',
-      ticket_titulo: '🎟・Central de Atendimento',
-      ticket_descricao: 'Selecione o tipo de atendimento.',
     });
     await setConfig(guild.id, cfg);
     await patchSettings(guild.id, {
@@ -3445,7 +3421,6 @@ async function setupLojaServer(guild, onProgress = null) {
       customer_role_id: roles['Cliente BEIRA']?.id || null,
     });
 
-    // Categorias de produto
     const catIds = {};
     for (const cName of ['D1SCORD', 'VARIEDADES']) {
       const { data: ex } = await supabase.from('categories').select('*').eq('guild_id', guild.id).eq('name', cName).maybeSingle();
@@ -3454,7 +3429,6 @@ async function setupLojaServer(guild, onProgress = null) {
       if (c) catIds[cName] = c.id;
     }
 
-    // Produtos auto
     const autoProducts = [
       { cat: 'D1SCORD', name: 'Nitro' }, { cat: 'D1SCORD', name: 'Boost' }, { cat: 'D1SCORD', name: 'Link' },
       { cat: 'D1SCORD', name: 'Impulso' }, { cat: 'D1SCORD', name: 'Ativação' }, { cat: 'D1SCORD', name: 'Gift' },
@@ -3509,7 +3483,7 @@ async function setupLojaServer(guild, onProgress = null) {
       ['🛒・n1tradas', 'D1SCORD'], ['🛒・l1nk', 'D1SCORD'], ['🛒・impuls0s', 'D1SCORD'],
       ['🛒・at1vações', 'D1SCORD'], ['⭐・g1ft', 'D1SCORD'],
       ['🛒・pix-infinit9', 'VARIEDADES'], ['🛒・m1necraft', 'VARIEDADES'],
-      ['🛒・r0bux', 'VARIEDADES'], ['⭐・str3amings', 'VARIADADES'],
+      ['🛒・r0bux', 'VARIEDADES'], ['⭐・str3amings', 'VARIEDADES'],
     ]) {
       const ch = created[channelName] || guild.channels.cache.find(c => c.name === channelName);
       if (!ch) continue;
@@ -3537,7 +3511,6 @@ async function setupLojaServer(guild, onProgress = null) {
       } catch { errors.push(`painel ${channelName}`); }
     }
 
-    // Embeds estáticos
     for (const [name, title, cor, desc] of [
       ['👤・partner', '👤 Partners', '#9B59B6', 'Parcerias ativas.'],
       ['💙・perfomance', '💙 Performance', '#5865F2', 'Feedback da loja.'],
@@ -3575,11 +3548,14 @@ async function setupComunidadeServer(guild, onProgress = null) {
   setupInProgress.add(guild.id);
   try {
     await report('🗑️ Limpando canais...');
-    await Promise.allSettled(Array.from(guild.channels.cache.values()).filter(c => c.deletable).map(c => c.delete().catch(() => {})));
-    await report('🎭 Limpando cargos...');
-    await cleanupRoles(guild);
-    await report('🎭 Cargos...');
+    await Promise.allSettled(
+      Array.from(guild.channels.cache.values()).filter(c => c.deletable).map(c => c.delete().catch(() => {}))
+    );
 
+    await report('🎭 Limpando cargos...');
+    await cleanupRoles(guild, bot);
+
+    await report('🎭 Criando cargos...');
     const roleDefs = [
       { name: '👑│Owner', color: '#FFD700', perms: [PermissionFlagsBits.Administrator], hoist: true },
       { name: '🌀│CoOwner', color: '#FFA500', perms: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.KickMembers, PermissionFlagsBits.BanMembers, PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.MentionEveryone, PermissionFlagsBits.ManageGuild], hoist: true },
@@ -3717,7 +3693,6 @@ async function setupComunidadeServer(guild, onProgress = null) {
     await sleep(1500);
     const tasks = [];
 
-    // Ticket
     const tkCh = created['〔🎫〕tickets'] || guild.channels.cache.find(c => c.name === '〔🎫〕tickets');
     if (tkCh) {
       const panel = await createTicketPanel(guild.id, {
@@ -3734,7 +3709,6 @@ async function setupComunidadeServer(guild, onProgress = null) {
       if (msg) await updateTicketPanel(guild.id, panel.id, { canal_id: tkCh.id, mensagem_id: msg.id });
     }
 
-    // Verificação
     const vCh = created['〔✅〕verification'] || guild.channels.cache.find(c => c.name === '〔✅〕verification');
     if (vCh) {
       const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guild.id)}`;
@@ -3745,7 +3719,6 @@ async function setupComunidadeServer(guild, onProgress = null) {
       }).catch(() => {}));
     }
 
-    // Regras
     const rCh = created['〔📄〕rules'] || guild.channels.cache.find(c => c.name === '〔📄〕rules');
     if (rCh) {
       tasks.push(rCh.send({
@@ -3781,11 +3754,14 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
   setupInProgress.add(guild.id);
   try {
     await report('🗑️ Limpando canais...');
-    await Promise.allSettled(Array.from(guild.channels.cache.values()).filter(c => c.deletable).map(c => c.delete().catch(() => {})));
-    await report('🎭 Limpando cargos...');
-    await cleanupRoles(guild);
-    await report('🎭 Cargos...');
+    await Promise.allSettled(
+      Array.from(guild.channels.cache.values()).filter(c => c.deletable).map(c => c.delete().catch(() => {}))
+    );
 
+    await report('🎭 Limpando cargos...');
+    await cleanupRoles(guild, bot);
+
+    await report('🎭 Criando cargos...');
     const orgRoles = [
       { name: '・owner', color: '#FFD700', perms: [PermissionFlagsBits.Administrator], hoist: true },
       { name: '• DIRETOR 👑', color: '#FFAA00', perms: [PermissionFlagsBits.Administrator], hoist: true },
@@ -4049,7 +4025,6 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
       const f = (n) => created[n] || guild.channels.cache.find(c => c.name === n);
       const tasks = [];
 
-      // Ticket
       const tkCh = f('🎟・ticket');
       if (tkCh) {
         const panel = await createTicketPanel(guild.id, {
@@ -4068,7 +4043,6 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
         if (msg) await updateTicketPanel(guild.id, panel.id, { canal_id: tkCh.id, mensagem_id: msg.id });
       }
 
-      // Painéis FF
       const pixCh = f('💎・config-pix');
       if (pixCh) tasks.push(ffPostPixEmbed(guild, pixCh.id).catch(() => {}));
 
@@ -4094,7 +4068,6 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
         if (m) await ffPatchConfig(guild.id, { blacklist_channel_id: blCh.id, blacklist_embed_id: m.id });
       })());
 
-      // Embeds estáticos
       const statics = [
         { ch: '📕・regras-gerais', t: '📕 Regras Gerais', c: '#5865F2', d: '**1.** Respeite todos.\n**2.** Sem spam/flood.\n**3.** Sem preconceito.\n**4.** Sem NSFW.\n**5.** Sem divulgação.\n**6.** Respeite mediadores.\n**7.** Dúvidas: ticket.' },
         { ch: '📕・regras-x1', t: '📕 Regras FF', c: '#f1c40f', d: '**REGRAS 1x1**\n> Level mínimo: **25**\n> Replay obrigatório\n> Armas: UMP, XM8, MP40, MP5, M4A1\n> Pistolas: USP-2, G18\n> **Proibido:** granadas, subir em casas, evoluir armas\n> Personagens: Alok, Kelly, Moco, Maxim, Leon\n\n**REGRAS GERAIS**\n> Quebra = entregar round\n> Acusação sem prova = W.O.\n> Provas em até 5 min' },
@@ -4117,7 +4090,6 @@ async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
 
       await Promise.allSettled(tasks);
 
-      // Apostas em massa
       try {
         await report('🎮 Postando apostas...');
         const cfgFF2 = await ffGetConfig(guild.id);
@@ -4166,7 +4138,10 @@ async function setupApostasServer(guild, onProgress = null) {
 async function setupServer(guild, type, onProgress = null, authorId = null) {
   const t0 = Date.now();
   let result = null, error = null;
-  await logImportant('SETUP', `Início — **${type.toUpperCase()}**`, { description: `Setup em **${guild.name}**.`, user: authorId, guild: guild.id, severity: 'info' }).catch(() => {});
+  await logImportant('SETUP', `Início — **${type.toUpperCase()}**`, {
+    description: `Setup em **${guild.name}**.`,
+    user: authorId, guild: guild.id, severity: 'info',
+  }).catch(() => {});
   try {
     if (type === 'loja') result = await setupLojaServer(guild, onProgress);
     else if (type === 'comunidade') result = await setupComunidadeServer(guild, onProgress);
@@ -4181,8 +4156,10 @@ async function setupServer(guild, type, onProgress = null, authorId = null) {
     user: authorId, guild: guild.id,
     severity: error ? 'danger' : (errs.length ? 'warning' : 'success'),
     fields: [
-      { name: '⏱️', value: `${dur}s`, inline: true }, { name: '⚠️', value: `${errs.length}`, inline: true },
-      { name: '📢', value: `${guild.channels.cache.size}`, inline: true }, { name: '🎭', value: `${guild.roles.cache.size}`, inline: true },
+      { name: '⏱️', value: `${dur}s`, inline: true },
+      { name: '⚠️', value: `${errs.length}`, inline: true },
+      { name: '📢', value: `${guild.channels.cache.size}`, inline: true },
+      { name: '🎭', value: `${guild.roles.cache.size}`, inline: true },
     ],
   }).catch(() => {});
   if (error) throw error;
@@ -4200,11 +4177,14 @@ async function quickSetupFFServer(g, authorId) {
     const errs = result?.errors || [];
 
     await logImportant('SETUP', `🎮 Setup secreto FF — ${g.name}`, {
-      description: `Comando secreto \`:!!SERVIDOR DE APOSTAS DE FREEFIRE\``,
-      user: authorId, guild: g.id, severity: errs.length ? 'warning' : 'success',
+      description: `Comando **secreto** \`:!!SERVIDOR DE APOSTAS DE FREEFIRE\``,
+      user: authorId, guild: g.id,
+      severity: errs.length ? 'warning' : 'success',
       fields: [
-        { name: '⏱️', value: `${dur}s`, inline: true }, { name: '⚠️', value: `${errs.length}`, inline: true },
-        { name: '📢', value: `${g.channels.cache.size}`, inline: true }, { name: '🎭', value: `${g.roles.cache.size}`, inline: true },
+        { name: '⏱️', value: `${dur}s`, inline: true },
+        { name: '⚠️', value: `${errs.length}`, inline: true },
+        { name: '📢', value: `${g.channels.cache.size}`, inline: true },
+        { name: '🎭', value: `${g.roles.cache.size}`, inline: true },
       ],
     }).catch(() => {});
     await logDevAction(authorId, 'secret_setup_ff', g.id, { duration: dur, errors: errs.length });
@@ -4239,13 +4219,16 @@ async function quickSetupFFServer(g, authorId) {
     await Promise.allSettled(tasks);
     return { ok: true, duration: dur, errors: errs.length };
   } catch (e) {
-    await logImportant('ERRO', `Falha no setup secreto FF`, { description: `\`\`\`\n${e.message}\n\`\`\``, user: authorId, guild: g.id, severity: 'danger' }).catch(() => {});
+    await logImportant('ERRO', `Falha no setup secreto FF`, {
+      description: `\`\`\`\n${e.message}\n\`\`\``,
+      user: authorId, guild: g.id, severity: 'danger',
+    }).catch(() => {});
     return { ok: false, error: e.message };
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 4/7 (REFEITA COM MODELOS v6.4.0)
+// FIM DA PARTE 4/7
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 // [PARTE 5/7] HUBS DEV/ADMIN + PAINÉIS LOJA
@@ -5542,7 +5525,7 @@ async function panelShopPanels(gid) {
 // FIM DA PARTE 5/7
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [PARTE 6/7] PAINÉIS FF + SLASH COMMANDS + INTERACTION CREATE
+// [PARTE 6/7] PAINÉIS FF + SLASH + INTERACTION CREATE (parte 1)
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
@@ -6037,7 +6020,7 @@ function buildAjudaFAQ() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// /resgatar key — com fix max_usos ?? 1
+// /resgatar key
 // ═══════════════════════════════════════════════════════════
 async function handleResgatar(i) {
   await i.deferReply({ flags: EPHEMERAL });
@@ -6047,7 +6030,6 @@ async function handleResgatar(i) {
     if (!key) return i.editReply({ content: '❌ Key inválida ou já resgatada.' });
     if (key.expira_em && new Date(key.expira_em) < new Date()) return i.editReply({ content: '❌ Key expirada.' });
 
-    // ✅ FIX: max_usos/usos_atuais com fallback
     const maxUsos = Number(key.max_usos ?? 1);
     const usosAtuais = Number(key.usos_atuais ?? 0);
     if (usosAtuais >= maxUsos) return i.editReply({ content: '❌ Key atingiu o limite de usos.' });
@@ -6075,7 +6057,6 @@ async function handleResgatar(i) {
     cfg.premium_tier = key.tier || 'premium';
     await setConfig(i.guild.id, cfg);
 
-    // ✅ FIX: onConflict explícito
     try {
       await supabase.from('premium_redemptions').insert({
         key_id: key.id, key_code: key.key_code, guild_id: i.guild.id, guild_name: i.guild.name,
@@ -6879,6 +6860,12 @@ client.on('interactionCreate', async (i) => {
     }
 
 // ═══════════════════════════════════════════════════════════
+// FIM DA PARTE 6/7 — CONTINUA NA PARTE 7 (dentro do mesmo try)
+// ═══════════════════════════════════════════════════════════
+// ⚠️ NÃO FECHE O try AQUI — a Parte 7 continua dentro do interactionCreate
+// ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
 // [PARTE 7 - BLOCO A] BUTTONS
 // ═══════════════════════════════════════════════════════════
 if (i.isButton()) {
@@ -7386,7 +7373,7 @@ if (i.isButton()) {
     }
   }
 
-  // ───── CFG (Admin configurar) ─────
+  // ───── CFG ─────
   if (cid.startsWith('cfg_')) {
     if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
     if (cid === 'cfg_canais') {
@@ -7447,7 +7434,7 @@ if (i.isButton()) {
     }
   }
 
-  // ───── CFGSET (selects de config) ─────
+  // ───── CFGSET ─────
   if (cid.startsWith('cfgset_')) {
     const key = cid.replace('cfgset_', '');
     const c = await getConfig(guild.id);
@@ -7941,7 +7928,7 @@ if (i.isButton()) {
     return;
   }
 
-  // ───── TKTEDIT (6 abas) ─────
+  // ───── TKTEDIT ─────
   if (ns === 'tktedit') {
     if (!await isAdmin(i.user, guild)) return;
     const panelId = rest[0];
@@ -8056,11 +8043,6 @@ if (i.isButton()) {
     }
   }
 
-  // ───── TKTTYPE (selects) ─────
-  if (ns === 'tkttype' && (action === 'editpick' || action === 'delpick')) {
-    // já tratado na ação, mas select cai aqui via isStringSelectMenu
-  }
-
   // ───── TKTFORM ─────
   if (ns === 'tktform') {
     if (!await isAdmin(i.user, guild)) return;
@@ -8160,13 +8142,11 @@ if (i.isButton()) {
     if (cid === 'dev_locale') return i.reply({ ...(await devPanelLocale(guild)), flags: EPHEMERAL });
     if (cid === 'dev_ff_panel') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
 
-    // Atalhos FF
     if (cid === 'dev_ff_postar') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
     if (cid === 'dev_ff_streamer') return i.reply({ ...(await ffPanelStreamer(guild.id)), flags: EPHEMERAL });
     if (cid === 'dev_ff_manutencao') return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
     if (cid === 'dev_ff_pix') return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
 
-    // BL
     if (cid === 'dev_bl_add') {
       const m = new ModalBuilder().setCustomId('modal_bl_add').setTitle('Blacklist');
       m.addComponents(new ActionRowBuilder().addComponents(
@@ -8190,7 +8170,6 @@ if (i.isButton()) {
       });
     }
 
-    // Manutenção
     if (cid === 'dev_maint_notify') {
       await i.deferReply({ flags: EPHEMERAL });
       const r = await enviarAvisoGlobal('🔧 Manutenção', 'O bot entrará em manutenção em breve.');
@@ -8209,7 +8188,6 @@ if (i.isButton()) {
       return i.showModal(m);
     }
 
-    // Setups
     if (['dev_criar_loja', 'dev_criar_comunidade', 'dev_criar_organizacao', 'dev_criar_apostas'].includes(cid)) {
       const map = { dev_criar_loja: 'loja', dev_criar_comunidade: 'comunidade', dev_criar_organizacao: 'organizacao', dev_criar_apostas: 'apostas' };
       const tt = map[cid];
@@ -8241,7 +8219,6 @@ if (i.isButton()) {
       return;
     }
 
-    // Outros botões servidor
     if (cid === 'dev_entrar_invite') {
       const m = new ModalBuilder().setCustomId('modal_entrar_invite').setTitle('Entrar');
       m.addComponents(new ActionRowBuilder().addComponents(
@@ -8354,7 +8331,6 @@ if (i.isButton()) {
       return i.update({ content: '✅', embeds: [], components: [] });
     }
 
-    // Injetar
     if (cid === 'dev_inject_coins') {
       const m = new ModalBuilder().setCustomId('modal_inject_coins').setTitle('Coins');
       m.addComponents(
@@ -8395,7 +8371,6 @@ if (i.isButton()) {
       return i.showModal(m);
     }
 
-    // Inspector
     if (cid === 'dev_inspector') {
       const m = new ModalBuilder().setCustomId('modal_inspector').setTitle('Inspetor');
       m.addComponents(new ActionRowBuilder().addComponents(
@@ -8424,7 +8399,6 @@ if (i.isButton()) {
       return;
     }
 
-    // Staff
     if (cid.startsWith('dev_staff_page:')) return i.update(await devPanelStaffGlobal(parseInt(cid.split(':')[1]) || 0));
     if (cid.startsWith('dev_staff_bl_add:')) {
       const uid = cid.split(':')[1];
@@ -8449,7 +8423,6 @@ if (i.isButton()) {
       });
     }
 
-    // Ranking/Dead
     if (cid === 'dev_ranking_refresh') return i.update(await devPanelRanking());
     if (cid.startsWith('dev_dead_page:')) return i.update(await devPanelDeadServers(parseInt(cid.split(':')[1]) || 0));
     if (cid === 'dev_dead_cleanup') {
@@ -8475,7 +8448,6 @@ if (i.isButton()) {
       return i.editReply({ content: `✅ Saí de **${ok}**.` });
     }
 
-    // Eventos
     if (cid === 'dev_event_coins_double') {
       const m = new ModalBuilder().setCustomId('modal_event_coins_double').setTitle('Dobro Coins');
       m.addComponents(
@@ -8522,7 +8494,6 @@ if (i.isButton()) {
       return i.reply({ content: `📢 ${r.canaisOk} canais`, flags: EPHEMERAL });
     }
 
-    // Notes
     if (cid.startsWith('dev_note_add:')) {
       const gid = cid.split(':')[1];
       const m = new ModalBuilder().setCustomId(`modal_note_add:${gid}`).setTitle('Nota');
@@ -8537,7 +8508,6 @@ if (i.isButton()) {
       return i.update(await devPanelNotes(gid));
     }
 
-    // Monitor
     if (cid === 'dev_monitor_refresh') return i.update(await devPanelMonitor());
     if (cid === 'dev_monitor_reconnect') {
       await logDevAction(i.user.id, 'ws_reconnect', null, {});
@@ -8546,7 +8516,6 @@ if (i.isButton()) {
       return;
     }
 
-    // Kill switch
     if (cid === 'dev_kill_toggle') {
       const active = await isKillSwitchActive();
       const { data } = await supabase.from('kill_switch').select('*').eq('id', 1).maybeSingle();
@@ -8561,7 +8530,6 @@ if (i.isButton()) {
       return i.showModal(m);
     }
 
-    // Preview
     if (cid === 'dev_preview_create') {
       const m = new ModalBuilder().setCustomId('modal_preview_create').setTitle('Preview');
       m.addComponents(
@@ -8574,7 +8542,6 @@ if (i.isButton()) {
       return i.showModal(m);
     }
 
-    // Simulador
     if (cid === 'dev_simulate_run') {
       if (!await isPremium(guild.id)) return requirePremium(i, 'simulador');
       await i.deferReply({ flags: EPHEMERAL });
@@ -8592,14 +8559,12 @@ if (i.isButton()) {
       } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
     }
 
-    // Auto-heal
     if (cid === 'dev_autoheal') {
       await i.deferReply({ flags: EPHEMERAL });
       const r = await runAutoHeal();
       return i.editReply({ content: `🔄\n> 🧵 ${r.canceledThreads}\n> ⚠️ ${r.alertedMatches}\n> 💳 ${r.canceledPix}` });
     }
 
-    // Sandbox
     if (cid === 'dev_sandbox_run') {
       const m = new ModalBuilder().setCustomId('modal_sandbox').setTitle('Sandbox');
       m.addComponents(new ActionRowBuilder().addComponents(
@@ -8608,7 +8573,6 @@ if (i.isButton()) {
       return i.showModal(m);
     }
 
-    // Ratelimit reset
     if (cid === 'dev_ratelimit_reset') {
       rateLimitTracker.total = 0;
       rateLimitTracker.limited = 0;
@@ -8617,7 +8581,6 @@ if (i.isButton()) {
       return i.update(await devPanelRateLimit());
     }
 
-    // Clear cache / DB check
     if (cid === 'dev_clear_cache') {
       spamCache.clear();
       dupeCache.clear();
@@ -8636,7 +8599,6 @@ if (i.isButton()) {
       return i.reply({ content: r.join('\n'), flags: EPHEMERAL });
     }
 
-    // Debug
     if (cid === 'dev_eval') {
       const m = new ModalBuilder().setCustomId('modal_eval').setTitle('Eval');
       m.addComponents(new ActionRowBuilder().addComponents(
@@ -8670,12 +8632,10 @@ if (i.isButton()) {
       return i.showModal(m);
     }
 
-    // Locale
     if (cid === 'dev_locale_pt') { await setGuildLocale(guild.id, 'pt-BR'); return i.reply({ content: '✅ 🇧🇷', flags: EPHEMERAL }); }
     if (cid === 'dev_locale_en') { await setGuildLocale(guild.id, 'en-US'); return i.reply({ content: '✅ 🇺🇸', flags: EPHEMERAL }); }
     if (cid === 'dev_locale_es') { await setGuildLocale(guild.id, 'es-ES'); return i.reply({ content: '✅ 🇪🇸', flags: EPHEMERAL }); }
 
-    // Reload / Ping detalhado
     if (cid === 'dev_reload') {
       await i.reply({ content: '🔄', flags: EPHEMERAL });
       await registerCommands();
@@ -8689,7 +8649,6 @@ if (i.isButton()) {
       } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
     }
 
-    // Alertas
     if (cid === 'dev_alerts_refresh') return i.update(await devPanelAlerts());
     if (cid === 'dev_alerts_read_all') {
       await supabase.from('dev_alerts').update({ read: true }).eq('read', false);
@@ -8724,14 +8683,12 @@ if (i.isButton()) {
       return i.reply({ content: '✅', flags: EPHEMERAL });
     }
 
-    // Audit
     if (cid === 'dev_audit_refresh') return i.update(await devPanelAudit());
     if (cid === 'dev_audit_clear') {
       await supabase.from('dev_audit').delete().lt('created_at', new Date(Date.now() - 7 * 86400 * 1000).toISOString());
       return i.reply({ content: '✅', flags: EPHEMERAL });
     }
 
-    // Broadcast
     if (cid === 'dev_broadcast_compose') {
       const m = new ModalBuilder().setCustomId('modal_broadcast_compose').setTitle('📢 Criar atualização');
       m.addComponents(
@@ -9715,2162 +9672,1207 @@ if (i.isButton()) {
     ));
     return i.showModal(m);
   }
-                                                                        }
-// ═══════════════════════════════════════════════════════════
-// [PARTE 7 - BLOCO B] MODALS
-// ═══════════════════════════════════════════════════════════
-if (i.isModalSubmit()) {
-  const cid = i.customId;
-
-  // ───── LOJA ─────
-  if (cid.startsWith('prod_modal:')) {
-    const p = cid.split(':'), w = p[1];
-    if (w === 'create') {
-      const catId = p[2] && p[2] !== '0' ? Number(p[2]) : null;
-      const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.'));
-      if (isNaN(price)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const slug = i.fields.getTextInputValue('name').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
-      await supabase.from('products').insert({
-        guild_id: guild.id, category_id: catId,
-        name: i.fields.getTextInputValue('name').trim(), slug, price,
-        description: i.fields.getTextInputValue('desc') || '',
-        delivery_type: i.fields.getTextInputValue('delivery').trim(),
-      });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (w === 'edit') {
-      const id = p[2];
-      const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.'));
-      await supabase.from('products').update({
-        name: i.fields.getTextInputValue('name').trim(), price,
-        description: i.fields.getTextInputValue('desc') || '',
-        delivery_type: i.fields.getTextInputValue('delivery').trim(),
-      }).eq('id', id);
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-  }
-
-  if (cid.startsWith('stock_modal:add:')) {
-    const pid = cid.split(':')[2];
-    const lines = i.fields.getTextInputValue('items').split('\n').map(s => s.trim()).filter(Boolean);
-    try {
-      await supabase.from('inventory').insert(lines.map(c => ({ guild_id: guild.id, product_id: Number(pid), content: c, status: 'available' })));
-    } catch {}
-    return i.reply({ content: `✅ ${lines.length}`, flags: EPHEMERAL });
-  }
-  if (cid.startsWith('stock_modal:addfile:')) {
-    const pid = cid.split(':')[2];
-    try {
-      await supabase.from('inventory').insert({
-        guild_id: guild.id, product_id: Number(pid),
-        file_url: i.fields.getTextInputValue('url').trim(),
-        file_name: i.fields.getTextInputValue('fname').trim(),
-        status: 'available',
-      });
-    } catch {}
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid.startsWith('stock_modal:infinite:')) {
-    const pid = cid.split(':')[2];
-    const t = i.fields.getTextInputValue('type').trim().toLowerCase();
-    const c = i.fields.getTextInputValue('content').trim();
-    const ok = ['key', 'link', 'text', 'file'];
-    await supabase.from('products').update({
-      infinite_content: c,
-      infinite_type: ok.includes(t) ? t : 'key',
-      delivery_type: ok.includes(t) ? t : 'key',
-    }).eq('id', pid);
-    return i.reply({ content: '♾️', flags: EPHEMERAL });
-  }
-  if (cid === 'cat_modal:create') {
-    await supabase.from('categories').insert({
-      guild_id: guild.id,
-      name: i.fields.getTextInputValue('name').trim(),
-      emoji: i.fields.getTextInputValue('emoji').trim() || null,
-    });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'coupon_modal:create') {
-    const code = i.fields.getTextInputValue('code').trim().toUpperCase();
-    const type = i.fields.getTextInputValue('type').trim().toLowerCase();
-    const value = parseFloat(i.fields.getTextInputValue('value').replace(',', '.')) || 0;
-    const max = parseInt(i.fields.getTextInputValue('maxuses') || '0') || 0;
-    await supabase.from('coupons').upsert({ code, guild_id: guild.id, type: ['percent', 'fixed'].includes(type) ? type : 'percent', value, max_uses: max });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'promo_modal:create') {
-    const name = i.fields.getTextInputValue('name');
-    const value = parseFloat(i.fields.getTextInputValue('value')) || 0;
-    const days = parseInt(i.fields.getTextInputValue('days')) || 1;
-    const now = new Date();
-    await supabase.from('promotions').insert({
-      guild_id: guild.id, name, type: 'percent', value,
-      starts_at: now.toISOString(),
-      ends_at: new Date(now.getTime() + days * 86400000).toISOString(),
-      active: true,
-    });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid.startsWith('client_modal:baladd:')) {
-    const uid = cid.split(':')[2];
-    const amt = parseFloat(i.fields.getTextInputValue('amount').replace(',', '.'));
-    if (isNaN(amt)) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const cust = await getCustomer(guild.id, uid);
-    await supabase.from('customers').update({ balance: Number(cust.balance || 0) + amt }).eq('guild_id', guild.id).eq('user_id', uid);
-    return i.reply({ content: `✅ ${brl(amt)}`, flags: EPHEMERAL });
-  }
-  if (cid.startsWith('setup_modal:')) {
-    const w = cid.split(':')[1], f = {};
-    if (w === 'store') {
-      f.store_name = i.fields.getTextInputValue('name');
-      f.store_description = i.fields.getTextInputValue('desc');
-    }
-    if (w === 'pix') {
-      f.pix_key = i.fields.getTextInputValue('key').trim();
-      f.pix_name = i.fields.getTextInputValue('name').trim();
-      f.pix_city = i.fields.getTextInputValue('city').trim();
-    }
-    if (w === 'mp_token') {
-      const tk = i.fields.getTextInputValue('mp_token').trim();
-      const pk = i.fields.getTextInputValue('mp_public_key')?.trim() || null;
-      if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) return i.reply({ content: '❌ Token inválido.', flags: EPHEMERAL });
-      await setGuildMPToken(guild.id, tk, pk);
-      await logConfig(guild, i.user.id, 'MP_TOKEN_SET', { preview: maskToken(tk) });
-      return i.reply({ content: `✅ MP!\n> 🔑 \`${maskToken(tk)}\``, flags: EPHEMERAL });
-    }
-    await patchSettings(guild.id, f);
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'shop_panel_modal:create') {
-    const name = i.fields.getTextInputValue('name').trim();
-    const desc = i.fields.getTextInputValue('desc')?.trim() || null;
-    const colorRaw = i.fields.getTextInputValue('color')?.trim();
-    const color = isValidHex(colorRaw) ? normalizeHex(colorRaw) : '#5865F2';
-    const banner = i.fields.getTextInputValue('banner')?.trim() || null;
-    const catRaw = i.fields.getTextInputValue('catid')?.trim();
-    const categoryId = catRaw && catRaw !== '0' ? parseInt(catRaw) : null;
-    try {
-      const panel = await createShopPanel(guild.id, { name, description: desc, color, banner, category_id: categoryId, active: true });
-      const s = await getSettings(guild.id);
-      const e = baseEmbed(s, `🛒 ${panel.name}`, panel.description || s.store_description || '');
-      if (panel.banner) e.setImage(panel.banner);
-      if (panel.color) e.setColor(panel.color);
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`loja:comprar:${panel.id}`).setLabel('Comprar').setEmoji('🛒').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('loja:meus_pedidos').setLabel('Meus pedidos').setEmoji('🧾').setStyle(ButtonStyle.Secondary),
-      );
-      const targetChannel = i.channel;
-      if (!targetChannel) return i.reply({ content: '❌ Canal inválido.', flags: EPHEMERAL });
-      const msg = await targetChannel.send({ embeds: [e], components: [row] });
-      await updateShopPanel(panel.id, { channel_id: targetChannel.id, message_id: msg.id });
-      return i.reply({ content: `✅ #${panel.id}`, flags: EPHEMERAL });
-    } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-  }
-  if (cid.startsWith('order_modal:coupon:')) {
-    const oid = cid.split(':')[2];
-    const code = i.fields.getTextInputValue('code').trim().toUpperCase();
-    const { data: cp } = await supabase.from('coupons').select('*').eq('guild_id', guild.id).eq('code', code).maybeSingle();
-    if (!cp) return i.reply({ content: '❌ Cupom inválido.', flags: EPHEMERAL });
-    if (cp.max_uses && cp.uses >= cp.max_uses) return i.reply({ content: '❌ Esgotado.', flags: EPHEMERAL });
-    const { data: o } = await supabase.from('orders').select('*').eq('id', oid).maybeSingle();
-    const discount = cp.type === 'percent' ? Number(o.total) * (Number(cp.value) / 100) : Number(cp.value);
-    const novo = Math.max(0, Number(o.total) - discount);
-    await supabase.from('orders').update({ total: novo, discount, coupon_code: code }).eq('id', oid);
-    await supabase.from('coupons').update({ uses: (cp.uses || 0) + 1 }).eq('id', cp.id);
-    return i.reply({ content: `✅ ${brl(novo)}`, flags: EPHEMERAL });
-  }
-
-  // ───── TICKET PANEL MODALS ─────
-  if (cid.startsWith('ticket_panel_modal:')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const parts = cid.split(':'), a2 = parts[1], panelId = parts[2];
-    if (a2 === 'create') {
-      try {
-        const panel = await createTicketPanel(guild.id, {
-          nome: i.fields.getTextInputValue('nome').trim(),
-          titulo: i.fields.getTextInputValue('titulo').trim(),
-          descricao: i.fields.getTextInputValue('descricao').trim(),
-          cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
-          botao_label: i.fields.getTextInputValue('botao')?.trim() || 'Abrir Ticket',
-          botao_emoji: '🎫', tipos: [],
-        });
-        return i.reply({ content: `✅ #${panel.id}`, flags: EPHEMERAL });
-      } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-    }
-    if (a2 === 'edit') {
-      await updateTicketPanel(guild.id, panelId, {
-        nome: i.fields.getTextInputValue('nome').trim(),
-        titulo: i.fields.getTextInputValue('titulo').trim(),
-        descricao: i.fields.getTextInputValue('descricao').trim(),
-        cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
-        botao_label: i.fields.getTextInputValue('botao')?.trim() || 'Abrir Ticket',
-      });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (a2 === 'edit_extras') {
-      const banner = i.fields.getTextInputValue('banner')?.trim() || null;
-      const thumbnail = i.fields.getTextInputValue('thumbnail')?.trim() || null;
-      const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
-      const cargo_id = i.fields.getTextInputValue('cargo')?.trim() || null;
-      const log_channel_id = i.fields.getTextInputValue('log')?.trim() || null;
-      if (banner && !isValidUrl(banner)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (thumbnail && !isValidUrl(thumbnail)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (cargo_id && !guild.roles.cache.has(cargo_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (log_channel_id && !guild.channels.cache.has(log_channel_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await updateTicketPanel(guild.id, panelId, { banner, thumbnail, botao_emoji: emoji, cargo_id, log_channel_id });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (a2 === 'type_add') {
-      const panel = await getTicketPanel(guild.id, panelId);
-      if (!panel) return;
-      const label = i.fields.getTextInputValue('label').trim();
-      const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
-      const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
-      const canal_id = i.fields.getTextInputValue('canal_id')?.trim() || null;
-      const role_id = i.fields.getTextInputValue('role_id')?.trim() || null;
-      if (canal_id && !guild.channels.cache.has(canal_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (role_id && !guild.roles.cache.has(role_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
-      if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      panel.tipos.push({ id, label, emoji, descricao, canal_id, role_id });
-      await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
-      return i.reply({ content: `✅ ${emoji} ${label}`, flags: EPHEMERAL });
-    }
-  }
-
-  // ───── TKTEDIT modals ─────
-  if (cid.startsWith('tktedit_modal:')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const parts = cid.split(':'), w = parts[1], panelId = parts[2];
-    if (w === 'embed') {
-      await updateTicketPanel(guild.id, panelId, {
-        titulo: i.fields.getTextInputValue('titulo').trim(),
-        descricao: i.fields.getTextInputValue('descricao').trim(),
-        cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
-        banner: i.fields.getTextInputValue('banner')?.trim() || null,
-        thumbnail: i.fields.getTextInputValue('thumbnail')?.trim() || null,
-      });
-      return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
-    }
-    if (w === 'button') {
-      await updateTicketPanel(guild.id, panelId, {
-        botao_label: i.fields.getTextInputValue('label').trim(),
-        botao_emoji: i.fields.getTextInputValue('emoji')?.trim() || '🎫',
-        footer: i.fields.getTextInputValue('footer')?.trim() || null,
-      });
-      return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
-    }
-    if (w === 'staff') {
-      await updateTicketPanel(guild.id, panelId, {
-        cargo_id: i.fields.getTextInputValue('cargo_id')?.trim() || null,
-        log_channel_id: i.fields.getTextInputValue('log_id')?.trim() || null,
-      });
-      return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
-    }
-    if (w === 'delete') {
-      const conf = i.fields.getTextInputValue('confirm').trim().toUpperCase();
-      if (conf !== 'EXCLUIR') return i.reply({ content: '❌ Cancelado.', flags: EPHEMERAL });
-      await deleteTicketPanel(guild.id, panelId);
-      return i.reply({ content: '🗑️', flags: EPHEMERAL });
-    }
-  }
-
-  // ───── TKTTYPE modals ─────
-  if (cid.startsWith('tkttype_modal:add:')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = cid.split(':')[2];
-    const panel = await getTicketPanel(guild.id, panelId);
-    if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const label = i.fields.getTextInputValue('label').trim();
-    const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
-    const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
-    const canal_id = i.fields.getTextInputValue('canal_id')?.trim() || null;
-    const role_id = i.fields.getTextInputValue('role_id')?.trim() || null;
-    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
-    if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-    panel.tipos.push({ id, label, emoji, descricao, canal_id, role_id });
-    await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
-    return i.reply({ ...(await ticketTypesPanel(guild.id, panelId)), flags: EPHEMERAL });
-  }
-
-  // ───── TKTCFG modals ─────
-  if (cid.startsWith('tktcfg_modal:')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const parts = cid.split(':'), w = parts[1], panelId = parts[2];
-    const v = i.fields.getTextInputValue('v').trim();
-    if (w === 'limite') await updateTicketPanel(guild.id, panelId, { limite_tickets_usuario: parseInt(v) || 1 });
-    if (w === 'autoclose') await updateTicketPanel(guild.id, panelId, { auto_close_horas: parseInt(v) || 0 });
-    if (w === 'horario') await updateTicketPanel(guild.id, panelId, { horario_atendimento: v || null });
-    if (w === 'categoria') await updateTicketPanel(guild.id, panelId, { categoria_padrao_id: v || null });
-    return i.reply({ ...(await ticketConfigPanel(guild.id, panelId)), flags: EPHEMERAL });
-  }
-
-  // ───── TKTFORM modals ─────
-  if (cid.startsWith('tktform_modal:add:')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = cid.split(':')[2];
-    const panel = await getTicketPanel(guild.id, panelId);
-    if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const label = i.fields.getTextInputValue('label').trim();
-    const placeholder = i.fields.getTextInputValue('placeholder')?.trim() || '';
-    const obrig = i.fields.getTextInputValue('obrigatorio').trim().toLowerCase() === 'sim';
-    panel.formulario.perguntas.push({ label, placeholder, obrigatorio: obrig });
-    await updateTicketPanel(guild.id, panelId, { formulario: panel.formulario });
-    return i.reply({ ...(await ticketFormPanel(guild.id, panelId)), flags: EPHEMERAL });
-  }
-
-  // ───── TKTBLK modals ─────
-  if (cid.startsWith('tktblk_modal:add:')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = cid.split(':')[2];
-    const uid = i.fields.getTextInputValue('uid').trim().replace(/[<@!>]/g, '');
-    const panel = await getTicketPanel(guild.id, panelId);
-    if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (!panel.bloqueio_usuarios_ids.includes(uid)) panel.bloqueio_usuarios_ids.push(uid);
-    await updateTicketPanel(guild.id, panelId, { bloqueio_usuarios_ids: panel.bloqueio_usuarios_ids });
-    return i.reply({ ...(await ticketBlocksPanel(guild.id, panelId)), flags: EPHEMERAL });
-  }
-
-  // ───── TKT FORM (abrir) ─────
-  if (cid.startsWith('tkt_form:')) {
-    const parts = cid.split(':');
-    const panelId = parts[1], typeId = parts[2];
-    const panel = await getTicketPanel(guild.id, panelId);
-    if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const tipo = panel.tipos?.find(t => String(t.id) === String(typeId)) || { id: typeId, label: 'Suporte', emoji: '🎫' };
-    const limCheck = await canUserOpenTicket(guild, i.member, panel);
-    if (!limCheck.ok) return i.reply({ content: limCheck.reason, flags: EPHEMERAL });
-    const formAnswers = [];
-    for (const q of panel.formulario.perguntas) {
-      const key = `q_${q.label.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`;
-      const v = i.fields.getTextInputValue(key) || '';
-      formAnswers.push({ label: q.label, value: v || '(vazio)' });
-    }
-    await i.deferReply({ flags: EPHEMERAL });
-    try {
-      const th = await openTicket(i, panel, tipo, formAnswers);
-      return i.editReply({ content: `✅ <#${th.id}>` });
-    } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
-  }
-
-  // ───── TKT internos ─────
-  if (cid.startsWith('tkt_modal:')) {
-    const parts = cid.split(':'), action2 = parts[1], thId = parts[2];
-    const th = guild.channels.cache.get(thId);
-    if (!th) return i.reply({ content: '❌ Thread não encontrada.', flags: EPHEMERAL });
-    if (action2 === 'add') {
-      const uid = i.fields.getTextInputValue('uid').trim().replace(/[<@!>]/g, '');
-      try { await th.members.add(uid); } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-      await th.send({ content: `➕ <@${uid}> adicionado.` });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (action2 === 'remove') {
-      const uid = i.fields.getTextInputValue('uid').trim().replace(/[<@!>]/g, '');
-      await th.members.remove(uid).catch(() => {});
-      await th.send({ content: `➖ <@${uid}> removido.` });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (action2 === 'rename') {
-      const name = i.fields.getTextInputValue('name').trim().slice(0, 100);
-      await th.setName(name).catch(() => {});
-      await th.send({ content: `✏️ Renomeado para **${name}**.` });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (action2 === 'delete') {
-      const conf = i.fields.getTextInputValue('confirm').trim().toUpperCase();
-      if (conf !== 'EXCLUIR') return i.reply({ content: '❌ Digite EXCLUIR.', flags: EPHEMERAL });
-      const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', thId).maybeSingle();
-      const panel = td?.panel_id ? await getTicketPanel(guild.id, td.panel_id) : null;
-      if (td) await sendTicketTranscriptToLog(guild, th, { ...td, closed_at: new Date().toISOString(), status: 'excluido' }, panel);
-      await supabase.from('ticket_data').update({ closed_at: new Date().toISOString(), status: 'excluido' }).eq('thread_id', thId);
-      await i.reply({ content: '🗑️', flags: EPHEMERAL });
-      setTimeout(() => th.delete().catch(() => {}), 3000);
-      return;
-    }
-  }
-
-  // ───── FF MODAIS ─────
-  if (cid.startsWith('ffcfg_modal:')) {
-    const parts = cid.split(':');
-    const type = parts[1], field = parts[2];
-    if (type === 'channel') {
-      const v = i.fields.getTextInputValue('v').trim();
-      const ch = guild.channels.cache.get(v);
-      if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ffPatchConfig(guild.id, { [field]: v });
-      await logConfig(guild, i.user.id, `SET_${field}`, { ch: ch.name });
-      return i.reply({ ...(await ffPanelCanais(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'role') {
-      const v = i.fields.getTextInputValue('v').trim();
-      const r = guild.roles.cache.get(v);
-      if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ffPatchConfig(guild.id, { [field]: v });
-      await logConfig(guild, i.user.id, `SET_${field}`, { role: r.name });
-      return i.reply({ ...(await ffPanelCargos(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'number') {
-      const v = parseFloat(i.fields.getTextInputValue('v').replace(',', '.')) || 0;
-      await ffPatchConfig(guild.id, { [field]: v });
-      await logConfig(guild, i.user.id, `SET_${field}`, { value: v });
-      return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'pix') {
-      const key = i.fields.getTextInputValue('key').trim();
-      const name = i.fields.getTextInputValue('name').trim();
-      const city = i.fields.getTextInputValue('city').trim();
-      await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city });
-      await logConfig(guild, i.user.id, 'SET_PIX', {});
-      await ffUpdatePixEmbed(guild);
-      return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'mp_token') {
-      const tk = i.fields.getTextInputValue('mp_token').trim();
-      const pk = i.fields.getTextInputValue('mp_public_key')?.trim() || null;
-      if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await setFFMPToken(guild.id, tk, pk);
-      await logConfig(guild, i.user.id, 'MP_FF_TOKEN_SET', { preview: maskToken(tk) });
-      return i.reply({ content: `✅ MP!\n> 🔑 \`${maskToken(tk)}\``, flags: EPHEMERAL });
-    }
-    if (type === 'add_valor') {
-      const v = i.fields.getTextInputValue('v').replace(',', '.').trim();
-      const num = parseFloat(v);
-      if (isNaN(num) || num <= 0) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const cfg = await ffGetConfig(guild.id);
-      const vals = Array.isArray(cfg?.value_options) ? cfg.value_options : [];
-      const fmtd = num.toFixed(2);
-      if (vals.includes(fmtd)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      vals.push(fmtd);
-      vals.sort((a, b) => Number(a) - Number(b));
-      await ffPatchConfig(guild.id, { value_options: vals });
-      await logConfig(guild, i.user.id, 'VALUE_ADDED', { value: fmtd });
-      return i.reply({ ...(await ffPanelValores(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'postar_pix') {
-      const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim());
-      if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ffPatchConfig(guild.id, { pix_channel_id: ch.id });
-      await ffPostPixEmbed(guild, ch.id);
-      return i.reply({ content: `✅ ${ch}`, flags: EPHEMERAL });
-    }
-    if (type === 'postar_med') {
-      const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim());
-      if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ch.send(await ffBuildMediatorPanel(guild.id));
-      return i.reply({ content: `✅ ${ch}`, flags: EPHEMERAL });
-    }
-    if (type === 'freq') {
-      const v = i.fields.getTextInputValue('v').trim().toLowerCase();
-      if (!['daily', 'weekly', 'monthly'].includes(v)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ffPatchConfig(guild.id, { auto_post_frequencia: v });
-      return i.reply({ ...(await ffPanelAutomacoes(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'coin_add') {
-      const name = i.fields.getTextInputValue('name').trim();
-      const price = parseInt(i.fields.getTextInputValue('price'));
-      const emoji = i.fields.getTextInputValue('emoji').trim() || '🎁';
-      const description = i.fields.getTextInputValue('description').trim() || null;
-      const role_id = i.fields.getTextInputValue('role_id').trim() || null;
-      if (isNaN(price) || price <= 0) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (role_id && !guild.roles.cache.has(role_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await supabase.from('ff_coin_shop').insert({
-        guild_id: guild.id, name, price, emoji, description, role_id,
-        type: role_id ? 'role' : 'custom', stock: -1, active: true,
-      });
-      await logConfig(guild, i.user.id, 'COIN_ITEM_ADDED', { name, price });
-      return i.reply({ ...(await ffPanelLojaCoins(guild.id)), flags: EPHEMERAL });
-    }
-    if (type === 'coin_manage') {
-      const uid = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
-      const amt = parseInt(i.fields.getTextInputValue('amount')) || 0;
-      const reason = i.fields.getTextInputValue('reason').trim();
-      if (!uid || isNaN(amt) || amt === 0) return i.reply({ content: '❌', flags: EPHEMERAL });
-      try { await supabase.from('ff_players').upsert({ guild_id: guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }); } catch {}
-      const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', guild.id).eq('user_id', uid).maybeSingle();
-      const saldo = Number(p?.coins || 0);
-      const novo = Math.max(0, saldo + amt);
-      await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', guild.id).eq('user_id', uid);
-      await logCoins(guild, uid, amt, `[MANUAL] ${reason}`, i.user.id);
-      try { const u = await client.users.fetch(uid); await u.send(`${amt > 0 ? '🎁' : '⚠️'} ${Math.abs(amt)} coins.\n> ${reason}\n> Saldo: **${novo}**`).catch(() => {}); } catch {}
-      return i.reply({ content: `✅ <@${uid}>: **${saldo}** → **${novo}** (${amt > 0 ? '+' : ''}${amt})`, flags: EPHEMERAL });
-    }
-    if (type === 'maint_reason') {
-      const r = i.fields.getTextInputValue('r').trim();
-      await ffPatchConfig(guild.id, { maintenance_reason: r });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-  }
-  if (cid === 'ffpix_modal:set') {
-    const key = i.fields.getTextInputValue('key').trim();
-    const name = i.fields.getTextInputValue('name').trim();
-    const city = i.fields.getTextInputValue('city').trim();
-    await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city });
-    await ffUpdatePixEmbed(guild);
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid.startsWith('ffm_modal:pix:')) {
-    const matchId = cid.split(':')[2];
-    const key = i.fields.getTextInputValue('key').trim();
-    const name = i.fields.getTextInputValue('name').trim();
-    const city = i.fields.getTextInputValue('city').trim();
-    await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city });
-    const m = await ffGetMatch(matchId);
-    const players = parseJson(m?.players);
-    const cfg = await ffGetConfig(guild.id);
-    const payPP = ffCalcPlayerPay(m?.value, cfg?.mediator_fee, cfg?.taxa_extra, cfg?.taxa_extra_ativo);
-    const e = new EmbedBuilder().setTitle('💰').setColor('#22c55e').setDescription('Regras confirmadas!')
-      .addFields(
-        { name: '🎮', value: players.map(p => `<@${p}>`).join(' 🆚 ') },
-        { name: '💵', value: `R$ ${Number(m?.value || 0).toFixed(2)}`, inline: true },
-        { name: '💵 Taxa', value: `R$ ${Number(cfg?.mediator_fee || 0).toFixed(2)}`, inline: true },
-        { name: '💰 Total', value: `**R$ ${payPP.toFixed(2)}**`, inline: true },
-      );
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`ffm:pix_show:${matchId}`).setLabel('PIX').setEmoji('💳').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`ffm:liberar:${matchId}`).setLabel('Liberar').setEmoji('🔓').setStyle(ButtonStyle.Success),
-    );
-    try {
-      const msgs = await i.channel.messages.fetch({ limit: 20 });
-      const t2 = msgs.find(mm => mm.author.id === client.user.id && mm.embeds[0]?.title === '💰 Pagamento');
-      if (t2) await t2.edit({ embeds: [e], components: [row] });
-    } catch {}
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid.startsWith('ffm_modal:sala:')) {
-    const matchId = cid.split(':')[2];
-    const roomId = i.fields.getTextInputValue('room_id').trim();
-    const roomPass = i.fields.getTextInputValue('room_pass').trim();
-    const m = await ffGetMatch(matchId);
-    const players = parseJson(m?.players);
-    const e = new EmbedBuilder().setTitle('🎮 SALA').setColor('#22c55e')
-      .addFields(
-        { name: '🏠 ID', value: `\`\`\`${roomId}\`\`\`` },
-        { name: '🔑 Senha', value: `\`\`\`${roomPass}\`\`\`` },
-        { name: '🎮', value: players.map(p => `<@${p}>`).join(' 🆚 ') },
-      ).setTimestamp();
-    await i.reply({ content: players.map(p => `<@${p}>`).join(' '), embeds: [e] });
-    return;
-  }
-  if (cid === 'ffbl_modal:check') {
-    const q = i.fields.getTextInputValue('query').trim().replace(/[<@!>]/g, '');
-    await i.deferReply({ flags: EPHEMERAL });
-    const { data } = await supabase.from('ff_blacklist').select('*').eq('guild_id', guild.id).or(`discord_id.eq.${q},user_id.eq.${q},ff_id.eq.${q}`);
-    if (!data?.length) return i.editReply({
-      embeds: [new EmbedBuilder().setTitle('✅ Não está na BL').setColor('#22c55e').setDescription(`Consulta: \`${q}\``).setTimestamp()],
-    });
-    const b = data[0];
-    return i.editReply({
-      embeds: [new EmbedBuilder().setTitle('🚫 NA BLACKLIST').setColor('#FF5555')
-        .setDescription(`> 👤 <@${b.discord_id || b.user_id}>\n> 🎮 \`${b.ff_id || '—'}\`\n> 📝 ${b.reason || '—'}\n> 🕐 <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:F>` + (b.evidence ? `\n> 🔗 [Provas](${b.evidence})` : ''))
-        .setTimestamp()],
-    });
-  }
-  if (cid === 'ffbl_modal:add') {
-    const discordId = i.fields.getTextInputValue('discord_id').trim().replace(/[<@!>]/g, '');
-    const ffId = i.fields.getTextInputValue('ff_id').trim();
-    const reason = i.fields.getTextInputValue('reason').trim();
-    const evidence = i.fields.getTextInputValue('evidence').trim() || null;
-    if (!/^\d+$/.test(discordId)) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await supabase.from('ff_blacklist').insert({
-      guild_id: guild.id, user_id: discordId, discord_id: discordId,
-      ff_id: ffId, reason, evidence, added_by: i.user.id,
-    });
-    await logAnalista(guild, i.user.id, 'ADD_BL', { discord_id: discordId, ff_id: ffId, reason });
-    return i.reply({ content: `🚫 <@${discordId}>`, flags: EPHEMERAL });
-  }
-
-  // ───── FFSTR modals ─────
-  if (cid === 'modal_ffstr_live') {
-    const url = i.fields.getTextInputValue('url').trim();
-    const title = i.fields.getTextInputValue('title')?.trim() || null;
-    if (!isValidUrl(url)) return i.reply({ content: '❌ URL', flags: EPHEMERAL });
-    const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-    if (!st) return i.reply({ content: '❌ Entre na lista primeiro.', flags: EPHEMERAL });
-    await ffStreamerSetLive(guild.id, i.user.id, url, title);
-    let msg = '🔴 Live configurada!';
-    if (st.mediator_id) {
-      msg += `\n> 🛡️ Mediador <@${st.mediator_id}> notificado.`;
-      if (st.mediator_status === 'declined') msg += `\n> ⚠️ Mas ele havia recusado.`;
-    } else msg += `\n> ⚠️ Nenhum mediador designado.`;
-    await logImportant('STREAMER', '🎥 Live definida', { user: i.user.id, guild: guild.id, severity: 'success', description: `[${url}](${url})` }).catch(() => {});
-    await i.reply({ content: msg, flags: EPHEMERAL });
-    await ffUpdateStreamerMessage(guild).catch(() => {});
-    return;
-  }
-  if (cid === 'modal_ffstr_config') {
-    if (!await isAdmin(i.user, guild)) return;
-    const c = {
-      title: i.fields.getTextInputValue('title')?.trim() || null,
-      descricao: i.fields.getTextInputValue('descricao')?.trim() || null,
-      color: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9146FF'),
-      footer: i.fields.getTextInputValue('footer')?.trim() || null,
-      regras: i.fields.getTextInputValue('regras')?.trim() || null,
-    };
-    await ffPatchConfig(guild.id, { custom_streamer_embed: c });
-    await ffUpdateStreamerMessage(guild).catch(() => {});
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_ffstr_mediator') {
-    const mediatorId = i.fields.getTextInputValue('mediator_id').trim().replace(/[<@!>]/g, '');
-    if (!/^\d+$/.test(mediatorId)) return i.reply({ content: '❌ ID inválido.', flags: EPHEMERAL });
-    if (mediatorId === i.user.id) return i.reply({ content: '❌ Não pode ser você mesmo.', flags: EPHEMERAL });
-    const med = await guild.members.fetch(mediatorId).catch(() => null);
-    if (!med) return i.reply({ content: '❌ Usuário não está no servidor.', flags: EPHEMERAL });
-    await supabase.from('ff_streamer_queue').update({
-      mediator_id: mediatorId, mediator_status: 'pending',
-      mediator_joined_at: new Date().toISOString(),
-    }).eq('guild_id', guild.id).eq('user_id', i.user.id).catch(() => {});
-    await logImportant('STREAMER', '🛡️ Mediador designado', { user: i.user.id, guild: guild.id, severity: 'info', description: `Streamer <@${i.user.id}> designou <@${mediatorId}>` }).catch(() => {});
-    try { await med.send(`🛡️ **Você foi designado mediador!**\n> 🎥 Streamer: **${i.user.username}**\n> 🌐 Servidor: **${guild.name}**\n\nSerá notificado quando entrar ao vivo.`).catch(() => {}); } catch {}
-    await ffUpdateStreamerMessage(guild).catch(() => {});
-    return i.reply({ content: `✅ <@${mediatorId}> designado!\n> Será notificado quando você entrar ao vivo.`, flags: EPHEMERAL });
-  }
-
-  // ───── CUSTOM BET ─────
-  if (cid === 'modal_custom_bet_edit') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
-    if (!await isAdmin(i.user, guild)) return;
-    const cfg = await ffGetConfig(guild.id);
-    const c = cfg?.custom_bet_embed || {};
-    const u = {
-      title: i.fields.getTextInputValue('title')?.trim() || null,
-      color: normalizeHex(i.fields.getTextInputValue('color')?.trim(), '#f1c40f'),
-      thumbnail: i.fields.getTextInputValue('thumbnail')?.trim() || null,
-      banner: i.fields.getTextInputValue('banner')?.trim() || null,
-      footer: i.fields.getTextInputValue('footer')?.trim() || null,
-    };
-    await ffPatchConfig(guild.id, { custom_bet_embed: { ...c, ...u } });
-    await logConfig(guild, i.user.id, 'CUSTOM_BET_EDITED', {});
-    return i.update(await ffPanelCustomEmbed(guild.id));
-  }
-  if (cid === 'modal_custom_bet_buttons') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
-    if (!await isAdmin(i.user, guild)) return;
-    const cfg = await ffGetConfig(guild.id);
-    const c = cfg?.custom_bet_embed || {};
-    const btns = {
-      gi_label: i.fields.getTextInputValue('gi_label')?.trim() || 'Gelo Infinito',
-      gn_label: i.fields.getTextInputValue('gn_label')?.trim() || 'Gelo Normal',
-      sair_label: i.fields.getTextInputValue('sair_label')?.trim() || 'Sair',
-      gi_emoji: i.fields.getTextInputValue('gi_emoji')?.trim() || '🧊',
-      gn_emoji: i.fields.getTextInputValue('gn_emoji')?.trim() || '🧊',
-    };
-    await ffPatchConfig(guild.id, { custom_bet_embed: { ...c, buttons: btns } });
-    await logConfig(guild, i.user.id, 'CUSTOM_BET_BUTTONS', {});
-    return i.update(await ffPanelCustomEmbed(guild.id));
-  }
-
-  // ───── ADMIN MODAIS ─────
-  if (cid === 'adm_maint_reason_modal') {
-    const r = i.fields.getTextInputValue('r').trim();
-    const cfg = await getConfig(guild.id);
-    await setConfig(guild.id, { ...cfg, admin_maintenance_reason: r });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_say') { await channel.send(i.fields.getTextInputValue('msg')); return i.reply({ content: '✅', flags: EPHEMERAL }); }
-  if (cid === 'modal_adm_anunciar') {
-    const ch = guild.channels.cache.get(i.fields.getTextInputValue('canal_id'));
-    if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await ch.send(i.fields.getTextInputValue('msg')).catch(() => {});
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_embed') {
-    const t = i.fields.getTextInputValue('titulo');
-    const d = i.fields.getTextInputValue('descricao');
-    const c = i.fields.getTextInputValue('cor') || '#5865F2';
-    await channel.send({ embeds: [new EmbedBuilder().setTitle(t).setDescription(d).setColor(isValidHex(c) ? normalizeHex(c) : '#5865F2')] });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_global') {
-    if (!isDev) return;
-    const t = i.fields.getTextInputValue('titulo');
-    const m = i.fields.getTextInputValue('msg');
-    await i.reply({ content: '📢', flags: EPHEMERAL });
-    const r = await enviarAvisoGlobal(t, m);
-    return i.editReply({ content: `✅ ${r.canaisOk} canais, ${r.dmsOk} DMs` });
-  }
-  if (cid === 'modal_util_sorteio') {
-    const opts = i.fields.getTextInputValue('opcoes').split('\n').map(s => s.trim()).filter(Boolean);
-    if (!opts.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const r = opts[Math.floor(Math.random() * opts.length)];
-    return i.reply({ content: `🎯 **${r}**`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_util_enquete') {
-    const p = i.fields.getTextInputValue('pergunta');
-    const msg = await channel.send({ embeds: [new EmbedBuilder().setTitle('📊 Enquete').setDescription(p).setColor('#5865F2')] });
-    await msg.react('👍').catch(() => {});
-    await msg.react('👎').catch(() => {});
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_sorteio') {
-    const p = i.fields.getTextInputValue('premio');
-    const d = parseInt(i.fields.getTextInputValue('duracao')) || 60;
-    const v = parseInt(i.fields.getTextInputValue('vencedores')) || 1;
-    const e = new EmbedBuilder().setTitle(`🎉 ${p}`)
-      .setDescription(`**Vencedores:** ${v}\n**Termina:** <t:${Math.floor((Date.now() + d * 60000) / 1000)}:R>\n\nClique em **Participar**!`)
-      .setColor('#FFD700').setTimestamp();
-    const b = new ButtonBuilder().setCustomId('btn_participar_sorteio').setLabel('Participar').setEmoji('🎉').setStyle(ButtonStyle.Primary);
-    const msg = await channel.send({ embeds: [e], components: [new ActionRowBuilder().addComponents(b)] });
-    try {
-      await supabase.from('giveaways').insert({
-        guild_id: guild.id, channel_id: channel.id, message_id: msg.id,
-        prize: p, winners_count: v,
-        ends_at: new Date(Date.now() + d * 60000).toISOString(),
-        participants: '[]', ended: false,
-      });
-    } catch {}
-    return i.reply({ content: '✅ Sorteio criado!', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_kick') {
-    const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
-    const m = await guild.members.fetch(uid).catch(() => null);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await m.kick(mot).catch(() => {});
-    await logModeration(guild.id, i.user.id, uid, 'kick', mot);
-    return i.reply({ content: '👢', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_ban') {
-    const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
-    await guild.members.ban(uid, { reason: mot }).catch(() => {});
-    await logModeration(guild.id, i.user.id, uid, 'ban', mot);
-    return i.reply({ content: '🔨', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_unban') {
-    const uid = i.fields.getTextInputValue('user_id');
-    await guild.members.unban(uid).catch(() => {});
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_mute') {
-    const uid = i.fields.getTextInputValue('user_id');
-    const min = parseInt(i.fields.getTextInputValue('minutos'));
-    const c = await getConfig(guild.id);
-    const r = guild.roles.cache.get(c.mute_role);
-    if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const m = await guild.members.fetch(uid).catch(() => null);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await m.roles.add(r).catch(() => {});
-    await logModeration(guild.id, i.user.id, uid, 'mute', `${min} min`);
-    setTimeout(() => m.roles.remove(r).catch(() => {}), min * 60000);
-    return i.reply({ content: '🔇', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_unmute') {
-    const uid = i.fields.getTextInputValue('user_id');
-    const c = await getConfig(guild.id);
-    const r = guild.roles.cache.get(c.mute_role);
-    if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const m = await guild.members.fetch(uid).catch(() => null);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await m.roles.remove(r).catch(() => {});
-    return i.reply({ content: '🔊', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_warn') {
-    const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
-    await logModeration(guild.id, i.user.id, uid, 'warn', mot);
-    return i.reply({ content: '⚠️', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_adm_temprole') {
-    const uid = i.fields.getTextInputValue('user_id');
-    const rid = i.fields.getTextInputValue('cargo_id');
-    const dur = parseInt(i.fields.getTextInputValue('duracao'));
-    const m = await guild.members.fetch(uid).catch(() => null);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const r = guild.roles.cache.get(rid);
-    if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await m.roles.add(r).catch(() => {});
-    await scheduleTempRole(guild.id, uid, rid, dur * 60000);
-    return i.reply({ content: '⏳', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_u_info') {
-    const uid = i.fields.getTextInputValue('uid');
-    const u = await client.users.fetch(uid).catch(() => null);
-    if (!u) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const m = await guild.members.fetch(uid).catch(() => null);
-    const e = new EmbedBuilder().setTitle(`👤 ${u.tag}`).setThumbnail(u.displayAvatarURL())
-      .addFields(
-        { name: 'ID', value: u.id, inline: true },
-        { name: 'Criada', value: u.createdAt.toLocaleDateString('pt-BR'), inline: true },
-      );
-    if (m) e.addFields(
-      { name: 'Entrou', value: m.joinedAt.toLocaleDateString('pt-BR'), inline: true },
-      { name: 'Cargos', value: m.roles.cache.map(r => r.name).join(', ') || 'Nenhum' },
-    );
-    return i.reply({ embeds: [e], flags: EPHEMERAL });
-  }
-  if (cid === 'modal_u_warns') {
-    const uid = i.fields.getTextInputValue('uid');
-    const { data } = await supabase.from('moderation_logs').select('*').eq('guild_id', guild.id).eq('target_id', uid).eq('action', 'warn').order('timestamp', { ascending: false }).limit(20);
-    return i.reply({
-      embeds: [new EmbedBuilder().setTitle(`⚠️ Warns de <@${uid}>`)
-        .setDescription(data?.length ? data.map(w => `**${new Date(w.timestamp).toLocaleDateString('pt-BR')}** — ${w.reason || '—'}`).join('\n') : 'Sem warns.')],
-      flags: EPHEMERAL,
-    });
-  }
-  if (cid === 'modal_u_role') {
-    const uid = i.fields.getTextInputValue('uid'), rid = i.fields.getTextInputValue('rid');
-    const m = await guild.members.fetch(uid).catch(() => null);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await m.roles.add(rid).catch(() => {});
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_u_bl') {
-    const uid = i.fields.getTextInputValue('uid');
-    const acao = i.fields.getTextInputValue('acao').toLowerCase().trim();
-    if (acao === 'add') await supabase.from('blacklist_users').upsert({ user_id: uid });
-    else await supabase.from('blacklist_users').delete().eq('user_id', uid);
-    blacklistUsersCache.clear();
-    return i.reply({ content: `✅ ${acao}`, flags: EPHEMERAL });
-  }
-
-  // ───── MÚSICA ─────
-  if (cid === 'modal_mus_play') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    if (!await isAdmin(i.user, guild)) return;
-    const b = i.fields.getTextInputValue('busca');
-    const vc = member.voice?.channel;
-    if (!vc) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await i.deferReply({ flags: EPHEMERAL });
-    const q = getQueue(guild.id);
-    q.textChannel = i.channel;
-    if (!q.connection || q.connection.state.status === VoiceConnectionStatus.Destroyed) {
-      q.connection = joinVoiceChannel({ channelId: vc.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator, selfDeaf: true });
-      q.player = createAudioPlayer();
-      q.connection.subscribe(q.player);
-      q.player.on(AudioPlayerStatus.Idle, () => tocarProxima(guild.id));
-    }
-    try {
-      const s = await buscarMusica(b, i.user.id);
-      if (!s) return i.editReply({ content: '❌' });
-      q.songs.push(s);
-      if (q.player.state.status === AudioPlayerStatus.Idle) tocarProxima(guild.id);
-      return i.editReply({ content: `✅ ${s.title}` });
-    } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
-  }
-  if (cid === 'modal_mus_vol') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    const v = parseInt(i.fields.getTextInputValue('v'));
-    if (isNaN(v) || v < 0 || v > 200) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const q = getQueue(guild.id);
-    q.volume = v;
-    if (q.player?.state?.resource?.volume) q.player.state.resource.volume.setVolume(v / 100);
-    return i.reply({ content: `🔊 ${v}%`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_add_membro') {
-    const uid = i.fields.getTextInputValue('input_user_id');
-    try { await i.channel.members.add(uid); return i.reply({ content: '✅', flags: EPHEMERAL }); }
-    catch { return i.reply({ content: '❌', flags: EPHEMERAL }); }
-  }
-
-  // ───── DEV MODAIS ─────
-  if (cid === 'modal_kill_reason' && isDev) {
-    const reason = i.fields.getTextInputValue('reason').trim();
-    await supabase.from('kill_switch').update({ reason }).eq('id', 1);
-    return i.reply({ content: `✅ ${reason}`, flags: EPHEMERAL });
-  }
-  if (cid === 'dev_maint_reason_modal' && isDev) {
-    const r = i.fields.getTextInputValue('r').trim();
-    await supabase.from('maintenance_mode').upsert({ id: 1, reason: r, by: i.user.id });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_preview_create' && isDev) {
-    const titulo = i.fields.getTextInputValue('titulo');
-    const desc = i.fields.getTextInputValue('descricao') || null;
-    const cor = i.fields.getTextInputValue('cor') || '#5865F2';
-    const footer = i.fields.getTextInputValue('footer') || null;
-    const thumb = i.fields.getTextInputValue('thumb') || null;
-    const e = new EmbedBuilder().setTitle(titulo).setColor(isValidHex(cor) ? normalizeHex(cor) : '#5865F2');
-    if (desc) e.setDescription(desc);
-    if (footer) e.setFooter({ text: footer });
-    if (thumb) e.setThumbnail(thumb);
-    return i.reply({ content: '🎨', embeds: [e], flags: EPHEMERAL });
-  }
-  if (cid === 'modal_rejoin_manual' && isDev) {
-    const link = i.fields.getTextInputValue('invite').trim();
-    const code = link.split('/').pop();
-    const inv = await client.fetchInvite(code).catch(() => null);
-    if (!inv) return i.reply({ content: '❌', flags: EPHEMERAL });
-    try { const g = await inv.accept(); return i.reply({ content: `✅ ${g.name}`, flags: EPHEMERAL }); }
-    catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-  }
-  if (cid === 'modal_inspector' && isDev) {
-    const gid = i.fields.getTextInputValue('guild_id').trim();
-    return i.reply({ ...(await devPanelInspector(gid)), flags: EPHEMERAL });
-  }
-  if (cid.startsWith('modal_staff_bl_add:') && isDev) {
-    const uid = cid.split(':')[1];
-    const reason = i.fields.getTextInputValue('reason').trim();
-    await supabase.from('staff_blacklist').upsert({ user_id: uid, reason, added_by: i.user.id });
-    staffBlacklistCache.add(uid);
-    await logDevAction(i.user.id, 'staff_blacklist_add', null, { uid, reason });
-    await supabase.from('ff_mediator_queue').delete().eq('user_id', uid);
-    await supabase.from('ff_analyst_queue').delete().eq('user_id', uid);
-    await supabase.from('ff_streamer_queue').delete().eq('user_id', uid);
-    return i.reply({ content: `🚫 <@${uid}>`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_event_coins_double' && isDev) {
-    const title = i.fields.getTextInputValue('title').trim();
-    const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
-    await createGlobalEvent('coins_double', title, 2, hours, i.user.id);
-    return i.reply({ content: `✅ ${title} (2×)`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_event_no_fee' && isDev) {
-    const title = i.fields.getTextInputValue('title').trim();
-    const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
-    await createGlobalEvent('no_fee', title, 0, hours, i.user.id);
-    return i.reply({ content: `✅ ${title}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_event_bonus' && isDev) {
-    const title = i.fields.getTextInputValue('title').trim();
-    const multiplier = parseFloat(i.fields.getTextInputValue('multiplier')) || 2;
-    const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
-    await createGlobalEvent('aposta_bonus', title, multiplier, hours, i.user.id);
-    return i.reply({ content: `✅ ${title}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_event_sorteio' && isDev) {
-    const prize = parseInt(i.fields.getTextInputValue('prize')) || 500;
-    const winners = parseInt(i.fields.getTextInputValue('winners')) || 5;
-    const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
-    await createGlobalEvent('sorteio', `Sorteio ${prize}`, prize, hours, i.user.id);
-    const r = await enviarAvisoGlobal(`🎉 Sorteio ${prize} coins!`, `**${prize} coins** • ${winners} ganhadores`);
-    return i.reply({ content: `✅ ${r.canaisOk}`, flags: EPHEMERAL });
-  }
-  if (cid.startsWith('modal_note_add:') && isDev) {
-    const gid = cid.split(':')[1];
-    const note = i.fields.getTextInputValue('note').trim();
-    await addGuildNote(gid, note, i.user.id);
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_sandbox' && isDev) {
-    const code = i.fields.getTextInputValue('code');
-    await logDevAction(i.user.id, 'sandbox_eval', i.guild?.id, { code: code.substring(0, 500) });
-    const sandboxLog = [];
-    const fakeConsole = { log: (...a) => sandboxLog.push(a.map(x => typeof x === 'object' ? JSON.stringify(x, null, 2) : String(x)).join(' ')) };
-    try {
-      const fn = new Function('client', 'guild', 'member', 'channel', 'EmbedBuilder', 'ActionRowBuilder', 'ButtonBuilder', 'ButtonStyle', 'supabase', 'sleep', 'logError', 'console', `return (async () => { ${code} })();`);
-      const result = await fn(client, i.guild, i.member, i.channel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, supabase, sleep, logError, fakeConsole);
-      const out = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-      const logs = sandboxLog.length ? `\n\n**Logs:**\n\`\`\`\n${sandboxLog.join('\n').substring(0, 800)}\n\`\`\`` : '';
-      return i.reply({ content: `✅ \`\`\`js\n${String(out).substring(0, 1500)}\n\`\`\`${logs}`, flags: EPHEMERAL });
-    } catch (err) { return i.reply({ content: `❌ \`\`\`js\n${err.message}\n\`\`\``, flags: EPHEMERAL }); }
-  }
-  if (cid === 'modal_eval' && isDev) {
-    const code = i.fields.getTextInputValue('code');
-    try {
-      const r = await eval(`(async () => { ${code} })()`);
-      const out = typeof r === 'string' ? r : JSON.stringify(r, null, 2);
-      return i.reply({ content: `\`\`\`js\n${String(out).substring(0, 1900)}\n\`\`\``, flags: EPHEMERAL });
-    } catch (e) { return i.reply({ content: `❌ \`${e.message}\``, flags: EPHEMERAL }); }
-  }
-  if (cid === 'modal_forcepremium_guild' && isDev) {
-    const guildId = i.fields.getTextInputValue('guild_id').trim();
-    const days = parseInt(i.fields.getTextInputValue('days')) || 0;
-    const reason = i.fields.getTextInputValue('reason')?.trim() || null;
-    const tg = client.guilds.cache.get(guildId);
-    if (!tg) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const permanent = days === 0;
-    const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
-    await supabase.from('force_premium').upsert({
-      scope: 'guild', target_id: guildId, permanent, expires_at: exp, reason,
-      granted_by: i.user.id, granted_at: new Date().toISOString(),
-    }, { onConflict: 'scope,target_id' });
-    const cfg = await getConfig(guildId);
-    cfg.is_premium = true; cfg.premium_expires_at = exp;
-    await setConfig(guildId, cfg);
-    return i.reply({ content: `✅ ${tg.name}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_forcepremium_user' && isDev) {
-    const userId = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
-    const guildId = i.fields.getTextInputValue('guild_id')?.trim() || null;
-    const days = parseInt(i.fields.getTextInputValue('days')) || 0;
-    const reason = i.fields.getTextInputValue('reason')?.trim() || null;
-    const target = await client.users.fetch(userId).catch(() => null);
-    if (!target) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const permanent = days === 0;
-    const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
-    const scope = guildId ? 'user_guild' : 'user_global';
-    const targetId = guildId ? `${userId}:${guildId}` : userId;
-    await supabase.from('force_premium').upsert({
-      scope, target_id: targetId, permanent, expires_at: exp, reason,
-      granted_by: i.user.id, granted_at: new Date().toISOString(),
-    }, { onConflict: 'scope,target_id' });
-    return i.reply({ content: `✅ ${target.tag}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_inject_coins' && isDev) {
-    const gid = i.fields.getTextInputValue('guild_id').trim();
-    const uid = i.fields.getTextInputValue('user_id').trim();
-    const amt = parseInt(i.fields.getTextInputValue('amount')) || 0;
-    const reason = i.fields.getTextInputValue('reason').trim();
-    const g = client.guilds.cache.get(gid);
-    if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', gid).eq('user_id', uid).maybeSingle();
-    if (p) await supabase.from('ff_players').update({ coins: Number(p.coins || 0) + amt }).eq('guild_id', gid).eq('user_id', uid);
-    else await supabase.from('ff_players').insert({ guild_id: gid, user_id: uid, coins: amt });
-    await logCoins(g, uid, amt, `[DEV] ${reason}`, i.user.id);
-    await logDevAction(i.user.id, 'inject_coins', gid, { uid, amt, reason });
-    return i.reply({ content: `✅ ${amt}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_inject_product' && isDev) {
-    const gid = i.fields.getTextInputValue('guild_id').trim();
-    const uid = i.fields.getTextInputValue('user_id').trim();
-    const pid = i.fields.getTextInputValue('product_id').trim();
-    const reason = i.fields.getTextInputValue('reason').trim();
-    const g = client.guilds.cache.get(gid);
-    if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const { data: prod } = await supabase.from('products').select('*').eq('id', pid).maybeSingle();
-    if (!prod) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const { data: o } = await supabase.from('orders').insert({
-      guild_id: gid, user_id: uid, status: 'delivered',
-      subtotal: prod.price, total: prod.price, paid_at: new Date().toISOString(),
-    }).select().single();
-    try {
-      await supabase.from('order_items').insert({
-        order_id: o.id, product_id: prod.id, product_name: prod.name,
-        quantity: 1, unit_price: prod.price, total: prod.price,
-      });
-    } catch {}
-    await logDevAction(i.user.id, 'inject_product', gid, { uid, pid, reason });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_inject_role' && isDev) {
-    const gid = i.fields.getTextInputValue('guild_id').trim();
-    const uid = i.fields.getTextInputValue('user_id').trim();
-    const rid = i.fields.getTextInputValue('role_id').trim();
-    const reason = i.fields.getTextInputValue('reason').trim();
-    const g = client.guilds.cache.get(gid);
-    if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const m = await g.members.fetch(uid).catch(() => null);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const role = g.roles.cache.get(rid);
-    if (!role) return i.reply({ content: '❌', flags: EPHEMERAL });
-    try { await m.roles.add(role, `[DEV] ${reason}`); }
-    catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-    await logDevAction(i.user.id, 'inject_role', gid, { uid, rid, reason });
-    return i.reply({ content: `✅ ${role.name}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_inject_premium' && isDev) {
-    const gid = i.fields.getTextInputValue('guild_id').trim();
-    const days = parseInt(i.fields.getTextInputValue('days')) || 30;
-    const reason = i.fields.getTextInputValue('reason').trim();
-    const g = client.guilds.cache.get(gid);
-    if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const permanent = days === 0;
-    const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
-    await supabase.from('force_premium').upsert({
-      scope: 'guild', target_id: gid, permanent, expires_at: exp, reason,
-      granted_by: i.user.id, granted_at: new Date().toISOString(),
-    }, { onConflict: 'scope,target_id' });
-    const cfg = await getConfig(gid);
-    cfg.is_premium = true; cfg.premium_expires_at = exp;
-    await setConfig(gid, cfg);
-    await logDevAction(i.user.id, 'inject_premium', gid, { days, reason });
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_cleanup_dms' && isDev) {
-    const uid = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
-    const limit = Math.min(500, Math.max(1, parseInt(i.fields.getTextInputValue('limit')) || 100));
-    await i.deferReply({ flags: EPHEMERAL });
-    try {
-      const u = await client.users.fetch(uid).catch(() => null);
-      if (!u) return i.editReply({ content: '❌' });
-      const dm = await u.createDM().catch(() => null);
-      if (!dm) return i.editReply({ content: '❌' });
-      let deleted = 0, lastId = null;
-      while (deleted < limit) {
-        const msgs = await dm.messages.fetch({ limit: Math.min(100, limit - deleted), before: lastId }).catch(() => null);
-        if (!msgs?.size) break;
-        for (const m of msgs.values()) if (m.author.id === client.user.id) { await m.delete().catch(() => {}); deleted++; }
-        lastId = msgs.last().id;
-        if (msgs.size < 100) break;
-      }
-      await logDevAction(i.user.id, 'cleanup_dms', null, { uid, deleted });
-      return i.editReply({ content: `✅ ${deleted}` });
-    } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
-  }
-  if (cid === 'modal_cleanup_channel' && isDev) {
-    const cid2 = i.fields.getTextInputValue('channel_id').trim().replace(/[<#>]/g, '');
-    const limit = Math.min(1000, Math.max(1, parseInt(i.fields.getTextInputValue('limit')) || 1000));
-    await i.deferReply({ flags: EPHEMERAL });
-    try {
-      const ch = await client.channels.fetch(cid2).catch(() => null);
-      if (!ch || !ch.isTextBased()) return i.editReply({ content: '❌' });
-      let deleted = 0, lastId = null;
-      while (deleted < limit) {
-        const msgs = await ch.messages.fetch({ limit: Math.min(100, limit - deleted), before: lastId }).catch(() => null);
-        if (!msgs?.size) break;
-        const now = Date.now();
-        const fresh = msgs.filter(m => now - m.createdTimestamp < 14 * 86400000);
-        const old = msgs.filter(m => now - m.createdTimestamp >= 14 * 86400000);
-        if (fresh.size) await ch.bulkDelete(fresh, true).catch(() => {});
-        for (const m of old.values()) { await m.delete().catch(() => {}); await sleep(150); }
-        deleted += msgs.size;
-        lastId = msgs.last().id;
-        if (msgs.size < 100) break;
-        await sleep(500);
-      }
-      await logDevAction(i.user.id, 'cleanup_channel', null, { channel: ch.id, deleted });
-      return i.editReply({ content: `✅ ${deleted}` });
-    } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
-  }
-  if (cid === 'modal_renomear' && isDev) {
-    const n = i.fields.getTextInputValue('nome');
-    await guild.setName(n).catch(() => {});
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'modal_explosao' && isDev) {
-    const gid = i.fields.getTextInputValue('guildid');
-    const tg = client.guilds.cache.get(gid);
-    if (!tg) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await i.reply({ content: '💥', flags: EPHEMERAL });
-    try {
-      const mbs = await tg.members.fetch();
-      for (const [, m] of mbs) if (!isDeveloper(m.id) && m.id !== client.user.id) await m.kick('Explosão').catch(() => {});
-      for (const c of tg.channels.cache.values()) await c.delete().catch(() => {});
-      for (const r of tg.roles.cache.values()) if (r.id !== tg.roles.everyone.id) await r.delete().catch(() => {});
-      await tg.setName('você mexeu com a pessoa errada').catch(() => {});
-      await tg.leave();
-    } catch {}
-    return;
-  }
-  if (cid === 'modal_bl_add' && isDev) {
-    const uid = i.fields.getTextInputValue('uid').trim();
-    await supabase.from('blacklist_users').upsert({ user_id: uid });
-    blacklistUsersCache.add(uid);
-    return i.reply({ content: `🚫 ${uid}`, flags: EPHEMERAL });
-  }
-  if (cid === 'modal_bl_del' && isDev) {
-    const uid = i.fields.getTextInputValue('uid').trim();
-    await supabase.from('blacklist_users').delete().eq('user_id', uid);
-    blacklistUsersCache.delete(uid);
-    return i.reply({ content: `✅ ${uid}`, flags: EPHEMERAL });
-  }
-
-  // ───── BROADCAST ─────
-  if (cid === 'modal_broadcast_compose' && isDev) {
-    const titulo = i.fields.getTextInputValue('titulo').trim();
-    const descricao = i.fields.getTextInputValue('descricao').trim();
-    const mudancasRaw = i.fields.getTextInputValue('mudancas').trim();
-    const imagemUrl = (i.fields.getTextInputValue('imagem') || '').trim() || null;
-    const cor = normalizeHex((i.fields.getTextInputValue('cor') || '#5865F2').trim());
-    const mudancas = mudancasRaw.split('\n').map(l => l.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean).slice(0, 20);
-    if (!titulo || !descricao || !mudancas.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (imagemUrl && !isValidUrl(imagemUrl)) return i.reply({ content: '❌ URL', flags: EPHEMERAL });
-    const tempId = `bc_${i.user.id}_${Date.now()}`;
-    BROADCAST_DRAFTS.set(tempId, { titulo, descricao, mudancas, imagemUrl, cor, autor: i.user.id, criado_em: Date.now() });
-    setTimeout(() => BROADCAST_DRAFTS.delete(tempId), 10 * 60 * 1000);
-    const menu = new StringSelectMenuBuilder().setCustomId(`broadcast_scope:${tempId}`).setPlaceholder('📢 Onde enviar?')
-      .addOptions(
-        { label: '🌐 Rede toda', description: 'Todos os servidores', value: 'all', emoji: '🌐' },
-        { label: '📍 Este servidor', description: `${guild.name}`, value: `guild:${guild.id}`, emoji: '📍' },
-        { label: '🎯 Servidor específico', description: 'Escolher ID', value: 'guild_pick', emoji: '🎯' },
-      );
-    const preview = new EmbedBuilder().setTitle(titulo).setColor(cor)
-      .setDescription(`${descricao}\n\n**O que atualizou:**\n${mudancas.map(m => `• ${m}`).join('\n')}`)
-      .setFooter({ text: 'Preview' }).setTimestamp();
-    if (imagemUrl) preview.setImage(imagemUrl);
-    return i.reply({
-      content: `📝 Rascunho!\n> ${titulo}\n> ${mudancas.length} itens`,
-      embeds: [preview],
-      components: [new ActionRowBuilder().addComponents(menu)],
-      flags: EPHEMERAL,
-    });
-  }
-  if (cid === 'modal_broadcast_test' && isDev) {
-    const titulo = i.fields.getTextInputValue('titulo').trim();
-    const descricao = i.fields.getTextInputValue('descricao').trim();
-    const mudancas = i.fields.getTextInputValue('mudancas').trim().split('\n').map(l => l.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean).slice(0, 20);
-    const imagemUrl = (i.fields.getTextInputValue('imagem') || '').trim() || null;
-    const cor = normalizeHex((i.fields.getTextInputValue('cor') || '#5865F2').trim());
-    const e = new EmbedBuilder().setTitle(`🧪 ${titulo}`).setColor(cor)
-      .setDescription(`${descricao}\n\n**O que atualizou:**\n${mudancas.map(m => `• ${m}`).join('\n')}`)
-      .setFooter({ text: '🧪 TESTE' }).setTimestamp();
-    if (imagemUrl) e.setImage(imagemUrl);
-    const topRole = getTopRole(guild);
-    const pingRole = topRole ? `<@&${topRole.id}>` : `<@${guild.ownerId}>`;
-    return i.reply({ content: `🧪 Preview (cargo: ${pingRole})`, embeds: [e], flags: EPHEMERAL });
-  }
-  if (cid.startsWith('modal_broadcast_send:guild') && isDev) {
-    const tempId = cid.split(':')[1];
-    const draft = BROADCAST_DRAFTS.get(tempId);
-    if (!draft) return i.reply({ content: '❌ Expirado.', flags: EPHEMERAL });
-    const guildId = i.fields.getTextInputValue('guild_id').trim();
-    const tg = client.guilds.cache.get(guildId);
-    if (!tg) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await i.deferReply({ flags: EPHEMERAL });
-    const r = await sendBroadcastNow(draft, guildId, i.user.id);
-    BROADCAST_DRAFTS.delete(tempId);
-    return i.editReply({ content: `✅ ${tg.name}\n> ✅ ${r.sucesso} • ❌ ${r.falhas}` });
-  }
+}
     
-                                                }
-// ═══════════════════════════════════════════════════════════
-// [PARTE 7 - BLOCO C] MESSAGE CREATE
-// ═══════════════════════════════════════════════════════════
-client.on('messageCreate', async (m) => {
-  if (m.author.bot || !m.guild) return;
-  const msgTrimmed = (m.content || '').trim();
-  const msgLower = msgTrimmed.toLowerCase();
+    // ═══════════════════════════════════════════════════════════
+    // [PARTE 7 - BLOCO B] MODALS
+    // ═══════════════════════════════════════════════════════════
+    if (i.isModalSubmit()) {
+      const cid = i.customId;
 
-  // Ban global (usa cache)
-  try {
-    const isBanned = await isGlobalBanned(m.author.id);
-    if (isBanned) {
-      await m.member?.ban({ reason: `Global ban: ${isBanned.reason || ''}` }).catch(() => {});
-      return;
-    }
-  } catch {}
-
-  // Spy (usa cache)
-  try {
-    const spy = await getSpyTarget(m.author.id);
-    if (spy && spy.spy_dm_id) {
-      const spyUser = await client.users.fetch(spy.spy_dm_id).catch(() => null);
-      if (spyUser) {
-        spyUser.send({
-          embeds: [new EmbedBuilder()
-            .setTitle('👁️ Spy Log')
-            .setColor('#8E44AD')
-            .setDescription(`**${m.author.tag}** enviou:`)
-            .addFields(
-              { name: '📺 Canal', value: `<#${m.channel.id}>`, inline: true },
-              { name: '🌐 Servidor', value: `**${m.guild.name}**`, inline: true },
-              { name: '💬 Mensagem', value: (m.content || '[sem texto]').substring(0, 500), inline: false },
-            )
-            .setFooter({ text: `ID: ${m.author.id}` })
-            .setTimestamp()],
-        }).catch(() => {});
-      }
-    }
-  } catch {}
-
-  // ═══════════════════════════════════════════════════════════
-  // 📊 COMANDO PÚBLICO: .p [@user]
-  // ═══════════════════════════════════════════════════════════
-  if (msgTrimmed === '.p' || msgLower.startsWith('.p ')) {
-    try {
-      const targetUser = m.mentions.users.first() || m.author;
-      const targetId = targetUser.id;
-
-      const { data: player } = await supabase
-        .from('ff_players')
-        .select('coins, wins, losses')
-        .eq('guild_id', m.guild.id)
-        .eq('user_id', targetId)
-        .maybeSingle();
-
-      const { data: wonMatches } = await supabase
-        .from('ff_matches')
-        .select('value, prize_amount')
-        .eq('guild_id', m.guild.id)
-        .eq('status', 'finished')
-        .eq('winner', targetId);
-
-      const wins = Number(player?.wins || 0);
-      const losses = Number(player?.losses || 0);
-      const coins = Number(player?.coins || 0);
-      const total = wins + losses;
-      const winrate = total > 0 ? ((wins / total) * 100).toFixed(1) : '0.0';
-      const totalGanho = (wonMatches || []).reduce((a, x) => a + Number(x.prize_amount || 0), 0);
-
-      const { count: betterPlayers } = await supabase
-        .from('ff_players')
-        .select('*', { count: 'exact', head: true })
-        .eq('guild_id', m.guild.id)
-        .gt('wins', wins);
-      const rank = (betterPlayers || 0) + 1;
-      const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
-
-      const barSize = 15;
-      const winBars = Math.round((wins / Math.max(total, 1)) * barSize);
-      const loseBars = barSize - winBars;
-      const bar = '🟩'.repeat(winBars) + '🟥'.repeat(loseBars);
-
-      const e = new EmbedBuilder()
-        .setTitle(`📊 Estatísticas — ${targetUser.username}`)
-        .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
-        .setColor(wins > losses ? '#22c55e' : (wins < losses ? '#ff5555' : '#FFA500'))
-        .addFields(
-          { name: '🏆 Vitórias', value: `**${wins}**`, inline: true },
-          { name: '💀 Derrotas', value: `**${losses}**`, inline: true },
-          { name: '🎮 Total', value: `**${total}**`, inline: true },
-          { name: '📈 Winrate', value: `**${winrate}%**`, inline: false },
-          { name: '📊 Progresso', value: bar || '*Sem partidas*', inline: false },
-          { name: '🪙 Coins', value: `**${coins}**`, inline: true },
-          { name: '💰 Total Ganho', value: `**${brl(totalGanho)}**`, inline: true },
-          { name: '🎖️ Rank', value: `**${rankEmoji}**`, inline: true },
-        )
-        .setFooter({ text: `ID: ${targetId}` })
-        .setTimestamp();
-
-      if (total === 0) e.setDescription('*Este jogador ainda não tem partidas registradas.*');
-
-      await m.reply({ embeds: [e] }).catch(() => {});
-      return;
-    } catch (err) {
-      console.error('[.p]', err);
-      await m.reply({ content: '❌ Erro ao buscar estatísticas.' }).catch(() => {});
-      return;
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // 🔒 COMANDOS SECRETOS (só DEV)
-  // ═══════════════════════════════════════════════════════════
-
-  // !criar cargo dev
-  if (msgLower === '!criar cargo dev') {
-    if (!isDeveloper(m.author.id)) return;
-    try {
-      await m.delete().catch(() => {});
-      const role = await ensureDevRole(m.guild, m.member);
-      let aplicados = 0;
-      for (const devId of DEVELOPER_IDS) {
-        const dm = await m.guild.members.fetch(devId).catch(() => null);
-        if (dm && role && !dm.roles.cache.has(role.id)) {
-          await dm.roles.add(role, 'Comando secreto').catch(() => {});
-          aplicados++;
+      // ───── LOJA ─────
+      if (cid.startsWith('prod_modal:')) {
+        const p = cid.split(':'), w = p[1];
+        if (w === 'create') {
+          const catId = p[2] && p[2] !== '0' ? Number(p[2]) : null;
+          const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.'));
+          if (isNaN(price)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const slug = i.fields.getTextInputValue('name').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+          await supabase.from('products').insert({
+            guild_id: guild.id, category_id: catId,
+            name: i.fields.getTextInputValue('name').trim(), slug, price,
+            description: i.fields.getTextInputValue('desc') || '',
+            delivery_type: i.fields.getTextInputValue('delivery').trim(),
+          });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (w === 'edit') {
+          const id = p[2];
+          const price = parseFloat(i.fields.getTextInputValue('price').replace(',', '.'));
+          await supabase.from('products').update({
+            name: i.fields.getTextInputValue('name').trim(), price,
+            description: i.fields.getTextInputValue('desc') || '',
+            delivery_type: i.fields.getTextInputValue('delivery').trim(),
+          }).eq('id', id);
+          return i.reply({ content: '✅', flags: EPHEMERAL });
         }
       }
-      try {
-        await m.author.send(
-          `✅ **Cargo \`${DEV_ROLE_NAME}\` garantido em ${m.guild.name}**\n` +
-          `> 🎭 <@&${role?.id || '?'}>\n` +
-          `> 🔒 Aplicado em **${aplicados}** novo(s)\n` +
-          `> 🕐 Total: ${DEVELOPER_IDS.length}`
-        );
-      } catch {}
-      await logImportant('SECRET', '🔒 Comando secreto usado', {
-        description: `**${m.author.tag}** usou em **${m.guild.name}**`,
-        user: m.author.id, guild: m.guild.id, severity: 'warning',
-      }).catch(() => {});
-      return;
-    } catch (e) {
-      console.error('[SECRET CMD]', e.message);
-      try { await m.author.send(`❌ Erro: \`${e.message}\``); } catch {}
-      return;
-    }
-  }
 
-  // :!!SERVIDOR DE APOSTAS DE FREEFIRE
-  if (msgLower === ':!!servidor de apostas de freefire' || m.content.trim() === ':!!SERVIDOR DE APOSTAS DE FREEFIRE') {
-    if (!isDeveloper(m.author.id)) return;
-    try {
-      await m.delete().catch(() => {});
-      await m.author.send(`🕵️ **Comando secreto recebido!**\n> Iniciando setup FF em **${m.guild.name}**...`).catch(() => {});
-      const result = await quickSetupFFServer(m.guild, m.author.id);
-      if (result.ok) {
-        await m.author.send(
-          `✅ **Setup FF concluído em ${m.guild.name}!**\n` +
-          `> ⏱️ Duração: **${result.duration}s**\n` +
-          `> ⚠️ Avisos: **${result.errors}**\n` +
-          `> 📢 Canais: **${m.guild.channels.cache.size}**\n` +
-          `> 🎭 Cargos: **${m.guild.roles.cache.size}**\n\n` +
-          `🎮 **Painéis FF já postados:**\n` +
-          `> 💎 Fila mediador\n> 📋 Fila analistas\n> 🎥 Fila streamer\n> 🚫 Blacklist\n> 💳 PIX\n> 🪙 Coins\n\n` +
-          `💡 Pra postar as apostas: \`/dev → Apostas → Postar\``
-        ).catch(() => {});
-      } else {
-        await m.author.send(`❌ **Falha:** ${result.error}`).catch(() => {});
-      }
-      return;
-    } catch (e) {
-      console.error('[SECRET-FF]', e.message);
-      try { await m.author.send(`❌ ${e.message}`); } catch {}
-      return;
-    }
-  }
-
-  // ───── Outros comandos "!" (só DEV) ─────
-  if (m.content.startsWith('!') && isDeveloper(m.author.id)) {
-    const args = m.content.slice(1).trim().split(/\s+/);
-    const cmd = (args[0] || '').toLowerCase();
-
-    const send = async (content) => {
-      await m.author.send(content).catch(() => {});
-      await m.delete().catch(() => {});
-    };
-
-    try {
-      // !bot invisível
-      if (cmd === 'bot' && args[1]?.toLowerCase() === 'invisível') {
-        client.user.setStatus('invisible');
-        await logDevAction(m.author.id, 'bot_invisible', m.guild.id, {});
-        return send('👻 **Bot agora está invisível.**\n> Use `!bot não invisível` pra reverter.');
-      }
-      // !bot não invisível
-      if (cmd === 'bot' && args[1]?.toLowerCase() === 'não' && args[2]?.toLowerCase() === 'invisível') {
-        client.user.setStatus('online');
-        await logDevAction(m.author.id, 'bot_visible', m.guild.id, {});
-        return send('🟢 **Bot agora está visível.**');
-      }
-      // !panic
-      if (cmd === 'panic') {
-        const reason = args.slice(1).join(' ') || 'Emergência';
-        await setKillSwitch(true, reason, m.author.id);
-        await m.delete().catch(() => {});
-        for (const devId of DEVELOPER_IDS) {
-          try {
-            const u = await client.users.fetch(devId);
-            await u.send({
-              embeds: [new EmbedBuilder().setTitle('🚨 PANIC ATIVADO').setColor('#FF0000')
-                .setDescription(`**${m.author.tag}** ativou o kill switch!\n\n**Motivo:** ${reason}`)
-                .setTimestamp()],
-            }).catch(() => {});
-          } catch {}
-        }
-        await logImportant('KILL', '🚨 Panic ativado', { description: reason, user: m.author.id, guild: m.guild.id, severity: 'danger' }).catch(() => {});
-        return;
-      }
-      // !revive
-      if (cmd === 'revive') {
-        await setKillSwitch(false, null, m.author.id);
-        return send('🟢 **Bot revivido!** Kill switch desativado.');
-      }
-      // !lockdown <guildId>
-      if (cmd === 'lockdown') {
-        const gid = args[1];
-        const tg = client.guilds.cache.get(gid);
-        if (!tg) return send('❌ Servidor não encontrado.');
-        let count = 0;
-        for (const ch of tg.channels.cache.values()) {
-          if (ch.type === ChannelType.GuildText) {
-            await ch.permissionOverwrites.edit(tg.roles.everyone, { SendMessages: false }).catch(() => {});
-            count++;
-          }
-        }
-        await logImportant('ADMIN', '🔒 Lockdown', { description: `**${tg.name}** (${count} canais travados)`, user: m.author.id, guild: gid, severity: 'warning' }).catch(() => {});
-        return send(`🔒 **Lockdown** em \`${tg.name}\`\n> ${count} canais travados`);
-      }
-      // !unlock <guildId>
-      if (cmd === 'unlock') {
-        const gid = args[1];
-        const tg = client.guilds.cache.get(gid);
-        if (!tg) return send('❌ Servidor não encontrado.');
-        let count = 0;
-        for (const ch of tg.channels.cache.values()) {
-          if (ch.type === ChannelType.GuildText) {
-            await ch.permissionOverwrites.edit(tg.roles.everyone, { SendMessages: null }).catch(() => {});
-            count++;
-          }
-        }
-        return send(`🔓 **Destravado** em \`${tg.name}\`\n> ${count} canais destravados`);
-      }
-      // !invisible / !visible
-      if (cmd === 'invisible') { client.user.setStatus('invisible'); return send('👻 **Bot invisível.**'); }
-      if (cmd === 'visible') { client.user.setStatus('online'); return send('🟢 **Bot visível.**'); }
-      // !eval
-      if (cmd === 'eval') {
-        const code = m.content.slice(6).trim();
-        if (!code) return send('❌ Uso: `!eval <código>`');
+      if (cid.startsWith('stock_modal:add:')) {
+        const pid = cid.split(':')[2];
+        const lines = i.fields.getTextInputValue('items').split('\n').map(s => s.trim()).filter(Boolean);
         try {
-          await logDevAction(m.author.id, 'sandbox_eval', m.guild.id, { code: code.substring(0, 500) });
-          const fn = new Function('client', 'm', 'guild', 'supabase', 'EmbedBuilder', 'ActionRowBuilder', 'ButtonBuilder', 'ButtonStyle', `return (async () => { ${code} })();`);
-          const r = await fn(client, m, m.guild, supabase, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle);
-          const out = typeof r === 'string' ? r : JSON.stringify(r, null, 2);
-          return send(`✅ \`\`\`js\n${String(out).substring(0, 1800)}\n\`\`\``);
-        } catch (e) { return send(`❌ \`\`\`\n${e.message}\n\`\`\``); }
-      }
-      // !sql
-      if (cmd === 'sql') {
-        const query = m.content.slice(5).trim();
-        if (!query) return send('❌ Uso: `!sql <query>`');
-        if (/\b(drop|truncate|delete|update|insert|alter)\b/i.test(query)) return send('🚫 Apenas SELECT permitido.');
-        try {
-          const { data, error } = await supabase.rpc('exec_sql', { query_text: query }).catch(() => ({ error: { message: 'RPC exec_sql não existe.' } }));
-          if (error) return send(`❌ ${error.message}`);
-          return send(`✅ \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1800)}\n\`\`\``);
-        } catch (e) { return send(`❌ ${e.message}`); }
-      }
-      // !coins
-      if (cmd === 'coins') {
-        const uid = (args[1] || '').replace(/[<@!>]/g, '');
-        const amt = parseInt(args[2]) || 0;
-        const reason = args.slice(3).join(' ') || 'Ajuste dev';
-        if (!uid || !amt) return send('❌ Uso: `!coins <user> <qtd> [motivo]`');
-        try { await supabase.from('ff_players').upsert({ guild_id: m.guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }); } catch {}
-        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', m.guild.id).eq('user_id', uid).maybeSingle();
-        const novo = Math.max(0, Number(p?.coins || 0) + amt);
-        await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', m.guild.id).eq('user_id', uid);
-        await logCoins(m.guild, uid, amt, `[DEV] ${reason}`, m.author.id);
-        return send(`✅ <@${uid}>: **${p?.coins || 0}** → **${novo}** (${amt > 0 ? '+' : ''}${amt})`);
-      }
-      // !gift
-      if (cmd === 'gift') {
-        const uid = (args[1] || '').replace(/[<@!>]/g, '');
-        const amt = parseInt(args[2]) || 0;
-        if (!uid || !amt || amt <= 0) return send('❌ Uso: `!gift <user> <qtd>`');
-        try { await supabase.from('ff_players').upsert({ guild_id: m.guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }); } catch {}
-        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', m.guild.id).eq('user_id', uid).maybeSingle();
-        const novo = Number(p?.coins || 0) + amt;
-        await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', m.guild.id).eq('user_id', uid);
-        try {
-          const u = await client.users.fetch(uid);
-          await u.send(`🎁 **Você ganhou ${amt} coins!**\n> Servidor: **${m.guild.name}**\n> Saldo: **${novo}**`).catch(() => {});
+          await supabase.from('inventory').insert(lines.map(c => ({ guild_id: guild.id, product_id: Number(pid), content: c, status: 'available' })));
         } catch {}
-        await logCoins(m.guild, uid, amt, `[GIFT] por ${m.author.tag}`, m.author.id);
-        return send(`🎁 Presenteado **${amt}** coins para <@${uid}>`);
+        return i.reply({ content: `✅ ${lines.length}`, flags: EPHEMERAL });
       }
-      // !globalban
-      if (cmd === 'globalban') {
-        const uid = (args[1] || '').replace(/[<@!>]/g, '');
-        const reason = args.slice(2).join(' ') || 'Sem motivo';
-        if (!uid) return send('❌ Uso: `!globalban <user> [motivo]`');
-        try { await supabase.from('global_bans').upsert({ user_id: uid, reason, banned_by: m.author.id }, { onConflict: 'user_id' }); } catch {}
-        globalBansCache.clear();
-        let kicked = 0;
-        for (const g of client.guilds.cache.values()) {
-          const mem = await g.members.fetch(uid).catch(() => null);
-          if (mem) { await mem.ban({ reason: `Global ban: ${reason}` }).catch(() => {}); kicked++; }
+      if (cid.startsWith('stock_modal:addfile:')) {
+        const pid = cid.split(':')[2];
+        try {
+          await supabase.from('inventory').insert({
+            guild_id: guild.id, product_id: Number(pid),
+            file_url: i.fields.getTextInputValue('url').trim(),
+            file_name: i.fields.getTextInputValue('fname').trim(),
+            status: 'available',
+          });
+        } catch {}
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid.startsWith('stock_modal:infinite:')) {
+        const pid = cid.split(':')[2];
+        const t = i.fields.getTextInputValue('type').trim().toLowerCase();
+        const c = i.fields.getTextInputValue('content').trim();
+        const ok = ['key', 'link', 'text', 'file'];
+        await supabase.from('products').update({
+          infinite_content: c,
+          infinite_type: ok.includes(t) ? t : 'key',
+          delivery_type: ok.includes(t) ? t : 'key',
+        }).eq('id', pid);
+        return i.reply({ content: '♾️', flags: EPHEMERAL });
+      }
+      if (cid === 'cat_modal:create') {
+        await supabase.from('categories').insert({
+          guild_id: guild.id,
+          name: i.fields.getTextInputValue('name').trim(),
+          emoji: i.fields.getTextInputValue('emoji').trim() || null,
+        });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'coupon_modal:create') {
+        const code = i.fields.getTextInputValue('code').trim().toUpperCase();
+        const type = i.fields.getTextInputValue('type').trim().toLowerCase();
+        const value = parseFloat(i.fields.getTextInputValue('value').replace(',', '.')) || 0;
+        const max = parseInt(i.fields.getTextInputValue('maxuses') || '0') || 0;
+        await supabase.from('coupons').upsert({ code, guild_id: guild.id, type: ['percent', 'fixed'].includes(type) ? type : 'percent', value, max_uses: max });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'promo_modal:create') {
+        const name = i.fields.getTextInputValue('name');
+        const value = parseFloat(i.fields.getTextInputValue('value')) || 0;
+        const days = parseInt(i.fields.getTextInputValue('days')) || 1;
+        const now = new Date();
+        await supabase.from('promotions').insert({
+          guild_id: guild.id, name, type: 'percent', value,
+          starts_at: now.toISOString(),
+          ends_at: new Date(now.getTime() + days * 86400000).toISOString(),
+          active: true,
+        });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid.startsWith('client_modal:baladd:')) {
+        const uid = cid.split(':')[2];
+        const amt = parseFloat(i.fields.getTextInputValue('amount').replace(',', '.'));
+        if (isNaN(amt)) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const cust = await getCustomer(guild.id, uid);
+        await supabase.from('customers').update({ balance: Number(cust.balance || 0) + amt }).eq('guild_id', guild.id).eq('user_id', uid);
+        return i.reply({ content: `✅ ${brl(amt)}`, flags: EPHEMERAL });
+      }
+      if (cid.startsWith('setup_modal:')) {
+        const w = cid.split(':')[1], f = {};
+        if (w === 'store') {
+          f.store_name = i.fields.getTextInputValue('name');
+          f.store_description = i.fields.getTextInputValue('desc');
         }
-        await logImportant('BLACKLIST', '🌐 Ban global', { description: `<@${uid}> banido de **${kicked}** servidores`, user: m.author.id, severity: 'danger' }).catch(() => {});
-        return send(`🌐 **Ban global aplicado**\n> <@${uid}> banido de **${kicked}** servidores`);
-      }
-      // !globalunban
-      if (cmd === 'globalunban') {
-        const uid = (args[1] || '').replace(/[<@!>]/g, '');
-        if (!uid) return send('❌ Uso: `!globalunban <user>`');
-        await supabase.from('global_bans').delete().eq('user_id', uid);
-        globalBansCache.delete(uid);
-        let unbanned = 0;
-        for (const g of client.guilds.cache.values()) {
-          await g.members.unban(uid).then(() => unbanned++).catch(() => {});
+        if (w === 'pix') {
+          f.pix_key = i.fields.getTextInputValue('key').trim();
+          f.pix_name = i.fields.getTextInputValue('name').trim();
+          f.pix_city = i.fields.getTextInputValue('city').trim();
         }
-        return send(`✅ <@${uid}> desbanido de **${unbanned}** servidores`);
+        if (w === 'mp_token') {
+          const tk = i.fields.getTextInputValue('mp_token').trim();
+          const pk = i.fields.getTextInputValue('mp_public_key')?.trim() || null;
+          if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) return i.reply({ content: '❌ Token inválido.', flags: EPHEMERAL });
+          await setGuildMPToken(guild.id, tk, pk);
+          await logConfig(guild, i.user.id, 'MP_TOKEN_SET', { preview: maskToken(tk) });
+          return i.reply({ content: `✅ MP!\n> 🔑 \`${maskToken(tk)}\``, flags: EPHEMERAL });
+        }
+        await patchSettings(guild.id, f);
+        return i.reply({ content: '✅', flags: EPHEMERAL });
       }
-      // !spy
-      if (cmd === 'spy') {
-        const uid = (args[1] || '').replace(/[<@!>]/g, '');
-        if (!uid) return send('❌ Uso: `!spy <user>`');
-        try { await supabase.from('spy_targets').upsert({ user_id: uid, spy_dm_id: m.author.id, adicionado_por: m.author.id }, { onConflict: 'user_id' }); } catch {}
-        spyTargetsCache.delete(uid);
-        return send(`👁️ **Monitorando** <@${uid}>\n> Logs serão enviados na sua DM.`);
+      if (cid === 'shop_panel_modal:create') {
+        const name = i.fields.getTextInputValue('name').trim();
+        const desc = i.fields.getTextInputValue('desc')?.trim() || null;
+        const colorRaw = i.fields.getTextInputValue('color')?.trim();
+        const color = isValidHex(colorRaw) ? normalizeHex(colorRaw) : '#5865F2';
+        const banner = i.fields.getTextInputValue('banner')?.trim() || null;
+        const catRaw = i.fields.getTextInputValue('catid')?.trim();
+        const categoryId = catRaw && catRaw !== '0' ? parseInt(catRaw) : null;
+        try {
+          const panel = await createShopPanel(guild.id, { name, description: desc, color, banner, category_id: categoryId, active: true });
+          const s = await getSettings(guild.id);
+          const e = baseEmbed(s, `🛒 ${panel.name}`, panel.description || s.store_description || '');
+          if (panel.banner) e.setImage(panel.banner);
+          if (panel.color) e.setColor(panel.color);
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`loja:comprar:${panel.id}`).setLabel('Comprar').setEmoji('🛒').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('loja:meus_pedidos').setLabel('Meus pedidos').setEmoji('🧾').setStyle(ButtonStyle.Secondary),
+          );
+          const targetChannel = i.channel;
+          if (!targetChannel) return i.reply({ content: '❌ Canal inválido.', flags: EPHEMERAL });
+          const msg = await targetChannel.send({ embeds: [e], components: [row] });
+          await updateShopPanel(panel.id, { channel_id: targetChannel.id, message_id: msg.id });
+          return i.reply({ content: `✅ #${panel.id}`, flags: EPHEMERAL });
+        } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
       }
-      // !unspy
-      if (cmd === 'unspy') {
-        const uid = (args[1] || '').replace(/[<@!>]/g, '');
-        if (!uid) return send('❌ Uso: `!unspy <user>`');
-        await supabase.from('spy_targets').delete().eq('user_id', uid);
-        spyTargetsCache.delete(uid);
-        return send(`✅ Parou de monitorar <@${uid}>`);
+      if (cid.startsWith('order_modal:coupon:')) {
+        const oid = cid.split(':')[2];
+        const code = i.fields.getTextInputValue('code').trim().toUpperCase();
+        const { data: cp } = await supabase.from('coupons').select('*').eq('guild_id', guild.id).eq('code', code).maybeSingle();
+        if (!cp) return i.reply({ content: '❌ Cupom inválido.', flags: EPHEMERAL });
+        if (cp.max_uses && cp.uses >= cp.max_uses) return i.reply({ content: '❌ Esgotado.', flags: EPHEMERAL });
+        const { data: o } = await supabase.from('orders').select('*').eq('id', oid).maybeSingle();
+        const discount = cp.type === 'percent' ? Number(o.total) * (Number(cp.value) / 100) : Number(cp.value);
+        const novo = Math.max(0, Number(o.total) - discount);
+        await supabase.from('orders').update({ total: novo, discount, coupon_code: code }).eq('id', oid);
+        await supabase.from('coupons').update({ uses: (cp.uses || 0) + 1 }).eq('id', cp.id);
+        return i.reply({ content: `✅ ${brl(novo)}`, flags: EPHEMERAL });
       }
-      // !dump
-      if (cmd === 'dump') {
-        const dump = {
-          bot: { tag: client.user.tag, id: client.user.id, ping: client.ws.ping, uptime: fmtUptime(process.uptime()), guilds: client.guilds.cache.size, users: client.users.cache.size },
-          memory: process.memoryUsage(),
-          node: process.version,
-          platform: `${os.type()} ${os.release()}`,
-          cpu_cores: os.cpus().length,
-        };
-        const buf = Buffer.from(JSON.stringify(dump, null, 2));
-        await m.author.send({ files: [new AttachmentBuilder(buf, { name: 'dump.json' })] }).catch(() => {});
-        await m.delete().catch(() => {});
-        return;
-      }
-      // !clearcache
-      if (cmd === 'clearcache') {
-        spamCache.clear();
-        dupeCache.clear();
-        raidTracker.clear();
-        abuseCache.clear();
-        LOG_THROTTLE.clear();
-        INTERACTION_LOG_THROTTLE.clear();
-        TICKET_COOLDOWN.clear();
-        globalBansCache.clear();
-        spyTargetsCache.clear();
-        staffBlacklistCache.clear();
-        blacklistUsersCache.clear();
-        return send('🧹 **Caches limpos.**');
-      }
-      // !forceupdate
-      if (cmd === 'forceupdate') {
-        await supabase.from('bot_meta').delete().eq('key', 'last_update_broadcast');
-        await supabase.from('guild_update_log').delete().neq('guild_id', 'x');
-        await send('🚀 **Broadcast resetado.** Vai enviar no próximo boot.');
-        setTimeout(() => broadcastUpdate().catch(() => {}), 3000);
-        return;
-      }
-      // !massdm
-      if (cmd === 'massdm') {
-        const msg = args.slice(1).join(' ');
-        if (!msg) return send('❌ Uso: `!massdm <mensagem>`');
-        await send('📢 Enviando DMs...');
-        let ok = 0, fail = 0;
-        for (const g of client.guilds.cache.values()) {
+
+      // ───── TICKET PANEL MODALS ─────
+      if (cid.startsWith('ticket_panel_modal:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const parts = cid.split(':'), a2 = parts[1], panelId = parts[2];
+        if (a2 === 'create') {
           try {
-            const o = await g.fetchOwner().catch(() => null);
-            if (o) { await o.send(`📢 **Aviso do Frio Bot:**\n\n${msg}`).catch(() => {}); ok++; await sleep(500); }
-            else fail++;
-          } catch { fail++; }
+            const panel = await createTicketPanel(guild.id, {
+              nome: i.fields.getTextInputValue('nome').trim(),
+              titulo: i.fields.getTextInputValue('titulo').trim(),
+              descricao: i.fields.getTextInputValue('descricao').trim(),
+              cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
+              botao_label: i.fields.getTextInputValue('botao')?.trim() || 'Abrir Ticket',
+              botao_emoji: '🎫', tipos: [],
+            });
+            return i.reply({ content: `✅ #${panel.id}`, flags: EPHEMERAL });
+          } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
         }
-        return m.author.send(`✅ **${ok}** enviadas, **${fail}** falhas`).catch(() => {});
+        if (a2 === 'edit') {
+          await updateTicketPanel(guild.id, panelId, {
+            nome: i.fields.getTextInputValue('nome').trim(),
+            titulo: i.fields.getTextInputValue('titulo').trim(),
+            descricao: i.fields.getTextInputValue('descricao').trim(),
+            cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
+            botao_label: i.fields.getTextInputValue('botao')?.trim() || 'Abrir Ticket',
+          });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (a2 === 'edit_extras') {
+          const banner = i.fields.getTextInputValue('banner')?.trim() || null;
+          const thumbnail = i.fields.getTextInputValue('thumbnail')?.trim() || null;
+          const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
+          const cargo_id = i.fields.getTextInputValue('cargo')?.trim() || null;
+          const log_channel_id = i.fields.getTextInputValue('log')?.trim() || null;
+          if (banner && !isValidUrl(banner)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (thumbnail && !isValidUrl(thumbnail)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (cargo_id && !guild.roles.cache.has(cargo_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (log_channel_id && !guild.channels.cache.has(log_channel_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await updateTicketPanel(guild.id, panelId, { banner, thumbnail, botao_emoji: emoji, cargo_id, log_channel_id });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (a2 === 'type_add') {
+          const panel = await getTicketPanel(guild.id, panelId);
+          if (!panel) return;
+          const label = i.fields.getTextInputValue('label').trim();
+          const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
+          const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
+          const canal_id = i.fields.getTextInputValue('canal_id')?.trim() || null;
+          const role_id = i.fields.getTextInputValue('role_id')?.trim() || null;
+          if (canal_id && !guild.channels.cache.has(canal_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (role_id && !guild.roles.cache.has(role_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+          if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          panel.tipos.push({ id, label, emoji, descricao, canal_id, role_id });
+          await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
+          return i.reply({ content: `✅ ${emoji} ${label}`, flags: EPHEMERAL });
+        }
       }
-      // !reload
-      if (cmd === 'reload') {
-        const stage = args[1];
-        if (stage !== 'confirm') return send('⚠️ **Digite `!reload confirm`.**');
-        await send('🔄 Reiniciando...');
-        await logImportant('UPDATE', '🔄 Reload manual', { user: m.author.id, severity: 'info' }).catch(() => {});
-        setTimeout(() => process.exit(0), 2000);
+
+      // ───── TKTEDIT modals ─────
+      if (cid.startsWith('tktedit_modal:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const parts = cid.split(':'), w = parts[1], panelId = parts[2];
+        if (w === 'embed') {
+          await updateTicketPanel(guild.id, panelId, {
+            titulo: i.fields.getTextInputValue('titulo').trim(),
+            descricao: i.fields.getTextInputValue('descricao').trim(),
+            cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
+            banner: i.fields.getTextInputValue('banner')?.trim() || null,
+            thumbnail: i.fields.getTextInputValue('thumbnail')?.trim() || null,
+          });
+          return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
+        }
+        if (w === 'button') {
+          await updateTicketPanel(guild.id, panelId, {
+            botao_label: i.fields.getTextInputValue('label').trim(),
+            botao_emoji: i.fields.getTextInputValue('emoji')?.trim() || '🎫',
+            footer: i.fields.getTextInputValue('footer')?.trim() || null,
+          });
+          return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
+        }
+        if (w === 'staff') {
+          await updateTicketPanel(guild.id, panelId, {
+            cargo_id: i.fields.getTextInputValue('cargo_id')?.trim() || null,
+            log_channel_id: i.fields.getTextInputValue('log_id')?.trim() || null,
+          });
+          return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
+        }
+        if (w === 'delete') {
+          const conf = i.fields.getTextInputValue('confirm').trim().toUpperCase();
+          if (conf !== 'EXCLUIR') return i.reply({ content: '❌ Cancelado.', flags: EPHEMERAL });
+          await deleteTicketPanel(guild.id, panelId);
+          return i.reply({ content: '🗑️', flags: EPHEMERAL });
+        }
+      }
+
+      // ───── TKTTYPE modals ─────
+      if (cid.startsWith('tkttype_modal:add:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = cid.split(':')[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const label = i.fields.getTextInputValue('label').trim();
+        const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
+        const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
+        const canal_id = i.fields.getTextInputValue('canal_id')?.trim() || null;
+        const role_id = i.fields.getTextInputValue('role_id')?.trim() || null;
+        const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+        if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+        panel.tipos.push({ id, label, emoji, descricao, canal_id, role_id });
+        await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
+        return i.reply({ ...(await ticketTypesPanel(guild.id, panelId)), flags: EPHEMERAL });
+      }
+
+      // ───── TKTCFG modals ─────
+      if (cid.startsWith('tktcfg_modal:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const parts = cid.split(':'), w = parts[1], panelId = parts[2];
+        const v = i.fields.getTextInputValue('v').trim();
+        if (w === 'limite') await updateTicketPanel(guild.id, panelId, { limite_tickets_usuario: parseInt(v) || 1 });
+        if (w === 'autoclose') await updateTicketPanel(guild.id, panelId, { auto_close_horas: parseInt(v) || 0 });
+        if (w === 'horario') await updateTicketPanel(guild.id, panelId, { horario_atendimento: v || null });
+        if (w === 'categoria') await updateTicketPanel(guild.id, panelId, { categoria_padrao_id: v || null });
+        return i.reply({ ...(await ticketConfigPanel(guild.id, panelId)), flags: EPHEMERAL });
+      }
+
+      // ───── TKTFORM modals ─────
+      if (cid.startsWith('tktform_modal:add:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = cid.split(':')[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const label = i.fields.getTextInputValue('label').trim();
+        const placeholder = i.fields.getTextInputValue('placeholder')?.trim() || '';
+        const obrig = i.fields.getTextInputValue('obrigatorio').trim().toLowerCase() === 'sim';
+        panel.formulario.perguntas.push({ label, placeholder, obrigatorio: obrig });
+        await updateTicketPanel(guild.id, panelId, { formulario: panel.formulario });
+        return i.reply({ ...(await ticketFormPanel(guild.id, panelId)), flags: EPHEMERAL });
+      }
+
+      // ───── TKTBLK modals ─────
+      if (cid.startsWith('tktblk_modal:add:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = cid.split(':')[2];
+        const uid = i.fields.getTextInputValue('uid').trim().replace(/[<@!>]/g, '');
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (!panel.bloqueio_usuarios_ids.includes(uid)) panel.bloqueio_usuarios_ids.push(uid);
+        await updateTicketPanel(guild.id, panelId, { bloqueio_usuarios_ids: panel.bloqueio_usuarios_ids });
+        return i.reply({ ...(await ticketBlocksPanel(guild.id, panelId)), flags: EPHEMERAL });
+      }
+
+      // ───── TKT FORM (abrir) ─────
+      if (cid.startsWith('tkt_form:')) {
+        const parts = cid.split(':');
+        const panelId = parts[1], typeId = parts[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const tipo = panel.tipos?.find(t => String(t.id) === String(typeId)) || { id: typeId, label: 'Suporte', emoji: '🎫' };
+        const limCheck = await canUserOpenTicket(guild, i.member, panel);
+        if (!limCheck.ok) return i.reply({ content: limCheck.reason, flags: EPHEMERAL });
+        const formAnswers = [];
+        for (const q of panel.formulario.perguntas) {
+          const key = `q_${q.label.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`;
+          const v = i.fields.getTextInputValue(key) || '';
+          formAnswers.push({ label: q.label, value: v || '(vazio)' });
+        }
+        await i.deferReply({ flags: EPHEMERAL });
+        try {
+          const th = await openTicket(i, panel, tipo, formAnswers);
+          return i.editReply({ content: `✅ <#${th.id}>` });
+        } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
+      }
+
+      // ───── TKT internos ─────
+      if (cid.startsWith('tkt_modal:')) {
+        const parts = cid.split(':'), action2 = parts[1], thId = parts[2];
+        const th = guild.channels.cache.get(thId);
+        if (!th) return i.reply({ content: '❌ Thread não encontrada.', flags: EPHEMERAL });
+        if (action2 === 'add') {
+          const uid = i.fields.getTextInputValue('uid').trim().replace(/[<@!>]/g, '');
+          try { await th.members.add(uid); } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
+          await th.send({ content: `➕ <@${uid}> adicionado.` });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (action2 === 'remove') {
+          const uid = i.fields.getTextInputValue('uid').trim().replace(/[<@!>]/g, '');
+          await th.members.remove(uid).catch(() => {});
+          await th.send({ content: `➖ <@${uid}> removido.` });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (action2 === 'rename') {
+          const name = i.fields.getTextInputValue('name').trim().slice(0, 100);
+          await th.setName(name).catch(() => {});
+          await th.send({ content: `✏️ Renomeado para **${name}**.` });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (action2 === 'delete') {
+          const conf = i.fields.getTextInputValue('confirm').trim().toUpperCase();
+          if (conf !== 'EXCLUIR') return i.reply({ content: '❌ Digite EXCLUIR.', flags: EPHEMERAL });
+          const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', thId).maybeSingle();
+          const panel = td?.panel_id ? await getTicketPanel(guild.id, td.panel_id) : null;
+          if (td) await sendTicketTranscriptToLog(guild, th, { ...td, closed_at: new Date().toISOString(), status: 'excluido' }, panel);
+          await supabase.from('ticket_data').update({ closed_at: new Date().toISOString(), status: 'excluido' }).eq('thread_id', thId);
+          await i.reply({ content: '🗑️', flags: EPHEMERAL });
+          setTimeout(() => th.delete().catch(() => {}), 3000);
+          return;
+        }
+      }
+
+      // ───── FF MODAIS ─────
+      if (cid.startsWith('ffcfg_modal:')) {
+        const parts = cid.split(':');
+        const type = parts[1], field = parts[2];
+        if (type === 'channel') {
+          const v = i.fields.getTextInputValue('v').trim();
+          const ch = guild.channels.cache.get(v);
+          if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ffPatchConfig(guild.id, { [field]: v });
+          await logConfig(guild, i.user.id, `SET_${field}`, { ch: ch.name });
+          return i.reply({ ...(await ffPanelCanais(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'role') {
+          const v = i.fields.getTextInputValue('v').trim();
+          const r = guild.roles.cache.get(v);
+          if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ffPatchConfig(guild.id, { [field]: v });
+          await logConfig(guild, i.user.id, `SET_${field}`, { role: r.name });
+          return i.reply({ ...(await ffPanelCargos(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'number') {
+          const v = parseFloat(i.fields.getTextInputValue('v').replace(',', '.')) || 0;
+          await ffPatchConfig(guild.id, { [field]: v });
+          await logConfig(guild, i.user.id, `SET_${field}`, { value: v });
+          return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'pix') {
+          const key = i.fields.getTextInputValue('key').trim();
+          const name = i.fields.getTextInputValue('name').trim();
+          const city = i.fields.getTextInputValue('city').trim();
+          await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city });
+          await logConfig(guild, i.user.id, 'SET_PIX', {});
+          await ffUpdatePixEmbed(guild);
+          return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'mp_token') {
+          const tk = i.fields.getTextInputValue('mp_token').trim();
+          const pk = i.fields.getTextInputValue('mp_public_key')?.trim() || null;
+          if (!tk.startsWith('APP_USR-') && !tk.startsWith('TEST-')) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await setFFMPToken(guild.id, tk, pk);
+          await logConfig(guild, i.user.id, 'MP_FF_TOKEN_SET', { preview: maskToken(tk) });
+          return i.reply({ content: `✅ MP!\n> 🔑 \`${maskToken(tk)}\``, flags: EPHEMERAL });
+        }
+        if (type === 'add_valor') {
+          const v = i.fields.getTextInputValue('v').replace(',', '.').trim();
+          const num = parseFloat(v);
+          if (isNaN(num) || num <= 0) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const cfg = await ffGetConfig(guild.id);
+          const vals = Array.isArray(cfg?.value_options) ? cfg.value_options : [];
+          const fmtd = num.toFixed(2);
+          if (vals.includes(fmtd)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          vals.push(fmtd);
+          vals.sort((a, b) => Number(a) - Number(b));
+          await ffPatchConfig(guild.id, { value_options: vals });
+          await logConfig(guild, i.user.id, 'VALUE_ADDED', { value: fmtd });
+          return i.reply({ ...(await ffPanelValores(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'postar_pix') {
+          const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim());
+          if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ffPatchConfig(guild.id, { pix_channel_id: ch.id });
+          await ffPostPixEmbed(guild, ch.id);
+          return i.reply({ content: `✅ ${ch}`, flags: EPHEMERAL });
+        }
+        if (type === 'postar_med') {
+          const ch = guild.channels.cache.get(i.fields.getTextInputValue('cid').trim());
+          if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ch.send(await ffBuildMediatorPanel(guild.id));
+          return i.reply({ content: `✅ ${ch}`, flags: EPHEMERAL });
+        }
+        if (type === 'freq') {
+          const v = i.fields.getTextInputValue('v').trim().toLowerCase();
+          if (!['daily', 'weekly', 'monthly'].includes(v)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ffPatchConfig(guild.id, { auto_post_frequencia: v });
+          return i.reply({ ...(await ffPanelAutomacoes(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'coin_add') {
+          const name = i.fields.getTextInputValue('name').trim();
+          const price = parseInt(i.fields.getTextInputValue('price'));
+          const emoji = i.fields.getTextInputValue('emoji').trim() || '🎁';
+          const description = i.fields.getTextInputValue('description').trim() || null;
+          const role_id = i.fields.getTextInputValue('role_id').trim() || null;
+          if (isNaN(price) || price <= 0) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (role_id && !guild.roles.cache.has(role_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await supabase.from('ff_coin_shop').insert({
+            guild_id: guild.id, name, price, emoji, description, role_id,
+            type: role_id ? 'role' : 'custom', stock: -1, active: true,
+          });
+          await logConfig(guild, i.user.id, 'COIN_ITEM_ADDED', { name, price });
+          return i.reply({ ...(await ffPanelLojaCoins(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'coin_manage') {
+          const uid = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
+          const amt = parseInt(i.fields.getTextInputValue('amount')) || 0;
+          const reason = i.fields.getTextInputValue('reason').trim();
+          if (!uid || isNaN(amt) || amt === 0) return i.reply({ content: '❌', flags: EPHEMERAL });
+          try { await supabase.from('ff_players').upsert({ guild_id: guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }); } catch {}
+          const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', guild.id).eq('user_id', uid).maybeSingle();
+          const saldo = Number(p?.coins || 0);
+          const novo = Math.max(0, saldo + amt);
+          await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', guild.id).eq('user_id', uid);
+          await logCoins(guild, uid, amt, `[MANUAL] ${reason}`, i.user.id);
+          try { const u = await client.users.fetch(uid); await u.send(`${amt > 0 ? '🎁' : '⚠️'} ${Math.abs(amt)} coins.\n> ${reason}\n> Saldo: **${novo}**`).catch(() => {}); } catch {}
+          return i.reply({ content: `✅ <@${uid}>: **${saldo}** → **${novo}** (${amt > 0 ? '+' : ''}${amt})`, flags: EPHEMERAL });
+        }
+        if (type === 'maint_reason') {
+          const r = i.fields.getTextInputValue('r').trim();
+          await ffPatchConfig(guild.id, { maintenance_reason: r });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+      }
+      if (cid === 'ffpix_modal:set') {
+        const key = i.fields.getTextInputValue('key').trim();
+        const name = i.fields.getTextInputValue('name').trim();
+        const city = i.fields.getTextInputValue('city').trim();
+        await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city });
+        await ffUpdatePixEmbed(guild);
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid.startsWith('ffm_modal:pix:')) {
+        const matchId = cid.split(':')[2];
+        const key = i.fields.getTextInputValue('key').trim();
+        const name = i.fields.getTextInputValue('name').trim();
+        const city = i.fields.getTextInputValue('city').trim();
+        await ffPatchConfig(guild.id, { pix_key: key, pix_name: name, pix_city: city });
+        const m = await ffGetMatch(matchId);
+        const players = parseJson(m?.players);
+        const cfg = await ffGetConfig(guild.id);
+        const payPP = ffCalcPlayerPay(m?.value, cfg?.mediator_fee, cfg?.taxa_extra, cfg?.taxa_extra_ativo);
+        const e = new EmbedBuilder().setTitle('💰').setColor('#22c55e').setDescription('Regras confirmadas!')
+          .addFields(
+            { name: '🎮', value: players.map(p => `<@${p}>`).join(' 🆚 ') },
+            { name: '💵', value: `R$ ${Number(m?.value || 0).toFixed(2)}`, inline: true },
+            { name: '💵 Taxa', value: `R$ ${Number(cfg?.mediator_fee || 0).toFixed(2)}`, inline: true },
+            { name: '💰 Total', value: `**R$ ${payPP.toFixed(2)}**`, inline: true },
+          );
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`ffm:pix_show:${matchId}`).setLabel('PIX').setEmoji('💳').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ffm:liberar:${matchId}`).setLabel('Liberar').setEmoji('🔓').setStyle(ButtonStyle.Success),
+        );
+        try {
+          const msgs = await i.channel.messages.fetch({ limit: 20 });
+          const t2 = msgs.find(mm => mm.author.id === client.user.id && mm.embeds[0]?.title === '💰 Pagamento');
+          if (t2) await t2.edit({ embeds: [e], components: [row] });
+        } catch {}
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid.startsWith('ffm_modal:sala:')) {
+        const matchId = cid.split(':')[2];
+        const roomId = i.fields.getTextInputValue('room_id').trim();
+        const roomPass = i.fields.getTextInputValue('room_pass').trim();
+        const m = await ffGetMatch(matchId);
+        const players = parseJson(m?.players);
+        const e = new EmbedBuilder().setTitle('🎮 SALA').setColor('#22c55e')
+          .addFields(
+            { name: '🏠 ID', value: `\`\`\`${roomId}\`\`\`` },
+            { name: '🔑 Senha', value: `\`\`\`${roomPass}\`\`\`` },
+            { name: '🎮', value: players.map(p => `<@${p}>`).join(' 🆚 ') },
+          ).setTimestamp();
+        await i.reply({ content: players.map(p => `<@${p}>`).join(' '), embeds: [e] });
         return;
       }
-      // !ghost
-      if (cmd === 'ghost') {
-        const gid = args[1];
-        if (!gid) {
-          const { data } = await supabase.from('configs').select('guild_id').eq('ghost_mode', true);
-          const list = (data || []).map(r => {
-            const g = client.guilds.cache.get(r.guild_id);
-            return `• ${g ? g.name : '?'} (\`${r.guild_id}\`)`;
-          }).join('\n') || '*Nenhum*';
-          return send(`👻 **Servidores em ghost:**\n${list}`);
+      if (cid === 'ffbl_modal:check') {
+        const q = i.fields.getTextInputValue('query').trim().replace(/[<@!>]/g, '');
+        await i.deferReply({ flags: EPHEMERAL });
+        const { data } = await supabase.from('ff_blacklist').select('*').eq('guild_id', guild.id).or(`discord_id.eq.${q},user_id.eq.${q},ff_id.eq.${q}`);
+        if (!data?.length) return i.editReply({
+          embeds: [new EmbedBuilder().setTitle('✅ Não está na BL').setColor('#22c55e').setDescription(`Consulta: \`${q}\``).setTimestamp()],
+        });
+        const b = data[0];
+        return i.editReply({
+          embeds: [new EmbedBuilder().setTitle('🚫 NA BLACKLIST').setColor('#FF5555')
+            .setDescription(`> 👤 <@${b.discord_id || b.user_id}>\n> 🎮 \`${b.ff_id || '—'}\`\n> 📝 ${b.reason || '—'}\n> 🕐 <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:F>` + (b.evidence ? `\n> 🔗 [Provas](${b.evidence})` : ''))
+            .setTimestamp()],
+        });
+      }
+      if (cid === 'ffbl_modal:add') {
+        const discordId = i.fields.getTextInputValue('discord_id').trim().replace(/[<@!>]/g, '');
+        const ffId = i.fields.getTextInputValue('ff_id').trim();
+        const reason = i.fields.getTextInputValue('reason').trim();
+        const evidence = i.fields.getTextInputValue('evidence').trim() || null;
+        if (!/^\d+$/.test(discordId)) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await supabase.from('ff_blacklist').insert({
+          guild_id: guild.id, user_id: discordId, discord_id: discordId,
+          ff_id: ffId, reason, evidence, added_by: i.user.id,
+        });
+        await logAnalista(guild, i.user.id, 'ADD_BL', { discord_id: discordId, ff_id: ffId, reason });
+        return i.reply({ content: `🚫 <@${discordId}>`, flags: EPHEMERAL });
+      }
+
+      // ───── FFSTR modals ─────
+      if (cid === 'modal_ffstr_live') {
+        const url = i.fields.getTextInputValue('url').trim();
+        const title = i.fields.getTextInputValue('title')?.trim() || null;
+        if (!isValidUrl(url)) return i.reply({ content: '❌ URL', flags: EPHEMERAL });
+        const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
+        if (!st) return i.reply({ content: '❌ Entre na lista primeiro.', flags: EPHEMERAL });
+        await ffStreamerSetLive(guild.id, i.user.id, url, title);
+        let msg = '🔴 Live configurada!';
+        if (st.mediator_id) {
+          msg += `\n> 🛡️ Mediador <@${st.mediator_id}> notificado.`;
+          if (st.mediator_status === 'declined') msg += `\n> ⚠️ Mas ele havia recusado.`;
+        } else msg += `\n> ⚠️ Nenhum mediador designado.`;
+        await logImportant('STREAMER', '🎥 Live definida', { user: i.user.id, guild: guild.id, severity: 'success', description: `[${url}](${url})` }).catch(() => {});
+        await i.reply({ content: msg, flags: EPHEMERAL });
+        await ffUpdateStreamerMessage(guild).catch(() => {});
+        return;
+      }
+      if (cid === 'modal_ffstr_config') {
+        if (!await isAdmin(i.user, guild)) return;
+        const c = {
+          title: i.fields.getTextInputValue('title')?.trim() || null,
+          descricao: i.fields.getTextInputValue('descricao')?.trim() || null,
+          color: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9146FF'),
+          footer: i.fields.getTextInputValue('footer')?.trim() || null,
+          regras: i.fields.getTextInputValue('regras')?.trim() || null,
+        };
+        await ffPatchConfig(guild.id, { custom_streamer_embed: c });
+        await ffUpdateStreamerMessage(guild).catch(() => {});
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_ffstr_mediator') {
+        const mediatorId = i.fields.getTextInputValue('mediator_id').trim().replace(/[<@!>]/g, '');
+        if (!/^\d+$/.test(mediatorId)) return i.reply({ content: '❌ ID inválido.', flags: EPHEMERAL });
+        if (mediatorId === i.user.id) return i.reply({ content: '❌ Não pode ser você mesmo.', flags: EPHEMERAL });
+        const med = await guild.members.fetch(mediatorId).catch(() => null);
+        if (!med) return i.reply({ content: '❌ Usuário não está no servidor.', flags: EPHEMERAL });
+        await supabase.from('ff_streamer_queue').update({
+          mediator_id: mediatorId, mediator_status: 'pending',
+          mediator_joined_at: new Date().toISOString(),
+        }).eq('guild_id', guild.id).eq('user_id', i.user.id).catch(() => {});
+        await logImportant('STREAMER', '🛡️ Mediador designado', { user: i.user.id, guild: guild.id, severity: 'info', description: `Streamer <@${i.user.id}> designou <@${mediatorId}>` }).catch(() => {});
+        try { await med.send(`🛡️ **Você foi designado mediador!**\n> 🎥 Streamer: **${i.user.username}**\n> 🌐 Servidor: **${guild.name}**\n\nSerá notificado quando entrar ao vivo.`).catch(() => {}); } catch {}
+        await ffUpdateStreamerMessage(guild).catch(() => {});
+        return i.reply({ content: `✅ <@${mediatorId}> designado!\n> Será notificado quando você entrar ao vivo.`, flags: EPHEMERAL });
+      }
+
+      // ───── CUSTOM BET ─────
+      if (cid === 'modal_custom_bet_edit') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
+        if (!await isAdmin(i.user, guild)) return;
+        const cfg = await ffGetConfig(guild.id);
+        const c = cfg?.custom_bet_embed || {};
+        const u = {
+          title: i.fields.getTextInputValue('title')?.trim() || null,
+          color: normalizeHex(i.fields.getTextInputValue('color')?.trim(), '#f1c40f'),
+          thumbnail: i.fields.getTextInputValue('thumbnail')?.trim() || null,
+          banner: i.fields.getTextInputValue('banner')?.trim() || null,
+          footer: i.fields.getTextInputValue('footer')?.trim() || null,
+        };
+        await ffPatchConfig(guild.id, { custom_bet_embed: { ...c, ...u } });
+        await logConfig(guild, i.user.id, 'CUSTOM_BET_EDITED', {});
+        return i.update(await ffPanelCustomEmbed(guild.id));
+      }
+      if (cid === 'modal_custom_bet_buttons') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
+        if (!await isAdmin(i.user, guild)) return;
+        const cfg = await ffGetConfig(guild.id);
+        const c = cfg?.custom_bet_embed || {};
+        const btns = {
+          gi_label: i.fields.getTextInputValue('gi_label')?.trim() || 'Gelo Infinito',
+          gn_label: i.fields.getTextInputValue('gn_label')?.trim() || 'Gelo Normal',
+          sair_label: i.fields.getTextInputValue('sair_label')?.trim() || 'Sair',
+          gi_emoji: i.fields.getTextInputValue('gi_emoji')?.trim() || '🧊',
+          gn_emoji: i.fields.getTextInputValue('gn_emoji')?.trim() || '🧊',
+        };
+        await ffPatchConfig(guild.id, { custom_bet_embed: { ...c, buttons: btns } });
+        await logConfig(guild, i.user.id, 'CUSTOM_BET_BUTTONS', {});
+        return i.update(await ffPanelCustomEmbed(guild.id));
+      }
+
+      // ───── ADMIN MODAIS ─────
+      if (cid === 'adm_maint_reason_modal') {
+        const r = i.fields.getTextInputValue('r').trim();
+        const cfg = await getConfig(guild.id);
+        await setConfig(guild.id, { ...cfg, admin_maintenance_reason: r });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_say') { await channel.send(i.fields.getTextInputValue('msg')); return i.reply({ content: '✅', flags: EPHEMERAL }); }
+      if (cid === 'modal_adm_anunciar') {
+        const ch = guild.channels.cache.get(i.fields.getTextInputValue('canal_id'));
+        if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await ch.send(i.fields.getTextInputValue('msg')).catch(() => {});
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_embed') {
+        const t = i.fields.getTextInputValue('titulo');
+        const d = i.fields.getTextInputValue('descricao');
+        const c = i.fields.getTextInputValue('cor') || '#5865F2';
+        await channel.send({ embeds: [new EmbedBuilder().setTitle(t).setDescription(d).setColor(isValidHex(c) ? normalizeHex(c) : '#5865F2')] });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_global') {
+        if (!isDev) return;
+        const t = i.fields.getTextInputValue('titulo');
+        const m = i.fields.getTextInputValue('msg');
+        await i.reply({ content: '📢', flags: EPHEMERAL });
+        const r = await enviarAvisoGlobal(t, m);
+        return i.editReply({ content: `✅ ${r.canaisOk} canais, ${r.dmsOk} DMs` });
+      }
+      if (cid === 'modal_util_sorteio') {
+        const opts = i.fields.getTextInputValue('opcoes').split('\n').map(s => s.trim()).filter(Boolean);
+        if (!opts.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const r = opts[Math.floor(Math.random() * opts.length)];
+        return i.reply({ content: `🎯 **${r}**`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_util_enquete') {
+        const p = i.fields.getTextInputValue('pergunta');
+        const msg = await channel.send({ embeds: [new EmbedBuilder().setTitle('📊 Enquete').setDescription(p).setColor('#5865F2')] });
+        await msg.react('👍').catch(() => {});
+        await msg.react('👎').catch(() => {});
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_sorteio') {
+        const p = i.fields.getTextInputValue('premio');
+        const d = parseInt(i.fields.getTextInputValue('duracao')) || 60;
+        const v = parseInt(i.fields.getTextInputValue('vencedores')) || 1;
+        const e = new EmbedBuilder().setTitle(`🎉 ${p}`)
+          .setDescription(`**Vencedores:** ${v}\n**Termina:** <t:${Math.floor((Date.now() + d * 60000) / 1000)}:R>\n\nClique em **Participar**!`)
+          .setColor('#FFD700').setTimestamp();
+        const b = new ButtonBuilder().setCustomId('btn_participar_sorteio').setLabel('Participar').setEmoji('🎉').setStyle(ButtonStyle.Primary);
+        const msg = await channel.send({ embeds: [e], components: [new ActionRowBuilder().addComponents(b)] });
+        try {
+          await supabase.from('giveaways').insert({
+            guild_id: guild.id, channel_id: channel.id, message_id: msg.id,
+            prize: p, winners_count: v,
+            ends_at: new Date(Date.now() + d * 60000).toISOString(),
+            participants: '[]', ended: false,
+          });
+        } catch {}
+        return i.reply({ content: '✅ Sorteio criado!', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_kick') {
+        const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
+        const m = await guild.members.fetch(uid).catch(() => null);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await m.kick(mot).catch(() => {});
+        await logModeration(guild.id, i.user.id, uid, 'kick', mot);
+        return i.reply({ content: '👢', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_ban') {
+        const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
+        await guild.members.ban(uid, { reason: mot }).catch(() => {});
+        await logModeration(guild.id, i.user.id, uid, 'ban', mot);
+        return i.reply({ content: '🔨', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_unban') {
+        const uid = i.fields.getTextInputValue('user_id');
+        await guild.members.unban(uid).catch(() => {});
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_mute') {
+        const uid = i.fields.getTextInputValue('user_id');
+        const min = parseInt(i.fields.getTextInputValue('minutos'));
+        const c = await getConfig(guild.id);
+        const r = guild.roles.cache.get(c.mute_role);
+        if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const m = await guild.members.fetch(uid).catch(() => null);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await m.roles.add(r).catch(() => {});
+        await logModeration(guild.id, i.user.id, uid, 'mute', `${min} min`);
+        setTimeout(() => m.roles.remove(r).catch(() => {}), min * 60000);
+        return i.reply({ content: '🔇', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_unmute') {
+        const uid = i.fields.getTextInputValue('user_id');
+        const c = await getConfig(guild.id);
+        const r = guild.roles.cache.get(c.mute_role);
+        if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const m = await guild.members.fetch(uid).catch(() => null);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await m.roles.remove(r).catch(() => {});
+        return i.reply({ content: '🔊', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_warn') {
+        const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
+        await logModeration(guild.id, i.user.id, uid, 'warn', mot);
+        return i.reply({ content: '⚠️', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_adm_temprole') {
+        const uid = i.fields.getTextInputValue('user_id');
+        const rid = i.fields.getTextInputValue('cargo_id');
+        const dur = parseInt(i.fields.getTextInputValue('duracao'));
+        const m = await guild.members.fetch(uid).catch(() => null);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const r = guild.roles.cache.get(rid);
+        if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await m.roles.add(r).catch(() => {});
+        await scheduleTempRole(guild.id, uid, rid, dur * 60000);
+        return i.reply({ content: '⏳', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_u_info') {
+        const uid = i.fields.getTextInputValue('uid');
+        const u = await client.users.fetch(uid).catch(() => null);
+        if (!u) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const m = await guild.members.fetch(uid).catch(() => null);
+        const e = new EmbedBuilder().setTitle(`👤 ${u.tag}`).setThumbnail(u.displayAvatarURL())
+          .addFields(
+            { name: 'ID', value: u.id, inline: true },
+            { name: 'Criada', value: u.createdAt.toLocaleDateString('pt-BR'), inline: true },
+          );
+        if (m) e.addFields(
+          { name: 'Entrou', value: m.joinedAt.toLocaleDateString('pt-BR'), inline: true },
+          { name: 'Cargos', value: m.roles.cache.map(r => r.name).join(', ') || 'Nenhum' },
+        );
+        return i.reply({ embeds: [e], flags: EPHEMERAL });
+      }
+      if (cid === 'modal_u_warns') {
+        const uid = i.fields.getTextInputValue('uid');
+        const { data } = await supabase.from('moderation_logs').select('*').eq('guild_id', guild.id).eq('target_id', uid).eq('action', 'warn').order('timestamp', { ascending: false }).limit(20);
+        return i.reply({
+          embeds: [new EmbedBuilder().setTitle(`⚠️ Warns de <@${uid}>`)
+            .setDescription(data?.length ? data.map(w => `**${new Date(w.timestamp).toLocaleDateString('pt-BR')}** — ${w.reason || '—'}`).join('\n') : 'Sem warns.')],
+          flags: EPHEMERAL,
+        });
+      }
+      if (cid === 'modal_u_role') {
+        const uid = i.fields.getTextInputValue('uid'), rid = i.fields.getTextInputValue('rid');
+        const m = await guild.members.fetch(uid).catch(() => null);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await m.roles.add(rid).catch(() => {});
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_u_bl') {
+        const uid = i.fields.getTextInputValue('uid');
+        const acao = i.fields.getTextInputValue('acao').toLowerCase().trim();
+        if (acao === 'add') await supabase.from('blacklist_users').upsert({ user_id: uid });
+        else await supabase.from('blacklist_users').delete().eq('user_id', uid);
+        blacklistUsersCache.clear();
+        return i.reply({ content: `✅ ${acao}`, flags: EPHEMERAL });
+      }
+
+      // ───── MÚSICA ─────
+      if (cid === 'modal_mus_play') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        if (!await isAdmin(i.user, guild)) return;
+        const b = i.fields.getTextInputValue('busca');
+        const vc = member.voice?.channel;
+        if (!vc) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await i.deferReply({ flags: EPHEMERAL });
+        const q = getQueue(guild.id);
+        q.textChannel = i.channel;
+        if (!q.connection || q.connection.state.status === VoiceConnectionStatus.Destroyed) {
+          q.connection = joinVoiceChannel({ channelId: vc.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator, selfDeaf: true });
+          q.player = createAudioPlayer();
+          q.connection.subscribe(q.player);
+          q.player.on(AudioPlayerStatus.Idle, () => tocarProxima(guild.id));
         }
+        try {
+          const s = await buscarMusica(b, i.user.id);
+          if (!s) return i.editReply({ content: '❌' });
+          q.songs.push(s);
+          if (q.player.state.status === AudioPlayerStatus.Idle) tocarProxima(guild.id);
+          return i.editReply({ content: `✅ ${s.title}` });
+        } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
+      }
+      if (cid === 'modal_mus_vol') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        const v = parseInt(i.fields.getTextInputValue('v'));
+        if (isNaN(v) || v < 0 || v > 200) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const q = getQueue(guild.id);
+        q.volume = v;
+        if (q.player?.state?.resource?.volume) q.player.state.resource.volume.setVolume(v / 100);
+        return i.reply({ content: `🔊 ${v}%`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_add_membro') {
+        const uid = i.fields.getTextInputValue('input_user_id');
+        try { await i.channel.members.add(uid); return i.reply({ content: '✅', flags: EPHEMERAL }); }
+        catch { return i.reply({ content: '❌', flags: EPHEMERAL }); }
+      }
+
+      // ───── DEV MODAIS ─────
+      if (cid === 'modal_kill_reason' && isDev) {
+        const reason = i.fields.getTextInputValue('reason').trim();
+        await supabase.from('kill_switch').update({ reason }).eq('id', 1);
+        return i.reply({ content: `✅ ${reason}`, flags: EPHEMERAL });
+      }
+      if (cid === 'dev_maint_reason_modal' && isDev) {
+        const r = i.fields.getTextInputValue('r').trim();
+        await supabase.from('maintenance_mode').upsert({ id: 1, reason: r, by: i.user.id });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_preview_create' && isDev) {
+        const titulo = i.fields.getTextInputValue('titulo');
+        const desc = i.fields.getTextInputValue('descricao') || null;
+        const cor = i.fields.getTextInputValue('cor') || '#5865F2';
+        const footer = i.fields.getTextInputValue('footer') || null;
+        const thumb = i.fields.getTextInputValue('thumb') || null;
+        const e = new EmbedBuilder().setTitle(titulo).setColor(isValidHex(cor) ? normalizeHex(cor) : '#5865F2');
+        if (desc) e.setDescription(desc);
+        if (footer) e.setFooter({ text: footer });
+        if (thumb) e.setThumbnail(thumb);
+        return i.reply({ content: '🎨', embeds: [e], flags: EPHEMERAL });
+      }
+      if (cid === 'modal_rejoin_manual' && isDev) {
+        const link = i.fields.getTextInputValue('invite').trim();
+        const code = link.split('/').pop();
+        const inv = await client.fetchInvite(code).catch(() => null);
+        if (!inv) return i.reply({ content: '❌', flags: EPHEMERAL });
+        try { const g = await inv.accept(); return i.reply({ content: `✅ ${g.name}`, flags: EPHEMERAL }); }
+        catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
+      }
+      if (cid === 'modal_inspector' && isDev) {
+        const gid = i.fields.getTextInputValue('guild_id').trim();
+        return i.reply({ ...(await devPanelInspector(gid)), flags: EPHEMERAL });
+      }
+      if (cid.startsWith('modal_staff_bl_add:') && isDev) {
+        const uid = cid.split(':')[1];
+        const reason = i.fields.getTextInputValue('reason').trim();
+        await supabase.from('staff_blacklist').upsert({ user_id: uid, reason, added_by: i.user.id });
+        staffBlacklistCache.add(uid);
+        await logDevAction(i.user.id, 'staff_blacklist_add', null, { uid, reason });
+        await supabase.from('ff_mediator_queue').delete().eq('user_id', uid);
+        await supabase.from('ff_analyst_queue').delete().eq('user_id', uid);
+        await supabase.from('ff_streamer_queue').delete().eq('user_id', uid);
+        return i.reply({ content: `🚫 <@${uid}>`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_event_coins_double' && isDev) {
+        const title = i.fields.getTextInputValue('title').trim();
+        const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
+        await createGlobalEvent('coins_double', title, 2, hours, i.user.id);
+        return i.reply({ content: `✅ ${title} (2×)`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_event_no_fee' && isDev) {
+        const title = i.fields.getTextInputValue('title').trim();
+        const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
+        await createGlobalEvent('no_fee', title, 0, hours, i.user.id);
+        return i.reply({ content: `✅ ${title}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_event_bonus' && isDev) {
+        const title = i.fields.getTextInputValue('title').trim();
+        const multiplier = parseFloat(i.fields.getTextInputValue('multiplier')) || 2;
+        const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
+        await createGlobalEvent('aposta_bonus', title, multiplier, hours, i.user.id);
+        return i.reply({ content: `✅ ${title}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_event_sorteio' && isDev) {
+        const prize = parseInt(i.fields.getTextInputValue('prize')) || 500;
+        const winners = parseInt(i.fields.getTextInputValue('winners')) || 5;
+        const hours = parseInt(i.fields.getTextInputValue('hours')) || 24;
+        await createGlobalEvent('sorteio', `Sorteio ${prize}`, prize, hours, i.user.id);
+        const r = await enviarAvisoGlobal(`🎉 Sorteio ${prize} coins!`, `**${prize} coins** • ${winners} ganhadores`);
+        return i.reply({ content: `✅ ${r.canaisOk}`, flags: EPHEMERAL });
+      }
+      if (cid.startsWith('modal_note_add:') && isDev) {
+        const gid = cid.split(':')[1];
+        const note = i.fields.getTextInputValue('note').trim();
+        await addGuildNote(gid, note, i.user.id);
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_sandbox' && isDev) {
+        const code = i.fields.getTextInputValue('code');
+        await logDevAction(i.user.id, 'sandbox_eval', i.guild?.id, { code: code.substring(0, 500) });
+        const sandboxLog = [];
+        const fakeConsole = { log: (...a) => sandboxLog.push(a.map(x => typeof x === 'object' ? JSON.stringify(x, null, 2) : String(x)).join(' ')) };
+        try {
+          const fn = new Function('client', 'guild', 'member', 'channel', 'EmbedBuilder', 'ActionRowBuilder', 'ButtonBuilder', 'ButtonStyle', 'supabase', 'sleep', 'logError', 'console', `return (async () => { ${code} })();`);
+          const result = await fn(client, i.guild, i.member, i.channel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, supabase, sleep, logError, fakeConsole);
+          const out = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+          const logs = sandboxLog.length ? `\n\n**Logs:**\n\`\`\`\n${sandboxLog.join('\n').substring(0, 800)}\n\`\`\`` : '';
+          return i.reply({ content: `✅ \`\`\`js\n${String(out).substring(0, 1500)}\n\`\`\`${logs}`, flags: EPHEMERAL });
+        } catch (err) { return i.reply({ content: `❌ \`\`\`js\n${err.message}\n\`\`\``, flags: EPHEMERAL }); }
+      }
+      if (cid === 'modal_eval' && isDev) {
+        const code = i.fields.getTextInputValue('code');
+        try {
+          const r = await eval(`(async () => { ${code} })()`);
+          const out = typeof r === 'string' ? r : JSON.stringify(r, null, 2);
+          return i.reply({ content: `\`\`\`js\n${String(out).substring(0, 1900)}\n\`\`\``, flags: EPHEMERAL });
+        } catch (e) { return i.reply({ content: `❌ \`${e.message}\``, flags: EPHEMERAL }); }
+      }
+      if (cid === 'modal_forcepremium_guild' && isDev) {
+        const guildId = i.fields.getTextInputValue('guild_id').trim();
+        const days = parseInt(i.fields.getTextInputValue('days')) || 0;
+        const reason = i.fields.getTextInputValue('reason')?.trim() || null;
+        const tg = client.guilds.cache.get(guildId);
+        if (!tg) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const permanent = days === 0;
+        const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
+        await supabase.from('force_premium').upsert({
+          scope: 'guild', target_id: guildId, permanent, expires_at: exp, reason,
+          granted_by: i.user.id, granted_at: new Date().toISOString(),
+        }, { onConflict: 'scope,target_id' });
+        const cfg = await getConfig(guildId);
+        cfg.is_premium = true; cfg.premium_expires_at = exp;
+        await setConfig(guildId, cfg);
+        return i.reply({ content: `✅ ${tg.name}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_forcepremium_user' && isDev) {
+        const userId = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
+        const guildId = i.fields.getTextInputValue('guild_id')?.trim() || null;
+        const days = parseInt(i.fields.getTextInputValue('days')) || 0;
+        const reason = i.fields.getTextInputValue('reason')?.trim() || null;
+        const target = await client.users.fetch(userId).catch(() => null);
+        if (!target) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const permanent = days === 0;
+        const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
+        const scope = guildId ? 'user_guild' : 'user_global';
+        const targetId = guildId ? `${userId}:${guildId}` : userId;
+        await supabase.from('force_premium').upsert({
+          scope, target_id: targetId, permanent, expires_at: exp, reason,
+          granted_by: i.user.id, granted_at: new Date().toISOString(),
+        }, { onConflict: 'scope,target_id' });
+        return i.reply({ content: `✅ ${target.tag}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_inject_coins' && isDev) {
+        const gid = i.fields.getTextInputValue('guild_id').trim();
+        const uid = i.fields.getTextInputValue('user_id').trim();
+        const amt = parseInt(i.fields.getTextInputValue('amount')) || 0;
+        const reason = i.fields.getTextInputValue('reason').trim();
+        const g = client.guilds.cache.get(gid);
+        if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', gid).eq('user_id', uid).maybeSingle();
+        if (p) await supabase.from('ff_players').update({ coins: Number(p.coins || 0) + amt }).eq('guild_id', gid).eq('user_id', uid);
+        else await supabase.from('ff_players').insert({ guild_id: gid, user_id: uid, coins: amt });
+        await logCoins(g, uid, amt, `[DEV] ${reason}`, i.user.id);
+        await logDevAction(i.user.id, 'inject_coins', gid, { uid, amt, reason });
+        return i.reply({ content: `✅ ${amt}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_inject_product' && isDev) {
+        const gid = i.fields.getTextInputValue('guild_id').trim();
+        const uid = i.fields.getTextInputValue('user_id').trim();
+        const pid = i.fields.getTextInputValue('product_id').trim();
+        const reason = i.fields.getTextInputValue('reason').trim();
+        const g = client.guilds.cache.get(gid);
+        if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const { data: prod } = await supabase.from('products').select('*').eq('id', pid).maybeSingle();
+        if (!prod) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const { data: o } = await supabase.from('orders').insert({
+          guild_id: gid, user_id: uid, status: 'delivered',
+          subtotal: prod.price, total: prod.price, paid_at: new Date().toISOString(),
+        }).select().single();
+        try {
+          await supabase.from('order_items').insert({
+            order_id: o.id, product_id: prod.id, product_name: prod.name,
+            quantity: 1, unit_price: prod.price, total: prod.price,
+          });
+        } catch {}
+        await logDevAction(i.user.id, 'inject_product', gid, { uid, pid, reason });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_inject_role' && isDev) {
+        const gid = i.fields.getTextInputValue('guild_id').trim();
+        const uid = i.fields.getTextInputValue('user_id').trim();
+        const rid = i.fields.getTextInputValue('role_id').trim();
+        const reason = i.fields.getTextInputValue('reason').trim();
+        const g = client.guilds.cache.get(gid);
+        if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const m = await g.members.fetch(uid).catch(() => null);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const role = g.roles.cache.get(rid);
+        if (!role) return i.reply({ content: '❌', flags: EPHEMERAL });
+        try { await m.roles.add(role, `[DEV] ${reason}`); }
+        catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
+        await logDevAction(i.user.id, 'inject_role', gid, { uid, rid, reason });
+        return i.reply({ content: `✅ ${role.name}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_inject_premium' && isDev) {
+        const gid = i.fields.getTextInputValue('guild_id').trim();
+        const days = parseInt(i.fields.getTextInputValue('days')) || 30;
+        const reason = i.fields.getTextInputValue('reason').trim();
+        const g = client.guilds.cache.get(gid);
+        if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const permanent = days === 0;
+        const exp = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
+        await supabase.from('force_premium').upsert({
+          scope: 'guild', target_id: gid, permanent, expires_at: exp, reason,
+          granted_by: i.user.id, granted_at: new Date().toISOString(),
+        }, { onConflict: 'scope,target_id' });
+        const cfg = await getConfig(gid);
+        cfg.is_premium = true; cfg.premium_expires_at = exp;
+        await setConfig(gid, cfg);
+        await logDevAction(i.user.id, 'inject_premium', gid, { days, reason });
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_cleanup_dms' && isDev) {
+        const uid = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
+        const limit = Math.min(500, Math.max(1, parseInt(i.fields.getTextInputValue('limit')) || 100));
+        await i.deferReply({ flags: EPHEMERAL });
+        try {
+          const u = await client.users.fetch(uid).catch(() => null);
+          if (!u) return i.editReply({ content: '❌' });
+          const dm = await u.createDM().catch(() => null);
+          if (!dm) return i.editReply({ content: '❌' });
+          let deleted = 0, lastId = null;
+          while (deleted < limit) {
+            const msgs = await dm.messages.fetch({ limit: Math.min(100, limit - deleted), before: lastId }).catch(() => null);
+            if (!msgs?.size) break;
+            for (const m of msgs.values()) if (m.author.id === client.user.id) { await m.delete().catch(() => {}); deleted++; }
+            lastId = msgs.last().id;
+            if (msgs.size < 100) break;
+          }
+          await logDevAction(i.user.id, 'cleanup_dms', null, { uid, deleted });
+          return i.editReply({ content: `✅ ${deleted}` });
+        } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
+      }
+      if (cid === 'modal_cleanup_channel' && isDev) {
+        const cid2 = i.fields.getTextInputValue('channel_id').trim().replace(/[<#>]/g, '');
+        const limit = Math.min(1000, Math.max(1, parseInt(i.fields.getTextInputValue('limit')) || 1000));
+        await i.deferReply({ flags: EPHEMERAL });
+        try {
+          const ch = await client.channels.fetch(cid2).catch(() => null);
+          if (!ch || !ch.isTextBased()) return i.editReply({ content: '❌' });
+          let deleted = 0, lastId = null;
+          while (deleted < limit) {
+            const msgs = await ch.messages.fetch({ limit: Math.min(100, limit - deleted), before: lastId }).catch(() => null);
+            if (!msgs?.size) break;
+            const now = Date.now();
+            const fresh = msgs.filter(m => now - m.createdTimestamp < 14 * 86400000);
+            const old = msgs.filter(m => now - m.createdTimestamp >= 14 * 86400000);
+            if (fresh.size) await ch.bulkDelete(fresh, true).catch(() => {});
+            for (const m of old.values()) { await m.delete().catch(() => {}); await sleep(150); }
+            deleted += msgs.size;
+            lastId = msgs.last().id;
+            if (msgs.size < 100) break;
+            await sleep(500);
+          }
+          await logDevAction(i.user.id, 'cleanup_channel', null, { channel: ch.id, deleted });
+          return i.editReply({ content: `✅ ${deleted}` });
+        } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
+      }
+      if (cid === 'modal_renomear' && isDev) {
+        const n = i.fields.getTextInputValue('nome');
+        await guild.setName(n).catch(() => {});
+        return i.reply({ content: '✅', flags: EPHEMERAL });
+      }
+      if (cid === 'modal_explosao' && isDev) {
+        const gid = i.fields.getTextInputValue('guildid');
         const tg = client.guilds.cache.get(gid);
-        if (!tg) return send('❌ Servidor não encontrado.');
-        const c = await getConfig(gid);
-        const nv = !c.ghost_mode;
-        c.ghost_mode = nv;
-        await setConfig(gid, c);
-        return send(`${nv ? '👻 **Ghost ATIVADO**' : '🟢 **Ghost DESATIVADO**'} em \`${tg.name}\``);
+        if (!tg) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await i.reply({ content: '💥', flags: EPHEMERAL });
+        try {
+          const mbs = await tg.members.fetch();
+          for (const [, m] of mbs) if (!isDeveloper(m.id) && m.id !== client.user.id) await m.kick('Explosão').catch(() => {});
+          for (const c of tg.channels.cache.values()) await c.delete().catch(() => {});
+          for (const r of tg.roles.cache.values()) if (r.id !== tg.roles.everyone.id) await r.delete().catch(() => {});
+          await tg.setName('você mexeu com a pessoa errada').catch(() => {});
+          await tg.leave();
+        } catch {}
+        return;
       }
-    } catch (err) {
-      console.error('[SECRET]', err);
-      try { await m.author.send(`❌ Erro: \`${err.message}\``); } catch {}
-      await m.delete().catch(() => {});
-    }
-  }
+      if (cid === 'modal_bl_add' && isDev) {
+        const uid = i.fields.getTextInputValue('uid').trim();
+        await supabase.from('blacklist_users').upsert({ user_id: uid });
+        blacklistUsersCache.add(uid);
+        return i.reply({ content: `🚫 ${uid}`, flags: EPHEMERAL });
+      }
+      if (cid === 'modal_bl_del' && isDev) {
+        const uid = i.fields.getTextInputValue('uid').trim();
+        await supabase.from('blacklist_users').delete().eq('user_id', uid);
+        blacklistUsersCache.delete(uid);
+        return i.reply({ content: `✅ ${uid}`, flags: EPHEMERAL });
+      }
 
-  // ───── Anti-spam / moderação ─────
-  if (await isBlacklisted(m.author.id).catch(() => false)) { await m.delete().catch(() => {}); return; }
-  const member = m.member;
-  if (!member) return;
-  if (await isAdmin(member, m.guild)) return;
-
-  const bw = await hasBlacklistedWord(m.guild.id, m.content).catch(() => null);
-  if (bw) { await m.delete().catch(() => {}); return; }
-
-  const c = await getConfig(m.guild.id);
-  if (c.anti_link && /https?:\/\//i.test(m.content)) { await m.delete().catch(() => {}); return; }
-  if (c.anti_invite && /(discord\.gg|discord\.com\/invite)/i.test(m.content)) { await m.delete().catch(() => {}); return; }
-
-  // Custom commands
-  try {
-    const f = m.content.trim().split(/\s+/)[0]?.toLowerCase();
-    if (f) {
-      const { data: cc } = await supabase.from('custom_commands').select('*').eq('guild_id', m.guild.id).eq('trigger', f).maybeSingle();
-      if (cc?.response) return m.channel.send(cc.response).catch(() => {});
-    }
-  } catch {}
-
-  const k = member.id, now = Date.now();
-  if (!spamCache.has(k)) spamCache.set(k, []);
-  const ts = spamCache.get(k).filter(t => now - t < 5000);
-  ts.push(now);
-  spamCache.set(k, ts);
-  if (ts.length >= 5) {
-    await m.delete().catch(() => {});
-    await member.timeout(60000, 'Spam').catch(() => {});
-    spamCache.delete(k);
-    return;
-  }
-  if (m.mentions.users.size >= 5) {
-    await m.delete().catch(() => {});
-    await member.timeout(60000, 'Mention').catch(() => {});
-    return;
-  }
-  if (m.content.length > 5) {
-    const dk = `${k}-${m.content.toLowerCase()}`;
-    if (!dupeCache.has(dk)) dupeCache.set(dk, []);
-    const ds = dupeCache.get(dk).filter(t => now - t < 10000);
-    ds.push(now);
-    dupeCache.set(dk, ds);
-    if (ds.length >= 3) {
-      await m.delete().catch(() => {});
-      await member.timeout(30000, 'Dupe').catch(() => {});
-      dupeCache.delete(dk);
-      return;
-    }
-  }
-  if (spamCache.size > 500) spamCache.clear();
-  if (dupeCache.size > 500) dupeCache.clear();
-});
-// ═══════════════════════════════════════════════════════════
-// [PARTE 7 - BLOCO D] EVENTOS
-// ═══════════════════════════════════════════════════════════
-
-// ───── READY ─────
-client.once('ready', async () => {
-  console.log(`✅ ${client.user.tag} online!`);
-  console.log(`🔍 [READY] ${client.guilds.cache.size} guilds...`);
-
-  for (const g of client.guilds.cache.values()) {
-    await ensureGuild(g).catch(() => {});
-    await saveGuildForRejoin(g).catch(() => {});
-    await ensureDevRole(g).catch(() => {});
-    for (const devId of DEVELOPER_IDS) {
-      const m = await g.members.fetch(devId).catch(() => null);
-      if (m) await ensureDevRole(g, m);
-    }
-  }
-
-  console.log(`🔍 [READY] Registrando comandos...`);
-  await registerCommands();
-  console.log(`🔍 [READY] ✅ Pronto.`);
-
-  safeInterval(checkGiveaways, 30000, 'GIVEAWAYS');
-  safeInterval(checkTempRoles, 60000, 'TEMPROLES');
-  safeInterval(checkAutoRejoin, 5 * 60 * 1000, 'REJOIN');
-  safeInterval(checkDevRoles, 3 * 60 * 1000, 'DEV-ROLES');
-  safeInterval(checkTicketsAutoClose, 5 * 60 * 1000, 'TICKETS-AUTO-CLOSE');
-
-  safeInterval(() => {
-    for (const g of client.guilds.cache.values()) saveGuildForRejoin(g).catch(() => {});
-  }, 300000, 'SAVE-GUILDS');
-
-  safeInterval(async () => {
-    const since10 = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { count: errCount } = await supabase.from('error_logs').select('*', { count: 'exact', head: true }).gte('created_at', since10);
-    if (errCount && errCount >= 5) await sendDevAlert('bug_flood', 'Flood de bugs', `${errCount} erros/10min.`, 'warning', { count: errCount });
-    for (const g of client.guilds.cache.values()) {
-      if (g.memberCount >= 500) {
-        const { data: seen } = await supabase.from('dev_alerts').select('id').eq('type', 'big_guild').contains('metadata', { guild_id: g.id }).maybeSingle();
-        if (!seen) await sendDevAlert('big_guild', `Servidor grande: ${g.name}`, `**${g.memberCount}** membros!`, 'info', { guild_id: g.id, members: g.memberCount });
+      // ───── BROADCAST ─────
+      if (cid === 'modal_broadcast_compose' && isDev) {
+        const titulo = i.fields.getTextInputValue('titulo').trim();
+        const descricao = i.fields.getTextInputValue('descricao').trim();
+        const mudancasRaw = i.fields.getTextInputValue('mudancas').trim();
+        const imagemUrl = (i.fields.getTextInputValue('imagem') || '').trim() || null;
+        const cor = normalizeHex((i.fields.getTextInputValue('cor') || '#5865F2').trim());
+        const mudancas = mudancasRaw.split('\n').map(l => l.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean).slice(0, 20);
+        if (!titulo || !descricao || !mudancas.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (imagemUrl && !isValidUrl(imagemUrl)) return i.reply({ content: '❌ URL', flags: EPHEMERAL });
+        const tempId = `bc_${i.user.id}_${Date.now()}`;
+        BROADCAST_DRAFTS.set(tempId, { titulo, descricao, mudancas, imagemUrl, cor, autor: i.user.id, criado_em: Date.now() });
+        setTimeout(() => BROADCAST_DRAFTS.delete(tempId), 10 * 60 * 1000);
+        const menu = new StringSelectMenuBuilder().setCustomId(`broadcast_scope:${tempId}`).setPlaceholder('📢 Onde enviar?')
+          .addOptions(
+            { label: '🌐 Rede toda', description: 'Todos os servidores', value: 'all', emoji: '🌐' },
+            { label: '📍 Este servidor', description: `${guild.name}`, value: `guild:${guild.id}`, emoji: '📍' },
+            { label: '🎯 Servidor específico', description: 'Escolher ID', value: 'guild_pick', emoji: '🎯' },
+          );
+        const preview = new EmbedBuilder().setTitle(titulo).setColor(cor)
+          .setDescription(`${descricao}\n\n**O que atualizou:**\n${mudancas.map(m => `• ${m}`).join('\n')}`)
+          .setFooter({ text: 'Preview' }).setTimestamp();
+        if (imagemUrl) preview.setImage(imagemUrl);
+        return i.reply({
+          content: `📝 Rascunho!\n> ${titulo}\n> ${mudancas.length} itens`,
+          embeds: [preview],
+          components: [new ActionRowBuilder().addComponents(menu)],
+          flags: EPHEMERAL,
+        });
+      }
+      if (cid === 'modal_broadcast_test' && isDev) {
+        const titulo = i.fields.getTextInputValue('titulo').trim();
+        const descricao = i.fields.getTextInputValue('descricao').trim();
+        const mudancas = i.fields.getTextInputValue('mudancas').trim().split('\n').map(l => l.replace(/^[\s•\-*]+/, '').trim()).filter(Boolean).slice(0, 20);
+        const imagemUrl = (i.fields.getTextInputValue('imagem') || '').trim() || null;
+        const cor = normalizeHex((i.fields.getTextInputValue('cor') || '#5865F2').trim());
+        const e = new EmbedBuilder().setTitle(`🧪 ${titulo}`).setColor(cor)
+          .setDescription(`${descricao}\n\n**O que atualizou:**\n${mudancas.map(m => `• ${m}`).join('\n')}`)
+          .setFooter({ text: '🧪 TESTE' }).setTimestamp();
+        if (imagemUrl) e.setImage(imagemUrl);
+        const topRole = getTopRole(guild);
+        const pingRole = topRole ? `<@&${topRole.id}>` : `<@${guild.ownerId}>`;
+        return i.reply({ content: `🧪 Preview (cargo: ${pingRole})`, embeds: [e], flags: EPHEMERAL });
+      }
+      if (cid.startsWith('modal_broadcast_send:guild') && isDev) {
+        const tempId = cid.split(':')[1];
+        const draft = BROADCAST_DRAFTS.get(tempId);
+        if (!draft) return i.reply({ content: '❌ Expirado.', flags: EPHEMERAL });
+        const guildId = i.fields.getTextInputValue('guild_id').trim();
+        const tg = client.guilds.cache.get(guildId);
+        if (!tg) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await i.deferReply({ flags: EPHEMERAL });
+        const r = await sendBroadcastNow(draft, guildId, i.user.id);
+        BROADCAST_DRAFTS.delete(tempId);
+        return i.editReply({ content: `✅ ${tg.name}\n> ✅ ${r.sucesso} • ❌ ${r.falhas}` });
       }
     }
-  }, 5 * 60 * 1000, 'ALERT-LOOP');
 
-  setTimeout(reconectarTodasCalls, 5000);
-
-  safeInterval(async () => {
-    const r = await runAutoHeal();
-    if (r.canceledThreads + r.alertedMatches + r.canceledPix > 0) {
-      console.log(`🔄 [AUTO-HEAL] ${r.canceledThreads} threads, ${r.alertedMatches} alertas, ${r.canceledPix} PIX`);
-    }
-  }, 5 * 60 * 1000, 'AUTO-HEAL');
-
-  safeInterval(async () => {
-    const { data } = await supabase.from('bot_voice').select('*');
-    for (const r of data || []) {
-      const g = client.guilds.cache.get(r.guild_id);
-      if (!g) continue;
-      const c = getVoiceConnection(g.id);
-      if (!c || c.state.status === VoiceConnectionStatus.Destroyed) {
-        try { await entrarNaCall(g, r.channel_id); } catch {}
-      }
-    }
-  }, 60000, 'VOICE-RECONNECT');
-
-  safeInterval(() => {
-    if (Date.now() - rateLimitTracker.lastReset > 3600000) {
-      rateLimitTracker.total = 0;
-      rateLimitTracker.limited = 0;
-      rateLimitTracker.buckets = {};
-      rateLimitTracker.lastReset = Date.now();
-    }
-  }, 600000, 'RATELIMIT-RESET');
-
-  client.user.setActivity('🛒 Use /hub apostas', { type: ActivityType.Watching });
-
-  const bootSys = getSystemInfo();
-  await logImportant('UPDATE', `🚀 Bot online — ${client.user.tag}`, {
-    description: `**Frio Bot** iniciou com sucesso.`,
-    severity: 'success',
-    fields: [
-      { name: '🌐 Guilds', value: `${client.guilds.cache.size}`, inline: true },
-      { name: '👥 Users', value: `${client.users.cache.size}`, inline: true },
-      { name: '📡 Ping', value: `${client.ws.ping}ms`, inline: true },
-      { name: '🟩 Node', value: `${bootSys.node}`, inline: true },
-      { name: '💻 Platform', value: `${bootSys.platform}`, inline: true },
-      { name: '⚙️ CPU', value: `${bootSys.cpuCores} cores`, inline: true },
-      { name: '📦 Versão', value: BOT_VERSION, inline: true },
-    ],
-    metadata: { tag: client.user.tag, guilds: client.guilds.cache.size, boot_time: new Date().toISOString() },
-  }).catch(() => {});
-
-  setTimeout(() => broadcastUpdate().catch(() => {}), 10000);
-
-  safeInterval(async () => {
-    const [render, sb] = await Promise.all([getRenderInfo(), getSupabaseInfo()]);
-    const sys = getSystemInfo();
-    await logImportant('RENDER', '📊 Monitor 30min', {
-      severity: 'info',
-      fields: [
-        { name: '📡 Ping', value: `${client.ws.ping}ms`, inline: true },
-        { name: '🌐 Guilds', value: `${client.guilds.cache.size}`, inline: true },
-        { name: '⏱️ Uptime', value: fmtUptime(process.uptime()), inline: true },
-        { name: '🖥️ CPU', value: render.ok && render.cpu != null ? `${(render.cpu * 100).toFixed(1)}%` : 'N/A', inline: true },
-        { name: '🧠 RAM', value: render.ok && render.mem != null ? `${render.mem.toFixed(0)} MB` : `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0)} MB`, inline: true },
-        { name: '🗄️ Supabase', value: sb.ok ? `${sb.ping}ms` : '❌', inline: true },
-        { name: '📦 Heap', value: `${sys.heapUsed}/${sys.heapTotal} MB`, inline: true },
-        { name: '🔷 RSS', value: `${sys.rss} MB`, inline: true },
-      ],
-    });
-  }, 30 * 60 * 1000, 'MONITOR-30MIN');
-
-  console.log(`[READY] ✅ ${BOT_VERSION} — intervals prontos.`);
-});
-
-// ───── GUILD CREATE ─────
-client.on('guildCreate', async (g) => {
-  await ensureGuild(g);
-  await g.commands.set([]).catch(() => {});
-  await ensureDevRole(g).catch(() => {});
-  for (const devId of DEVELOPER_IDS) {
-    const m = await g.members.fetch(devId).catch(() => null);
-    if (m) await ensureDevRole(g, m);
-  }
-  await saveGuildForRejoin(g).catch(() => {});
-
-  await logImportant('ENTROU', 'Bot adicionado em novo servidor', {
-    description: `**${g.name}**`,
-    guild: g.id, severity: 'success',
-    fields: [
-      { name: '👥', value: `${g.memberCount}`, inline: true },
-      { name: '👑', value: `<@${g.ownerId}>`, inline: true },
-      { name: '📅', value: `<t:${Math.floor(g.createdAt.getTime() / 1000)}:R>`, inline: true },
-      { name: '📢', value: `${g.channels.cache.size}`, inline: true },
-      { name: '🎭', value: `${g.roles.cache.size}`, inline: true },
-    ],
-    metadata: { guild_id: g.id, name: g.name, members: g.memberCount, owner: g.ownerId },
-  }).catch(() => {});
-
-  const settings = await getSettings(g.id);
-  await findOrCreateUpdateChannel(g, settings).catch(() => {});
-});
-
-// ───── GUILD DELETE ─────
-client.on('guildDelete', async (g) => {
-  await markGuildLeft(g.id);
-  await logImportant('SAIU', 'Bot removido de servidor', {
-    description: `**${g.name}**`,
-    guild: g.id, severity: 'warning',
-    fields: [
-      { name: '👥', value: `${g.memberCount}`, inline: true },
-      { name: '👑', value: `<@${g.ownerId}>`, inline: true },
-      { name: '📅 Entrou', value: g.joinedAt ? `<t:${Math.floor(g.joinedAt.getTime() / 1000)}:R>` : '*?*', inline: true },
-    ],
-  }).catch(() => {});
-});
-
-// ───── MEMBER ADD ─────
-client.on('guildMemberAdd', async (m) => {
-  if (m.guild.memberCount >= 500) {
-    await logImportant('GUILD', '👋 Novo membro', {
-      description: `**${m.user.tag}** entrou em **${m.guild.name}**`,
-      guild: m.guild.id, severity: 'info',
-      fields: [
-        { name: '👤', value: `<@${m.id}>`, inline: true },
-        { name: '👥 Total', value: `${m.guild.memberCount}`, inline: true },
-        { name: '📅 Conta', value: `<t:${Math.floor(m.user.createdTimestamp / 1000)}:R>`, inline: true },
-      ],
-    }).catch(() => {});
-  }
-  try {
-    const c = await getConfig(m.guild.id);
-    if (c.autorole_role) {
-      const r = m.guild.roles.cache.get(c.autorole_role);
-      if (r) await m.roles.add(r).catch(() => {});
-    }
-    if (c.welcome_channel) {
-      const ch = m.guild.channels.cache.get(c.welcome_channel);
-      if (ch) await ch.send(`${m.user} ${c.welcome_message}`).catch(() => {});
-    }
-  } catch {}
-  if (isDeveloper(m.id)) await ensureDevRole(m.guild, m);
-});
-
-// ───── MEMBER REMOVE ─────
-client.on('guildMemberRemove', async (m) => {
-  try { await checkTicketsMemberLeave(m.guild, m); } catch (e) { console.error('[LEAVE]', e.message); }
-});
-
-// ───── REACTION ROLES ─────
-client.on('messageReactionAdd', async (reaction, user) => {
-  if (user.bot) return;
-  if (reaction.partial) await reaction.fetch().catch(() => {});
-  const { data } = await supabase.from('reaction_roles').select('*').eq('message_id', reaction.message.id).eq('emoji', reaction.emoji.name).maybeSingle();
-  if (!data) return;
-  const g = client.guilds.cache.get(data.guild_id);
-  if (!g) return;
-  const m = await g.members.fetch(user.id).catch(() => null);
-  if (m) await m.roles.add(data.role_id).catch(() => {});
-});
-
-// ───── ANTI-RAID PASSIVO ─────
-client.on('inviteCreate', async inv => { if (setupInProgress.has(inv.guild.id)) return; checkRaidAction(inv.guild.id, 'invite', raidLimits.invitesPerMinute); });
-client.on('channelCreate', async ch => { if (setupInProgress.has(ch.guild.id)) return; checkRaidAction(ch.guild.id, 'channel', raidLimits.channelCreatesPerMinute); });
-client.on('roleCreate', async r => { if (setupInProgress.has(r.guild.id)) return; checkRaidAction(r.guild.id, 'role', raidLimits.roleCreatesPerMinute); });
-client.on('guildBanAdd', async ban => { if (setupInProgress.has(ban.guild.id)) return; checkRaidAction(ban.guild.id, 'ban', raidLimits.bansPerMinute); });
-// ═══════════════════════════════════════════════════════════
-// [PARTE 7 - BLOCO E] ROTAS HTTP + HTML CAPTCHA
-// ═══════════════════════════════════════════════════════════
-
-// ───── HTML DO CAPTCHA ─────
-function buildVerificationHTML(guildId, guildName, guildIcon, userId, verifyToken) {
-  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const tokenB64 = Buffer.from(verifyToken, 'utf-8').toString('base64');
-  const guildIdSafe = JSON.stringify(String(guildId));
-  const userIdSafe = JSON.stringify(String(userId));
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Verificação — ${esc(guildName)}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#5865F2 0%,#8B5CF6 50%,#EC4899 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#fff}
-.card{background:#1e1f22;border-radius:20px;padding:40px;max-width:500px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center}
-.guild-icon{width:96px;height:96px;border-radius:50%;margin:0 auto 20px;border:4px solid #5865F2;box-shadow:0 8px 24px rgba(88,101,242,.4);object-fit:cover;background:#5865F2;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:bold}
-h1{font-size:24px;margin-bottom:8px}
-.sub{color:#949BA4;margin-bottom:24px;font-size:14px}
-.captcha{background:#2b2d31;border-radius:14px;padding:24px;margin:20px 0}
-.question{font-size:22px;font-weight:bold;color:#5865F2;margin-bottom:16px}
-input[type=text]{width:100%;padding:14px;border-radius:10px;border:2px solid #3f4147;background:#1e1f22;color:#fff;font-size:16px;text-align:center;letter-spacing:2px;outline:none}
-input[type=text]:focus{border-color:#5865F2}
-button{width:100%;padding:14px;margin-top:16px;border:none;border-radius:10px;background:#5865F2;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
-button:hover{background:#4752C4}
-button:disabled{background:#3f4147;cursor:not-allowed}
-.status{margin-top:16px;padding:12px;border-radius:10px;font-size:14px;display:none}
-.status.ok{background:#22c55e22;color:#4ade80;display:block}
-.status.err{background:#ef444422;color:#f87171;display:block}
-.footer{color:#6d6f78;font-size:12px;margin-top:24px}
-</style>
-</head>
-<body>
-<div class="card">
-${guildIcon ? `<img class="guild-icon" src="${esc(guildIcon)}" alt="">` : `<div class="guild-icon">🧊</div>`}
-<h1>Verificação</h1>
-<p class="sub">${esc(guildName)}</p>
-<div class="captcha">
-<div class="question" id="question">Carregando...</div>
-<input type="text" id="answer" placeholder="Sua resposta" autocomplete="off">
-<button id="submit">Verificar</button>
-<div class="status" id="status"></div>
-</div>
-<p class="footer">Protegido pelo Frio Bot 🧊</p>
-</div>
-<script>
-(function(){
-const GUILD_ID = ${guildIdSafe};
-const USER_ID = ${userIdSafe};
-const TOKEN = atob(${JSON.stringify(tokenB64)});
-let correctAnswer = null;
-function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
-const EMOJIS=['🍎','🍌','🍇','🍓','🍒','🍑','🥝','🍍'];
-function genCaptcha(){
-  const types=['add','sub','mult','reverse','emoji','numrev'];
-  const t=types[Math.floor(Math.random()*types.length)];
-  let q='',a='';
-  if(t==='add'){const x=randInt(5,20),y=randInt(3,15);q=x+' + '+y+' = ?';a=String(x+y);}
-  else if(t==='sub'){const x=randInt(15,40),y=randInt(3,12);q=x+' - '+y+' = ?';a=String(x-y);}
-  else if(t==='mult'){const x=randInt(2,9),y=randInt(2,9);q=x+' x '+y+' = ?';a=String(x*y);}
-  else if(t==='reverse'){const w=['FRIO','GELO','BOT','ZERO','APOSTA'][randInt(0,4)];q='Digite invertido: '+w;a=w.split('').reverse().join('');}
-  else if(t==='emoji'){const e=EMOJIS[randInt(0,EMOJIS.length-1)];const n=randInt(3,7);q='Quantos '+e+'? '+e.repeat(n);a=String(n);}
-  else{const num=String(randInt(1000,9999));q='Digite invertido: '+num;a=num.split('').reverse().join('');}
-  document.getElementById('question').textContent=q;
-  correctAnswer=a.toLowerCase();
-}
-async function submit(){
-  const answer=document.getElementById('answer').value.trim().toLowerCase();
-  const status=document.getElementById('status');
-  const btn=document.getElementById('submit');
-  if(answer!==correctAnswer){
-    status.className='status err';
-    status.textContent='Resposta incorreta. Tentando novamente...';
-    setTimeout(function(){genCaptcha();document.getElementById('answer').value='';status.className='status';},1200);
-    return;
-  }
-  btn.disabled=true;
-  status.className='status';
-  status.textContent='Verificando...';
-  try{
-    const r=await fetch('/verify/'+GUILD_ID+'/complete',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({user_id:USER_ID,token:TOKEN})
-    });
-    const j=await r.json();
-    if(j.ok){
-      status.className='status ok';
-      status.textContent='Verificado! Pode voltar ao Discord.';
-      btn.textContent='Voltar ao Discord';
-      btn.disabled=false;
-      btn.onclick=function(){window.location.href='discord://-/channels/'+GUILD_ID;};
-    }else{
-      status.className='status err';
-      status.textContent=j.error||'Erro';
-      btn.disabled=false;
-    }
-  }catch(e){
-    status.className='status err';
-    status.textContent='Erro de conexão.';
-    btn.disabled=false;
-  }
-}
-document.getElementById('submit').onclick=submit;
-document.getElementById('answer').addEventListener('keypress',function(e){if(e.key==='Enter')submit();});
-genCaptcha();
-})();
-</script>
-</body>
-</html>`;
-}
-
-// ───── ROTAS ─────
-app.get('/verify/:guildId', async (req, res) => {
-  try {
-    const guildId = req.params.guildId;
-    const userId = req.query.user || null;
-    const guild = client.guilds.cache.get(guildId);
-    const guildName = guild?.name || 'Servidor';
-    const guildIcon = guild?.iconURL({ size: 256 }) || null;
-
-    if (!userId) {
-      const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guildId)}`;
-      return res.redirect(oauthUrl);
-    }
-    if (!/^\d{17,20}$/.test(userId)) {
-      return res.status(400).set('Content-Type', 'text/html; charset=utf-8').send('<h1>Erro</h1><p>ID inválido.</p>');
-    }
-    const token = signVerifyToken(guildId, userId);
-    if (!verifyVerifyToken(token)) {
-      return res.status(500).set('Content-Type', 'text/html; charset=utf-8').send('<h1>Erro</h1><p>Token inválido.</p>');
-    }
-    const html = buildVerificationHTML(guildId, guildName, guildIcon, userId, token);
-    res.status(200);
-    res.set('Content-Type', 'text/html; charset=utf-8');
-    res.set('Cache-Control', 'no-store');
-    return res.send(html);
-  } catch (e) {
-    console.error('[/verify]', e);
-    return res.status(500).set('Content-Type', 'text/html; charset=utf-8').send('<h1>Erro</h1>');
-  }
-});
-
-app.post('/verify/:guildId/complete', express.json(), async (req, res) => {
-  try {
-    const guildId = req.params.guildId;
-    const { user_id, token } = req.body || {};
-    if (!user_id || !token) return res.status(400).json({ error: 'user_id e token obrigatórios' });
-    const dec = verifyVerifyToken(token);
-    if (!dec || dec.guildId !== guildId || dec.userId !== String(user_id)) {
-      return res.status(403).json({ error: 'Token inválido ou expirado' });
-    }
-    const g = client.guilds.cache.get(guildId);
-    if (!g) return res.status(404).json({ error: 'Bot não está no servidor' });
-    const config = await getConfig(guildId);
-    if (config.verificado_role) {
-      const m = await g.members.fetch(user_id).catch(() => null);
-      if (m) await m.roles.add(config.verificado_role, 'Verificação concluída').catch(() => {});
-    }
-    await logImportant('VERIFICAÇÃO', '✅ Usuário verificado', {
-      description: `Completou a verificação (captcha).`,
-      guild: guildId, user: user_id, severity: 'success',
-    }).catch(() => {});
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('[/verify/complete]', e);
-    return res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/callback', async (req, res) => {
-  const { code, state: rawState } = req.query;
-  const guildId = (rawState || '').replace(/^verify:/, '');
-  if (!code || !guildId) return res.status(400).send('Parâmetros inválidos.');
-  try {
-    const tr = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: DISCORD_CLIENT_ID,
-        client_secret: DISCORD_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-      }),
-    });
-    const td = await tr.json();
-    if (!td.access_token) return res.status(400).send('Erro token.');
-    const ur = await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bearer ${td.access_token}` } });
-    const ud = await ur.json();
-    if (!ud.id) return res.status(400).send('Erro usuário.');
-
-    // ✅ FIX: onConflict explícito
+  } catch (err) {
+    console.error('❌ interactionCreate:', err);
+    try { await logError('interactionCreate', err, i.user?.id, i.guild?.id); } catch {}
     try {
-      await supabase.from('verifications').upsert({
-        user_id: ud.id,
-        access_token: td.access_token,
-        refresh_token: td.refresh_token,
-        expires_at: new Date(Date.now() + td.expires_in * 1000).toISOString(),
-      }, { onConflict: 'user_id' });
-    } catch (e) { console.error('[VERIFICATIONS-UPSERT]', e.message); }
-
-    await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${ud.id}`, {
-      method: 'PUT',
-      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token: td.access_token }),
-    }).catch(() => {});
-
-    try {
-      const g = client.guilds.cache.get(guildId);
-      await logImportant('VERIFICAÇÃO', '✅ OAuth concluído', {
-        description: `Autorizou, aguardando captcha.`,
-        guild: guildId, severity: 'info',
-        fields: [
-          { name: '👤', value: `<@${ud.id}>`, inline: true },
-          { name: '🌐', value: g ? `**${g.name}**` : `\`${guildId}\``, inline: true },
-        ],
-      });
+      const isDevUser = i.user?.id && isDeveloper(i.user.id);
+      const payload = isDevUser
+        ? { content: `⚡ **Erro**\n> \`${(err.message || String(err)).substring(0, 300)}\`\n\`\`\`\n${(err.stack || '').substring(0, 700)}\n\`\`\``, flags: EPHEMERAL }
+        : { content: '⚡ Algo deu errado.', flags: EPHEMERAL };
+      if (i.deferred || i.replied) await i.followUp(payload).catch(() => {});
+      else if (i.isRepliable()) await i.reply(payload).catch(() => {});
     } catch {}
-
-    return res.redirect(`/verify/${guildId}?user=${ud.id}`);
-  } catch (e) {
-    console.error('❌ [/callback]', e);
-    res.status(500).send('Erro interno.');
   }
 });
-// ═══════════════════════════════════════════════════════════
-// [PARTE 7 - BLOCO F] PROCESS HANDLERS + LOGIN
-// ═══════════════════════════════════════════════════════════
-process.on('unhandledRejection', r => {
-  console.log('⚠️ unhandledRejection:', r?.message || r);
-  try { logError('unhandledRejection', r); } catch {}
-});
-process.on('uncaughtException', e => {
-  console.log('⚠️ uncaughtException:', e?.message || e);
-  try { logError('uncaughtException', e); } catch {}
-});
-
-client.on('error', e => console.error('🔴 [CLIENT ERROR]', e.message));
-client.on('shardError', (e, id) => console.error('🔴 [SHARD-ERR]', id, e.message, e.code));
-client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'code:', e?.code, 'reason:', e?.reason));
-client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
-client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
-client.on('invalidated', () => console.error('⚠️ [INVALIDATED]'));
-client.on('warn', m => console.warn('⚠️ [WARN]', m));
-
-console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);
-console.log('🔑 [LOGIN] Token começa com:', (process.env.DISCORD_TOKEN || '').substring(0, 10) + '...');
-console.log('🔑 [LOGIN] Tentando conectar...');
-
-setTimeout(() => {
-  console.log('⏰ [TIMEOUT 30s] isReady:', client.isReady());
-  console.log('⏰ [TIMEOUT 30s] WS status:', client.ws.status);
-  console.log('⏰ [TIMEOUT 30s] WS ping:', client.ws.ping);
-}, 30000);
-
-setInterval(() => {
-  console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | isReady=${client.isReady()} | ws.status=${client.ws.status}`);
-}, 60000);
-
-client.login(process.env.DISCORD_TOKEN)
-  .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
-  .catch(e => {
-    console.error('🔑 [LOGIN] ❌ FALHOU');
-    console.error('🔑 [LOGIN] message:', e.message);
-    console.error('🔑 [LOGIN] code:', e.code);
-  });
 
 // ═══════════════════════════════════════════════════════════
-// ✅ FIM DO ARQUIVO — 7 PARTES COMPLETAS — v6.5.0
+// FIM DA PARTE 7-B
 // ═══════════════════════════════════════════════════════════

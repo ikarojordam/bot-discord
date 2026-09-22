@@ -10899,19 +10899,7 @@ if (i.isModalSubmit()) {
     BROADCAST_DRAFTS.delete(tempId);
     return i.editReply({ content: `✅ ${tg.name}\n> ✅ ${r.sucesso} • ❌ ${r.falhas}` });
   }
-    } catch (err) {
-    console.error('❌ interactionCreate:', err);
-    try { await logError('interactionCreate', err, i.user?.id, i.guild?.id); } catch {}
-    try {
-      const isDevUser = i.user?.id && isDeveloper(i.user.id);
-      const payload = isDevUser
-        ? { content: `⚡ **Erro**\n> \`${(err.message || String(err)).substring(0, 300)}\`\n\`\`\`\n${(err.stack || '').substring(0, 700)}\n\`\`\``, flags: EPHEMERAL }
-        : { content: '⚡ Algo deu errado.', flags: EPHEMERAL };
-      if (i.deferred || i.replied) await i.followUp(payload).catch(() => {});
-      else if (i.isRepliable()) await i.reply(payload).catch(() => {});
-    } catch {}
-  }
-});
+    
                                                 }
 // ═══════════════════════════════════════════════════════════
 // [PARTE 7 - BLOCO C] MESSAGE CREATE

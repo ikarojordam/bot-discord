@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frio Panel — Login</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="auth-page">
+<div class="auth-card">
+  <div class="logo">🧊</div>
+  <h1>Frio Panel</h1>
+  <p class="sub">Acesso restrito à equipe</p>
+
+  <form id="loginForm">
+    <div class="field">
+      <label>E-mail</label>
+      <input type="email" id="email" required autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="password" required autocomplete="current-password">
+    </div>
+    <button type="submit" id="btnLogin">Entrar</button>
+  </form>
+
+  <div class="links">
+    <a href="#" id="linkForgot">Esqueci minha senha</a>
+  </div>
+
+  <div class="divider">ou</div>
+
+  <div class="register-block">
+    <p>Primeira vez aqui?</p>
+    <button id="btnRegister" class="btn-secondary">Criar conta</button>
+  </div>
+
+  <div id="msg" class="msg"></div>
+</div>
+
+<div id="modalForgot" class="modal" style="display:none">
+  <div class="modal-content">
+    <h2>Recuperar senha</h2>
+    <p>Enviaremos um link de recuperação pro seu e-mail.</p>
+    <div class="field">
+      <label>E-mail</label>
+      <input type="email" id="forgotEmail">
+    </div>
+    <div class="modal-actions">
+      <button id="btnCancelForgot" class="btn-secondary">Cancelar</button>
+      <button id="btnSendForgot">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/app.js"></script>
+</body>
+</html>

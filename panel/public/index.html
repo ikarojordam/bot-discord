@@ -3,141 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Frio Panel — Gerenciador de Keys</title>
+<title>Frio Panel</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#0f1115;color:#e8eaed;min-height:100vh}
-a{color:#5865F2;text-decoration:none}a:hover{text-decoration:underline}
-
-/* ═══ Auth pages ═══ */
-.auth-page{display:flex;align-items:center;justify-content:center;padding:20px;min-height:100vh;background:linear-gradient(135deg,#5865F2 0%,#8B5CF6 50%,#EC4899 100%)}
-.auth-card{background:#1e1f22;border-radius:20px;padding:40px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-.auth-card .logo{font-size:56px;text-align:center;margin-bottom:16px;animation:float 3s ease-in-out infinite}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.auth-card h1{text-align:center;margin-bottom:8px;font-size:26px;background:linear-gradient(135deg,#5865F2,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.auth-card .sub{text-align:center;color:#949BA4;margin-bottom:32px;font-size:14px}
-
-.field{margin-bottom:16px}
-.field label{display:block;font-size:13px;color:#b5bac1;margin-bottom:6px;font-weight:500}
-.field input,.field select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #3f4147;background:#2b2d31;color:#fff;font-size:15px;outline:none;transition:all .2s}
-.field input:focus,.field select:focus{border-color:#5865F2;box-shadow:0 0 0 3px rgba(88,101,242,.15)}
-.field.checkbox label{display:flex;align-items:center;gap:8px;cursor:pointer;color:#b5bac1}
-.field.checkbox input{width:auto}
-
-.btn{padding:12px 20px;border-radius:10px;border:none;background:#5865F2;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
-.btn:hover{background:#4752C4;transform:translateY(-1px)}
-.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
-.btn-secondary{background:#2b2d31;border:1px solid #3f4147}
-.btn-secondary:hover{background:#36393f}
-.btn-ghost{background:transparent;padding:8px 14px;font-size:14px}
-.btn-ghost:hover{background:rgba(255,255,255,.08);transform:none}
-.btn-danger{background:#ED4245}.btn-danger:hover{background:#c73a3d}
-.btn-success{background:#22c55e}.btn-success:hover{background:#1ea34d}
-.btn-block{width:100%;margin-top:8px}
-
-.links{text-align:center;margin-top:16px;font-size:13px}
-.divider{text-align:center;color:#6d6f78;font-size:12px;margin:24px 0;position:relative}
-.divider::before,.divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:#3f4147}
-.divider::before{left:0}.divider::after{right:0}
-.register-block{text-align:center}
-.register-block p{font-size:13px;color:#949BA4;margin-bottom:8px}
-
-.msg{margin-top:16px;padding:12px 16px;border-radius:10px;font-size:14px;display:none;border-left:3px solid}
-.msg.error{background:#ef444415;color:#f87171;border-color:#ef4444;display:block}
-.msg.ok{background:#22c55e15;color:#4ade80;border-color:#22c55e;display:block}
-.msg.info{background:#5865F215;color:#a5b4fc;border-color:#5865F2;display:block}
-
-/* ═══ Modal ═══ */
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:20px;z-index:100;backdrop-filter:blur(4px)}
-.modal.active{display:flex}
-.modal-content{background:#1e1f22;border-radius:16px;padding:32px;max-width:420px;width:100%;animation:slideUp .2s ease}
-@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
-.modal-content h2{margin-bottom:8px}
-.modal-content p{color:#949BA4;font-size:14px;margin-bottom:20px}
-.modal-actions{display:flex;gap:8px;margin-top:20px}
-.modal-actions button{flex:1}
-
-/* ═══ Dashboard ═══ */
-.dashboard{display:none;min-height:100vh}
-.dashboard.active{display:block}
-
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;background:#1e1f22;border-bottom:1px solid #2b2d31;position:sticky;top:0;z-index:50}
-.topbar-left{display:flex;align-items:center;gap:12px}
-.topbar-right{display:flex;align-items:center;gap:16px}
-.logo-sm{font-size:24px}
-.user-badge{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#2b2d31;border-radius:20px;font-size:13px}
-.user-badge .dot{width:8px;height:8px;border-radius:50%;background:#22c55e}
-.user-email{color:#949BA4;font-size:13px}
-
-.tabs{display:flex;gap:4px;padding:16px 24px 0;border-bottom:1px solid #2b2d31;overflow-x:auto;background:#0f1115}
-.tab{background:transparent;color:#949BA4;border:none;padding:12px 20px;border-radius:8px 8px 0 0;font-size:14px;cursor:pointer;white-space:nowrap;transition:all .2s;font-weight:500;position:relative}
-.tab:hover{background:rgba(255,255,255,.04);color:#e8eaed}
-.tab.active{background:#1e1f22;color:#fff}
-.tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:#5865F2}
-
-.content{padding:24px;max-width:1200px;margin:0 auto}
-.tab-panel{display:none;animation:fadeIn .2s}
-.tab-panel.active{display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.tab-panel h2{margin-bottom:20px;font-size:22px;font-weight:600}
-
-.card{background:#1e1f22;border-radius:14px;padding:24px;margin-bottom:20px;border:1px solid #2b2d31}
-.card h3{margin-bottom:8px;font-size:16px}
-.hint{color:#949BA4;font-size:13px;margin-bottom:16px}
-
-.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:16px}
-
-.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
-.filters select{padding:10px 14px;border-radius:8px;border:1px solid #3f4147;background:#2b2d31;color:#fff;font-size:14px;cursor:pointer}
-
-.result-box{margin-top:16px;max-height:400px;overflow-y:auto}
-.key-row{display:flex;align-items:center;justify-content:space-between;background:#0f1115;padding:12px 16px;border-radius:10px;margin-bottom:8px;font-family:monospace;border:1px solid #2b2d31;transition:all .2s;gap:12px;flex-wrap:wrap}
-.key-row:hover{border-color:#5865F2;background:#14161a}
-.key-row .code{color:#4ade80;font-weight:600;letter-spacing:1px;font-size:13px}
-.key-row .meta{color:#949BA4;font-size:12px;margin-left:8px}
-.key-row button{padding:6px 14px;font-size:12px;background:#2b2d31;border:1px solid #3f4147;border-radius:6px;color:#fff;cursor:pointer;transition:all .2s}
-.key-row button:hover{background:#36393f;border-color:#5865F2}
-
-.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #2b2d31;background:#1e1f22}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #2b2d31}
-th{background:#18191c;color:#949BA4;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,.02)}
-code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;border-radius:6px;font-size:12px;color:#a5b4fc;border:1px solid #2b2d31}
-
-.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.3px}
-.badge.basic{background:#92400e25;color:#fbbf24;border:1px solid #92400e50}
-.badge.premium{background:#6b728025;color:#cbd5e1;border:1px solid #6b728050}
-.badge.ultra{background:#b4530925;color:#fbbf24;border:1px solid #b4530950}
-.badge.unlimited{background:#7c3aed25;color:#a78bfa;border:1px solid #7c3aed50}
-.badge.active{background:#22c55e25;color:#4ade80;border:1px solid #22c55e50}
-.badge.used{background:#ef444425;color:#f87171;border:1px solid #ef444450}
-
-.loading{text-align:center;padding:40px;color:#949BA4}
-.loading::after{content:'';display:inline-block;width:16px;height:16px;margin-left:8px;border:2px solid #3f4147;border-top-color:#5865F2;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-.empty{text-align:center;padding:40px;color:#6d6f78;font-size:14px}
-
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
-.stat-card{background:#1e1f22;border:1px solid #2b2d31;border-radius:12px;padding:16px;text-align:center}
-.stat-card .num{font-size:28px;font-weight:700;background:linear-gradient(135deg,#5865F2,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.stat-card .lbl{font-size:12px;color:#949BA4;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
-
-.toast{position:fixed;bottom:24px;right:24px;background:#1e1f22;border:1px solid #2b2d31;border-left:3px solid #22c55e;padding:14px 20px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.4);color:#fff;font-size:14px;z-index:200;animation:slideIn .3s;display:none}
-.toast.error{border-left-color:#ef4444}
-.toast.active{display:block}
-@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-
-@media(max-width:640px){
-  .content{padding:16px}
-  .auth-card{padding:32px 24px}
-  .grid-2{grid-template-columns:1fr}
-  .stat-grid{grid-template-columns:repeat(2,1fr)}
-}
-</style>
+<link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
 
@@ -148,7 +16,7 @@ code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;bord
   <div class="auth-card">
     <div class="logo">🧊</div>
     <h1>Frio Panel</h1>
-    <p class="sub">Gerencie suas keys premium</p>
+    <p class="sub">Gerencie keys, servidores e clientes</p>
 
     <form id="loginForm">
       <div class="field">
@@ -162,9 +30,7 @@ code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;bord
       <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
     </form>
 
-    <div class="links">
-      <a href="#" id="linkForgot">Esqueci minha senha</a>
-    </div>
+    <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
 
     <div class="divider">ou</div>
 
@@ -184,12 +50,16 @@ code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;bord
   <div class="auth-card">
     <div class="logo">✨</div>
     <h1>Criar Conta</h1>
-    <p class="sub">Cadastre-se para acessar o painel</p>
+    <p class="sub">Aguardará aprovação do DEV</p>
 
     <form id="registerForm">
       <div class="field">
         <label>E-mail</label>
         <input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com">
+      </div>
+      <div class="field">
+        <label>Discord ID (opcional)</label>
+        <input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off">
       </div>
       <div class="field">
         <label>Senha (mín. 8 caracteres)</label>
@@ -202,23 +72,19 @@ code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;bord
       <button type="submit" class="btn btn-block" id="btnRegister">Criar conta</button>
     </form>
 
-    <div class="links">
-      <a href="#" id="linkBackLogin">← Voltar pro login</a>
-    </div>
-
+    <div class="links"><a href="#" id="linkBackLogin">← Voltar pro login</a></div>
     <div id="registerMsg" class="msg"></div>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     RESET PASSWORD
+     RESET
      ═══════════════════════════════════════════════════════════ -->
 <div id="view-reset" class="auth-page" style="display:none">
   <div class="auth-card">
     <div class="logo">🔐</div>
     <h1>Nova Senha</h1>
     <p class="sub">Digite sua nova senha</p>
-
     <form id="resetForm">
       <div class="field">
         <label>Nova senha</label>
@@ -230,90 +96,113 @@ code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;bord
       </div>
       <button type="submit" class="btn btn-block" id="btnResetSubmit">Salvar nova senha</button>
     </form>
-
     <div id="resetMsg" class="msg"></div>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     DASHBOARD
+     APP
      ═══════════════════════════════════════════════════════════ -->
-<div id="view-dashboard" class="dashboard">
-  <header class="topbar">
-    <div class="topbar-left">
-      <div class="logo-sm">🧊</div>
-      <strong>Frio Panel</strong>
-    </div>
-    <div class="topbar-right">
-      <div class="user-badge">
+<div id="view-app" class="app-layout">
+
+  <header class="app-header">
+    <button class="hamburger" id="btnHamburger">☰</button>
+    <div class="brand"><span class="logo">🧊</span><span>Frio Panel</span></div>
+    <div class="spacer"></div>
+    <div class="header-right">
+      <button class="bell" id="btnBell" title="Notificações">
+        🔔<span class="badge hidden" id="bellBadge">0</span>
+      </button>
+      <div class="user-chip">
         <span class="dot"></span>
-        <span id="userEmail" class="user-email"></span>
+        <span class="email" id="userEmail">—</span>
+        <span class="badge" id="userRole">—</span>
       </div>
       <button id="btnLogout" class="btn btn-ghost">Sair</button>
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="generate">🔑 Gerar Keys</button>
-    <button class="tab" data-tab="list">📋 Minhas Keys</button>
-    <button class="tab" data-tab="redemptions">🎁 Resgates</button>
-    <button class="tab" data-tab="stats">📊 Estatísticas</button>
-    <button class="tab" data-tab="admins" id="tabAdminsBtn" style="display:none">👥 Admins</button>
-  </nav>
+  <aside class="sidebar" id="sidebar">
+    <nav>
+      <div class="section-title">Geral</div>
+      <a data-nav="dashboard" class="active"><span class="icon">📊</span>Dashboard</a>
+      <a data-nav="keys" data-roles="dev,admin,funcionario"><span class="icon">🔑</span>Keys</a>
+      <a data-nav="servers"><span class="icon">🌐</span>Servidores</a>
+      <a data-nav="notifications"><span class="icon">🔔</span>Notificações <span class="badge hidden" id="navNotifBadge" style="margin-left:auto">0</span></a>
 
-  <main class="content">
+      <div class="section-title dev-only">DEV</div>
+      <a data-nav="usuarios" data-roles="dev"><span class="icon">👥</span>Usuários</a>
+      <a data-nav="pending" data-roles="dev"><span class="icon">⏳</span>Aprovações <span class="badge hidden" id="navPendingBadge" style="margin-left:auto">0</span></a>
+      <a data-nav="logs" data-roles="dev"><span class="icon">📋</span>Logs</a>
+    </nav>
+  </aside>
 
-    <!-- GERAR KEYS -->
-    <section id="tab-generate" class="tab-panel active">
-      <h2>Gerar Keys Premium</h2>
-      <form id="genForm" class="card">
-        <div class="grid-2">
-          <div class="field">
-            <label>Tier</label>
-            <select id="genTier" required>
-              <option value="basic">🥉 Basic</option>
-              <option value="premium" selected>🥈 Premium</option>
-              <option value="ultra">🥇 Ultra</option>
-              <option value="unlimited">💎 Unlimited</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Duração</label>
-            <select id="genDuracao" required>
-              <option value="7">7 dias</option>
-              <option value="15">15 dias</option>
-              <option value="30" selected>30 dias</option>
-              <option value="90">90 dias</option>
-              <option value="180">180 dias</option>
-              <option value="365">1 ano</option>
-              <option value="0">♾️ Permanente</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Quantidade (1-50)</label>
-            <input type="number" id="genQtd" value="1" min="1" max="50">
-          </div>
-          <div class="field">
-            <label>Máx. usos por key</label>
-            <input type="number" id="genMaxUsos" value="1" min="1" max="100">
-          </div>
-          <div class="field">
-            <label>Validade da key (dias, 0=sem)</label>
-            <input type="number" id="genValidade" value="0" min="0">
-          </div>
-          <div class="field">
-            <label>Motivo (opcional)</label>
-            <input type="text" id="genMotivo" placeholder="Ex: Parceria com X">
-          </div>
-        </div>
-        <button type="submit" class="btn btn-block" id="btnGerar">🚀 Gerar Keys</button>
-        <div id="genResult" class="result-box"></div>
-      </form>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <main class="app-main">
+
+    <!-- ═══ DASHBOARD ═══ -->
+    <section class="page active" id="page-dashboard">
+      <h2>📊 Dashboard</h2>
+      <div class="grid-3" id="dashStats"></div>
+      <div class="card">
+        <h3>Bem-vindo(a)</h3>
+        <p class="hint">Use o menu lateral pra navegar. Seu papel: <span class="badge" id="dashRole">—</span></p>
+      </div>
     </section>
 
-    <!-- LISTAR KEYS -->
-    <section id="tab-list" class="tab-panel">
-      <h2>Minhas Keys</h2>
+    <!-- ═══ KEYS ═══ -->
+    <section class="page" id="page-keys">
+      <h2>🔑 Keys Premium</h2>
+
+      <div class="card">
+        <h3>➕ Gerar novas keys</h3>
+        <form id="genForm">
+          <div class="grid-2">
+            <div class="field">
+              <label>Tier</label>
+              <select id="genTier" required>
+                <option value="basic">🥉 Basic</option>
+                <option value="premium" selected>🥈 Premium</option>
+                <option value="ultra">🥇 Ultra</option>
+                <option value="unlimited">💎 Unlimited</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Duração</label>
+              <select id="genDuracao" required>
+                <option value="7">7 dias</option>
+                <option value="15">15 dias</option>
+                <option value="30" selected>30 dias</option>
+                <option value="90">90 dias</option>
+                <option value="180">180 dias</option>
+                <option value="365">1 ano</option>
+                <option value="0">♾️ Permanente</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Quantidade (1-50)</label>
+              <input type="number" id="genQtd" value="1" min="1" max="50">
+            </div>
+            <div class="field">
+              <label>Máx. usos por key</label>
+              <input type="number" id="genMaxUsos" value="1" min="1" max="100">
+            </div>
+            <div class="field">
+              <label>Validade (dias, 0=sem)</label>
+              <input type="number" id="genValidade" value="0" min="0">
+            </div>
+            <div class="field">
+              <label>Motivo (opcional)</label>
+              <input type="text" id="genMotivo" placeholder="Ex: Parceria">
+            </div>
+          </div>
+          <button type="submit" class="btn">🚀 Gerar Keys</button>
+          <div id="genResult" class="result-box"></div>
+        </form>
+      </div>
+
+      <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys geradas</h3>
       <div class="filters">
         <select id="filterStatus">
           <option value="">Todas</option>
@@ -327,465 +216,180 @@ code{font-family:'Courier New',monospace;background:#0f1115;padding:3px 8px;bord
           <option value="ultra">Ultra</option>
           <option value="unlimited">Unlimited</option>
         </select>
-        <button id="btnRefreshKeys" class="btn btn-secondary">🔄 Atualizar</button>
+        <button id="btnRefreshKeys" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
       </div>
       <div id="keysTable" class="table-wrap"></div>
-    </section>
 
-    <!-- RESGATES -->
-    <section id="tab-redemptions" class="tab-panel">
-      <h2>Histórico de Resgates</h2>
-      <button id="btnRefreshRedemptions" class="btn btn-secondary" style="margin-bottom:16px">🔄 Atualizar</button>
+      <h3 style="margin:24px 0 12px;font-size:16px">🎁 Resgates</h3>
       <div id="redemptionsTable" class="table-wrap"></div>
     </section>
 
-    <!-- STATS -->
-    <section id="tab-stats" class="tab-panel">
-      <h2>Estatísticas</h2>
-      <div id="statsGrid" class="stat-grid"></div>
-      <div id="statsTable" class="table-wrap"></div>
+    <!-- ═══ SERVIDORES ═══ -->
+    <section class="page" id="page-servers">
+      <h2>🌐 Servidores</h2>
+      <div id="serversGrid" class="server-grid"></div>
     </section>
 
-    <!-- ADMINS -->
-    <section id="tab-admins" class="tab-panel">
-      <h2>Administradores</h2>
-      <div class="card">
-        <h3>➕ Adicionar admin</h3>
-        <p class="hint">A pessoa precisa ter criado conta no site antes.</p>
-        <form id="addAdminForm">
-          <div class="grid-2">
-            <div class="field">
-              <label>E-mail</label>
-              <input type="email" id="admEmail" required placeholder="func@email.com">
-            </div>
-            <div class="field">
-              <label>Nome</label>
-              <input type="text" id="admNome" placeholder="Nome do funcionário">
-            </div>
-            <div class="field checkbox">
-              <label><input type="checkbox" id="admPodeGerar"> Pode gerar keys</label>
-            </div>
-          </div>
-          <button type="submit" class="btn btn-success">Adicionar</button>
-        </form>
+    <!-- ═══ NOTIFICAÇÕES (página) ═══ -->
+    <section class="page" id="page-notifications">
+      <h2>🔔 Notificações</h2>
+      <div style="margin-bottom:12px">
+        <button id="btnMarkAllRead" class="btn btn-secondary btn-sm">✅ Marcar todas como lidas</button>
       </div>
-      <div id="adminsTable" class="table-wrap"></div>
+      <div id="notifList"></div>
+    </section>
+
+    <!-- ═══ USUÁRIOS (DEV) ═══ -->
+    <section class="page" id="page-usuarios">
+      <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo usuário</button></h2>
+      <div class="filters">
+        <input type="text" id="userSearch" placeholder="🔍 Buscar por email, nome ou Discord ID">
+        <select id="userFilterRole">
+          <option value="">Todos os roles</option>
+          <option value="dev">DEV</option>
+          <option value="admin">ADMIN</option>
+          <option value="funcionario">FUNCIONÁRIO</option>
+          <option value="cliente">CLIENTE</option>
+          <option value="pending">PENDENTE</option>
+        </select>
+        <select id="userFilterAtivo">
+          <option value="">Todos</option>
+          <option value="true">Só ativos</option>
+          <option value="false">Só inativos</option>
+        </select>
+        <button id="btnRefreshUsers" class="btn btn-secondary btn-sm">🔄</button>
+      </div>
+      <div id="usersTable" class="table-wrap"></div>
+    </section>
+
+    <!-- ═══ APROVAÇÕES PENDENTES (DEV) ═══ -->
+    <section class="page" id="page-pending">
+      <h2>⏳ Aprovações Pendentes</h2>
+      <p class="hint">Cadastros aguardando definição de role.</p>
+      <div id="pendingList"></div>
+    </section>
+
+    <!-- ═══ LOGS (DEV) ═══ -->
+    <section class="page" id="page-logs">
+      <h2>📋 Logs de Auditoria</h2>
+      <div class="filters">
+        <input type="text" id="logFilterAction" placeholder="🔍 Filtrar ação">
+        <button id="btnRefreshLogs" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+      </div>
+      <div id="logsTable" class="table-wrap"></div>
     </section>
 
   </main>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     MODAL ESQUECI SENHA
+     DRAWER NOTIFICAÇÕES
      ═══════════════════════════════════════════════════════════ -->
+<div id="notifDrawer" class="drawer">
+  <div class="drawer-header">
+    <h3>🔔 Notificações</h3>
+    <button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-footer">
+    <button id="btnMarkAllReadDrawer" class="btn btn-secondary btn-sm" style="flex:1">✅ Marcar todas</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAIS
+     ═══════════════════════════════════════════════════════════ -->
+
+<!-- Forgot password -->
 <div id="modalForgot" class="modal">
-  <div class="modal-content">
+  <div class="modal-content" style="max-width:420px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalForgot')">✕</button>
     <h2>🔐 Recuperar senha</h2>
-    <p>Enviaremos um link de recuperação pro seu e-mail.</p>
-    <div class="field">
-      <label>E-mail cadastrado</label>
-      <input type="email" id="forgotEmail" placeholder="seu@email.com">
-    </div>
+    <p class="sub">Enviaremos um link pro seu e-mail.</p>
+    <div class="field"><label>E-mail</label><input type="email" id="forgotEmail" placeholder="seu@email.com"></div>
     <div class="modal-actions">
-      <button id="btnCancelForgot" class="btn btn-secondary">Cancelar</button>
-      <button id="btnSendForgot" class="btn">Enviar link</button>
+      <button class="btn btn-secondary" onclick="closeModal('modalForgot')">Cancelar</button>
+      <button class="btn" id="btnSendForgot">Enviar link</button>
     </div>
+  </div>
+</div>
+
+<!-- Criar usuário (DEV) -->
+<div id="modalUser" class="modal">
+  <div class="modal-content" style="position:relative">
+    <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
+    <h2 id="modalUserTitle">➕ Novo Usuário</h2>
+    <p class="sub">A conta será criada imediatamente.</p>
+    <form id="userForm">
+      <input type="hidden" id="modalUserId">
+      <div class="grid-2">
+        <div class="field"><label>E-mail *</label><input type="email" id="modalUserEmail" required></div>
+        <div class="field"><label>Discord ID *</label><input type="text" id="modalUserDiscord" required placeholder="123456789012345678"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Nome</label><input type="text" id="modalUserNome" placeholder="Nome de exibição"></div>
+        <div class="field"><label>Role *</label>
+          <select id="modalUserRole" required>
+            <option value="cliente" selected>CLIENTE</option>
+            <option value="funcionario">FUNCIONÁRIO</option>
+            <option value="admin">ADMIN</option>
+            <option value="dev">DEV</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="fieldPassword">
+        <label>Senha inicial (deixe vazio pra gerar)</label>
+        <input type="text" id="modalUserPassword" placeholder="Deixe vazio → gerada automaticamente">
+      </div>
+      <div class="field" id="fieldGuilds">
+        <label>Servidores atribuídos (IDs separados por vírgula)</label>
+        <input type="text" id="modalUserGuilds" placeholder="123,456,789">
+      </div>
+      <div class="field">
+        <label>Notas internas</label>
+        <textarea id="modalUserNotes" placeholder="Anotações do DEV..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalUser')">Cancelar</button>
+        <button type="submit" class="btn" id="btnSaveUser">Criar usuário</button>
+      </div>
+      <div id="modalUserMsg" class="msg"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Aprovar usuário (DEV) -->
+<div id="modalApprove" class="modal">
+  <div class="modal-content" style="max-width:480px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalApprove')">✕</button>
+    <h2>✅ Aprovar usuário</h2>
+    <p class="sub" id="approveEmail">—</p>
+    <form id="approveForm">
+      <input type="hidden" id="approveUserId">
+      <div class="field"><label>Role *</label>
+        <select id="approveRole" required>
+          <option value="cliente" selected>CLIENTE</option>
+          <option value="funcionario">FUNCIONÁRIO</option>
+          <option value="admin">ADMIN</option>
+        </select>
+      </div>
+      <div class="field" id="approveGuildsField">
+        <label>Servidores (IDs por vírgula)</label>
+        <input type="text" id="approveGuilds" placeholder="123,456">
+      </div>
+      <div class="field"><label>Notas</label><textarea id="approveNotes"></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalApprove')">Cancelar</button>
+        <button type="submit" class="btn btn-success" id="btnApprove">Aprovar</button>
+      </div>
+      <div id="approveMsg" class="msg"></div>
+    </form>
   </div>
 </div>
 
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
-<script>
-// ═══════════════════════════════════════════════════════════
-// FRIO PANEL — Frontend
-// ═══════════════════════════════════════════════════════════
-const API = {
-  async req(url, opts = {}) {
-    const r = await fetch(url, {
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-      ...opts,
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
-    return j;
-  },
-  login: (email, password) => API.req('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  logout: () => API.req('/api/auth/logout', { method: 'POST' }),
-  me: () => API.req('/api/auth/me'),
-  forgot: (email) => API.req('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) }),
-  updatePassword: (token, new_password) => API.req('/api/auth/update-password', { method: 'POST', body: JSON.stringify({ token, new_password }) }),
-  generateKeys: (data) => API.req('/api/keys/generate', { method: 'POST', body: JSON.stringify(data) }),
-  listKeys: (params) => API.req('/api/keys?' + new URLSearchParams(params)),
-  deleteKey: (id) => API.req('/api/keys/' + id, { method: 'DELETE' }),
-  listRedemptions: () => API.req('/api/redemptions'),
-  listAdmins: () => API.req('/api/admins'),
-  addAdmin: (data) => API.req('/api/admins', { method: 'POST', body: JSON.stringify(data) }),
-  updateAdmin: (userId, patch) => API.req('/api/admins/' + userId, { method: 'PATCH', body: JSON.stringify(patch) }),
-  publicConfig: () => API.req('/api/public-config'),
-};
-
-// Estado global
-const state = { user: null, admin: null, supa: null };
-
-// ═══ Helpers UI ═══
-function $(sel) { return document.querySelector(sel); }
-function $$(sel) { return document.querySelectorAll(sel); }
-
-function showView(name) {
-  ['login', 'register', 'reset', 'dashboard'].forEach(v => {
-    const el = document.getElementById('view-' + v);
-    if (el) {
-      if (v === 'dashboard') el.classList.toggle('active', v === name);
-      else el.style.display = v === name ? 'flex' : 'none';
-    }
-  });
-}
-
-function showMsg(el, text, type = 'error') {
-  const e = typeof el === 'string' ? $(el) : el;
-  if (!e) return;
-  e.textContent = text;
-  e.className = 'msg ' + type;
-  if (type === 'ok') setTimeout(() => { e.style.display = 'none'; }, 5000);
-}
-
-function toast(text, type = 'ok') {
-  const t = $('#toast');
-  t.textContent = text;
-  t.className = 'toast ' + type + ' active';
-  setTimeout(() => t.classList.remove('active'), 3000);
-}
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}
-
-function fmtDate(d) { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
-function fmtDateShort(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
-
-// ═══ Boot ═══
-async function boot() {
-  // Verifica se é callback de reset (hash tem access_token)
-  const hash = new URLSearchParams(window.location.hash.substring(1));
-  const resetToken = hash.get('access_token');
-  if (resetToken) {
-    window.__RESET_TOKEN__ = resetToken;
-    showView('reset');
-    return;
-  }
-
-  try {
-    const me = await API.me();
-    state.user = me.user;
-    state.admin = me.admin;
-    $('#userEmail').textContent = me.user.email;
-    if (me.admin.is_owner) $('#tabAdminsBtn').style.display = 'inline-block';
-    showView('dashboard');
-    loadKeys();
-  } catch {
-    showView('login');
-  }
-}
-
-// ═══ Login ═══
-$('#loginForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = $('#btnLogin');
-  btn.disabled = true;
-  try {
-    const r = await API.login($('#loginEmail').value.trim(), $('#loginPassword').value);
-    state.user = r.user;
-    state.admin = r.admin;
-    $('#userEmail').textContent = r.user.email;
-    if (r.admin.is_owner) $('#tabAdminsBtn').style.display = 'inline-block';
-    showView('dashboard');
-    loadKeys();
-  } catch (err) {
-    showMsg('#loginMsg', err.message);
-  } finally { btn.disabled = false; }
-});
-
-// ═══ Register ═══
-$('#btnShowRegister').addEventListener('click', () => showView('register'));
-$('#linkBackLogin').addEventListener('click', e => { e.preventDefault(); showView('login'); });
-
-$('#registerForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const msg = $('#registerMsg');
-  const p1 = $('#regPassword').value;
-  const p2 = $('#regConfirm').value;
-  if (p1 !== p2) return showMsg(msg, 'As senhas não coincidem');
-  if (p1.length < 8) return showMsg(msg, 'Senha muito curta');
-  try {
-    const cfg = await API.publicConfig();
-    if (!state.supa) state.supa = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon);
-    const { error } = await state.supa.auth.signUp({
-      email: $('#regEmail').value.trim(),
-      password: p1,
-      options: { emailRedirectTo: window.location.origin + '/index.html' },
-    });
-    if (error) throw error;
-    showMsg(msg, '✅ Conta criada! Verifique seu e-mail e depois peça acesso ao owner.', 'ok');
-  } catch (err) {
-    showMsg(msg, err.message);
-  }
-});
-
-// ═══ Forgot ═══
-$('#linkForgot').addEventListener('click', e => { e.preventDefault(); $('#modalForgot').classList.add('active'); });
-$('#btnCancelForgot').addEventListener('click', () => $('#modalForgot').classList.remove('active'));
-$('#btnSendForgot').addEventListener('click', async () => {
-  const email = $('#forgotEmail').value.trim();
-  if (!email) return alert('Digite o e-mail');
-  try {
-    await API.forgot(email);
-    toast('Se o e-mail existir, enviaremos instruções.');
-    $('#modalForgot').classList.remove('active');
-  } catch (err) { toast(err.message, 'error'); }
-});
-
-// ═══ Reset ═══
-$('#resetForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const msg = $('#resetMsg');
-  const p1 = $('#resetPassword').value;
-  const p2 = $('#resetConfirm').value;
-  if (p1 !== p2) return showMsg(msg, 'As senhas não coincidem');
-  if (!window.__RESET_TOKEN__) return showMsg(msg, 'Token ausente. Solicite novo link.');
-  try {
-    await API.updatePassword(window.__RESET_TOKEN__, p1);
-    showMsg(msg, '✅ Senha atualizada! Redirecionando…', 'ok');
-    setTimeout(() => { window.location.hash = ''; window.location.reload(); }, 2000);
-  } catch (err) { showMsg(msg, err.message); }
-});
-
-// ═══ Logout ═══
-$('#btnLogout').addEventListener('click', async () => {
-  await API.logout().catch(() => {});
-  window.location.reload();
-});
-
-// ═══ Tabs ═══
-$$('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    $$('.tab').forEach(t => t.classList.remove('active'));
-    $$('.tab-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    const id = 'tab-' + tab.dataset.tab;
-    const panel = document.getElementById(id);
-    if (panel) panel.classList.add('active');
-    if (tab.dataset.tab === 'list') loadKeys();
-    if (tab.dataset.tab === 'redemptions') loadRedemptions();
-    if (tab.dataset.tab === 'stats') loadStats();
-    if (tab.dataset.tab === 'admins') loadAdmins();
-  });
-});
-
-// ═══ Gerar keys ═══
-$('#genForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = $('#btnGerar');
-  btn.disabled = true;
-  const box = $('#genResult');
-  box.innerHTML = '<div class="loading">Gerando keys…</div>';
-  try {
-    const r = await API.generateKeys({
-      tier: $('#genTier').value,
-      duracao_dias: Number($('#genDuracao').value),
-      quantidade: Number($('#genQtd').value),
-      max_usos: Number($('#genMaxUsos').value),
-      validade_key_dias: Number($('#genValidade').value),
-      motivo: $('#genMotivo').value.trim() || null,
-    });
-    box.innerHTML = `<p style="margin-bottom:12px;color:#4ade80;font-size:14px">✅ <b>${r.keys.length}</b> key(s) gerada(s)</p>` +
-      r.keys.map(k => `
-        <div class="key-row">
-          <div>
-            <span class="code">${escapeHtml(k.key_code)}</span>
-            <span class="meta">· ${escapeHtml(k.tier)} · ${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</span>
-          </div>
-          <button onclick="copyKey(this, '${escapeHtml(k.key_code)}')">📋 Copiar</button>
-        </div>`).join('');
-    toast(`${r.keys.length} key(s) gerada(s)!`);
-    loadKeys();
-  } catch (err) {
-    box.innerHTML = `<p style="color:#f87171">❌ ${escapeHtml(err.message)}</p>`;
-  } finally { btn.disabled = false; }
-});
-
-window.copyKey = function(btn, code) {
-  navigator.clipboard.writeText(code).then(() => {
-    const old = btn.textContent;
-    btn.textContent = '✅ Copiado!';
-    setTimeout(() => { btn.textContent = old; }, 1500);
-  });
-};
-
-// ═══ Listar keys ═══
-async function loadKeys() {
-  const table = $('#keysTable');
-  table.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const params = {};
-    if ($('#filterStatus').value) params.status = $('#filterStatus').value;
-    if ($('#filterTier').value) params.tier = $('#filterTier').value;
-    const r = await API.listKeys(params);
-    if (!r.keys.length) {
-      table.innerHTML = '<div class="empty">📭 Nenhuma key encontrada</div>';
-      return;
-    }
-    table.innerHTML = `
-      <table>
-        <thead><tr>
-          <th>Key</th><th>Tier</th><th>Duração</th><th>Usos</th>
-          <th>Gerada por</th><th>Status</th><th>Criada</th><th></th>
-        </tr></thead>
-        <tbody>
-          ${r.keys.map(k => `
-            <tr>
-              <td><code>${escapeHtml(k.key_code)}</code></td>
-              <td><span class="badge ${k.tier}">${escapeHtml(k.tier)}</span></td>
-              <td>${k.duracao_dias === 0 ? '♾️ Permanente' : k.duracao_dias + ' dias'}</td>
-              <td>${k.usos_atuais}/${k.max_usos}</td>
-              <td>${escapeHtml(k.gerado_por_email || '—')}</td>
-              <td><span class="badge ${k.ativo ? 'active' : 'used'}">${k.ativo ? 'Ativa' : 'Esgotada'}</span></td>
-              <td>${fmtDateShort(k.created_at)}</td>
-              <td><button onclick="copyKey(this, '${escapeHtml(k.key_code)}')" style="padding:4px 10px;font-size:11px;background:#2b2d31;border:1px solid #3f4147;border-radius:6px;color:#fff;cursor:pointer">📋</button></td>
-            </tr>`).join('')}
-        </tbody>
-      </table>`;
-  } catch (err) {
-    table.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`;
-  }
-}
-
-$('#btnRefreshKeys').addEventListener('click', loadKeys);
-$('#filterStatus').addEventListener('change', loadKeys);
-$('#filterTier').addEventListener('change', loadKeys);
-
-// ═══ Resgates ═══
-async function loadRedemptions() {
-  const table = $('#redemptionsTable');
-  table.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await API.listRedemptions();
-    if (!r.redemptions.length) {
-      table.innerHTML = '<div class="empty">📭 Nenhum resgate ainda</div>';
-      return;
-    }
-    table.innerHTML = `
-      <table>
-        <thead><tr>
-          <th>Key</th><th>Tier</th><th>Servidor</th><th>Resgatado por</th>
-          <th>Expira</th><th>Data</th>
-        </tr></thead>
-        <tbody>
-          ${r.redemptions.map(x => `
-            <tr>
-              <td><code>${escapeHtml(x.key_code)}</code></td>
-              <td><span class="badge ${x.tier}">${escapeHtml(x.tier)}</span></td>
-              <td>${escapeHtml(x.guild_name || x.guild_id)}</td>
-              <td>${escapeHtml(x.resgatado_por_tag || x.resgatado_por)}</td>
-              <td>${x.premium_expires_at ? fmtDate(x.premium_expires_at) : '♾️ Permanente'}</td>
-              <td>${fmtDate(x.created_at)}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>`;
-  } catch (err) {
-    table.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`;
-  }
-}
-$('#btnRefreshRedemptions').addEventListener('click', loadRedemptions);
-
-// ═══ Stats ═══
-async function loadStats() {
-  try {
-    const keys = await API.listKeys({});
-    const redemptions = await API.listRedemptions();
-    const totalKeys = keys.keys.length;
-    const ativas = keys.keys.filter(k => k.ativo).length;
-    const totalResgates = redemptions.redemptions.length;
-    const porTier = {};
-    keys.keys.forEach(k => { porTier[k.tier] = (porTier[k.tier] || 0) + 1; });
-
-    $('#statsGrid').innerHTML = `
-      <div class="stat-card"><div class="num">${totalKeys}</div><div class="lbl">Keys Totais</div></div>
-      <div class="stat-card"><div class="num">${ativas}</div><div class="lbl">Keys Ativas</div></div>
-      <div class="stat-card"><div class="num">${totalResgates}</div><div class="lbl">Resgates</div></div>
-      <div class="stat-card"><div class="num">${totalKeys - ativas}</div><div class="lbl">Esgotadas</div></div>
-    `;
-    $('#statsTable').innerHTML = `
-      <table>
-        <thead><tr><th>Tier</th><th>Quantidade</th></tr></thead>
-        <tbody>
-          ${Object.entries(porTier).map(([t, q]) => `<tr><td><span class="badge ${t}">${escapeHtml(t)}</span></td><td>${q}</td></tr>`).join('')}
-        </tbody>
-      </table>`;
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}
-
-// ═══ Admins ═══
-async function loadAdmins() {
-  const table = $('#adminsTable');
-  table.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await API.listAdmins();
-    if (!r.admins.length) {
-      table.innerHTML = '<div class="empty">📭 Nenhum admin</div>';
-      return;
-    }
-    table.innerHTML = `
-      <table>
-        <thead><tr><th>E-mail</th><th>Nome</th><th>Gerar keys</th><th>Owner</th><th>Ativo</th><th>Ações</th></tr></thead>
-        <tbody>
-          ${r.admins.map(a => `
-            <tr>
-              <td>${escapeHtml(a.email)}</td>
-              <td>${escapeHtml(a.nome || '—')}</td>
-              <td>${a.pode_gerar_keys ? '✅' : '❌'}</td>
-              <td>${a.is_owner ? '👑' : '—'}</td>
-              <td>${a.ativo ? '🟢' : '🔴'}</td>
-              <td>
-                ${!a.is_owner ? `
-                  <button onclick="toggleKeys('${a.user_id}', ${!a.pode_gerar_keys})" style="padding:4px 10px;font-size:11px;background:#2b2d31;border:1px solid #3f4147;border-radius:6px;color:#fff;cursor:pointer;margin-right:4px">${a.pode_gerar_keys ? '🚫 Remover' : '✅ Permitir'}</button>
-                  <button onclick="toggleActive('${a.user_id}', ${!a.ativo})" style="padding:4px 10px;font-size:11px;background:#2b2d31;border:1px solid #3f4147;border-radius:6px;color:#fff;cursor:pointer">${a.ativo ? '🔴 Desativar' : '🟢 Ativar'}</button>
-                ` : ''}
-              </td>
-            </tr>`).join('')}
-        </tbody>
-      </table>`;
-  } catch (err) {
-    table.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`;
-  }
-}
-
-window.toggleKeys = async (uid, val) => {
-  try { await API.updateAdmin(uid, { pode_gerar_keys: val }); loadAdmins(); } catch (e) { toast(e.message, 'error'); }
-};
-window.toggleActive = async (uid, val) => {
-  try { await API.updateAdmin(uid, { ativo: val }); loadAdmins(); } catch (e) { toast(e.message, 'error'); }
-};
-
-$('#addAdminForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  try {
-    await API.addAdmin({
-      email: $('#admEmail').value.trim(),
-      nome: $('#admNome').value.trim() || null,
-      pode_gerar_keys: $('#admPodeGerar').checked,
-    });
-    toast('✅ Admin adicionado!');
-    $('#addAdminForm').reset();
-    loadAdmins();
-  } catch (err) { toast(err.message, 'error'); }
-});
-
-// ═══ Start ═══
-boot();
-</script>
+<script src="/assets/panel.js"></script>
 </body>
 </html>

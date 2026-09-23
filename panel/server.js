@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v2.0
+// 🔑 FRIO PANEL — Backend v2.1
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 const express = require('express');
@@ -34,19 +34,29 @@ app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ═══ MIDDLEWARES ═══
+// ═══ AUTH MIDDLEWARE (aceita cookie + Bearer + header) ═══
 async function requireAuth(req, res, next) {
   try {
-    const token = req.cookies?.sb_token || (req.headers.authorization || '').replace('Bearer ', '');
-    if (!token) return res.status(401).json({ error: 'Não autenticado' });
+    let token = null;
+    if (req.cookies?.sb_token) token = req.cookies.sb_token;
+    if (!token) {
+      const auth = req.headers.authorization || '';
+      if (auth.startsWith('Bearer ')) token = auth.slice(7).trim();
+    }
+    if (!token) token = req.headers['x-panel-token'] || null;
+
+    if (!token) return res.status(401).json({ error: 'Não autenticado', hint: 'sem_token' });
+
     const { data: { user }, error } = await supaPublic.auth.getUser(token);
-    if (error || !user) return res.status(401).json({ error: 'Sessão inválida' });
+    if (error || !user) return res.status(401).json({ error: 'Sessão inválida', hint: 'token_invalido' });
+
     const { data: admin } = await supaAdmin.from('panel_admins').select('*').eq('user_id', user.id).maybeSingle();
-    if (!admin) return res.status(403).json({ error: 'Sem acesso ao painel' });
+    if (!admin) return res.status(403).json({ error: 'Sem acesso ao painel', hint: 'sem_registro' });
     if (!admin.ativo) {
       if (admin.role === 'pending') return res.status(403).json({ error: 'Conta aguardando aprovação do DEV', code: 'PENDING' });
-      return res.status(403).json({ error: 'Conta desativada' });
+      return res.status(403).json({ error: 'Conta desativada', hint: 'inativo' });
     }
+
     req.user = user;
     req.admin = admin;
     req.role = admin.role;
@@ -89,9 +99,14 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'E-mail e senha obrigatórios' });
+
     const { data, error } = await supaPublic.auth.signInWithPassword({ email, password });
-    if (error) return res.status(401).json({ error: 'E-mail ou senha inválidos' });
+    if (error) {
+      console.error('[LOGIN-SUPABASE]', error.message);
+      return res.status(401).json({ error: error.message || 'E-mail ou senha inválidos' });
+    }
     if (!data.session) return res.status(401).json({ error: 'Sessão não criada' });
+
     const { data: admin } = await supaAdmin.from('panel_admins').select('*').eq('user_id', data.user.id).maybeSingle();
     if (!admin) { await supaPublic.auth.signOut(); return res.status(403).json({ error: 'Você não tem acesso ao painel.' }); }
     if (!admin.ativo) {
@@ -99,13 +114,19 @@ app.post('/api/auth/login', async (req, res) => {
       if (admin.role === 'pending') return res.status(403).json({ error: 'Conta aguardando aprovação do DEV.', code: 'PENDING' });
       return res.status(403).json({ error: 'Conta desativada.' });
     }
+
     res.cookie('sb_token', data.session.access_token, {
-      httpOnly: true, secure: process.env.NODE_ENV === 'production' || !!process.env.RENDER,
-      sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: false,
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     await audit({ user: data.user, ip: req.ip }, 'login');
+
     return res.json({
       ok: true,
+      token: data.session.access_token,
       user: { id: data.user.id, email: data.user.email },
       admin: {
         nome: admin.nome, role: admin.role, is_owner: admin.role === 'dev',
@@ -418,4 +439,4 @@ app.get('/api/dev/audit', requireDev, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`🌐 [PANEL v2.0] Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 [PANEL v2.1] Rodando na porta ${PORT}`));

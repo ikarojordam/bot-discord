@@ -4,67 +4,202 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel</title>
-<link rel="stylesheet" href="/assets/style.css?v=4">
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="stylesheet" href="/assets/style.css?v=6">
 </head>
 <body>
 
-<div id="view-login" class="auth-page">
-  <div class="auth-card">
-    <div class="logo">🧊</div>
-    <h1>Frio Panel</h1>
-    <p class="sub">Gerencie keys, servidores e clientes</p>
-    <form id="loginForm">
-      <div class="field"><label>E-mail</label><input type="email" id="loginEmail" required></div>
-      <div class="field"><label>Senha</label><input type="password" id="loginPassword" required></div>
-      <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
-    </form>
-    <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
-    <div class="divider">ou</div>
-    <div class="register-block">
-      <p>Primeira vez aqui?</p>
-      <button id="btnShowRegister" class="btn btn-secondary btn-block">Criar conta</button>
+<!-- ═══════════════════════════════════════════════════════
+     LOGIN
+     ═══════════════════════════════════════════════════════ -->
+<div id="view-login" class="auth-page active">
+  <div class="aurora">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
+  <div class="auth-shell">
+    <!-- Marca (esquerda) -->
+    <div class="auth-brand">
+      <div class="brand-badge"><span class="dot"></span>FRIO BOT · v4</div>
+      <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
+      <div class="brand-title">Gerenciamento<br>premium de servers.</div>
+      <div class="brand-sub">Keys, clientes, notificações, force premium e ferramentas DEV — tudo num painel só.</div>
+      <div class="brand-features">
+        <div class="brand-feature"><div class="ico">🔑</div>Keys ilimitadas por tier</div>
+        <div class="brand-feature"><div class="ico">🌐</div>Multi-servidores com OAuth</div>
+        <div class="brand-feature"><div class="ico">🚨</div>Kill switch + manutenção global</div>
+      </div>
     </div>
-    <div id="loginMsg" class="msg"></div>
+
+    <!-- Form (direita) -->
+    <div class="auth-form-side">
+      <div class="auth-card">
+        <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+        <h1>Bem-vindo de volta</h1>
+        <p class="sub">Entre com sua conta pra continuar</p>
+
+        <form id="loginForm">
+          <div class="field">
+            <label>E-mail</label>
+            <div class="input-wrap">
+              <span class="ico">📧</span>
+              <input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com">
+            </div>
+          </div>
+          <div class="field">
+            <label>Senha</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('loginPassword', this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
+        </form>
+
+        <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
+        <div class="divider">ou</div>
+        <div class="register-block">
+          <p>Primeira vez aqui?</p>
+          <button id="btnShowRegister" class="btn btn-secondary btn-block">Criar conta</button>
+        </div>
+
+        <div id="loginMsg" class="msg"></div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div id="view-register" class="auth-page" style="display:none">
-  <div class="auth-card">
-    <div class="logo">✨</div>
-    <h1>Criar Conta</h1>
-    <p class="sub">Aguardará aprovação do DEV</p>
-    <form id="registerForm">
-      <div class="field"><label>E-mail</label><input type="email" id="regEmail" required></div>
-      <div class="field"><label>Discord ID (opcional)</label><input type="text" id="regDiscord"></div>
-      <div class="field"><label>Senha (mín. 8)</label><input type="password" id="regPassword" required minlength="8"></div>
-      <div class="field"><label>Confirmar senha</label><input type="password" id="regConfirm" required minlength="8"></div>
-      <button type="submit" class="btn btn-block">Criar conta</button>
-    </form>
-    <div class="links"><a href="#" id="linkBackLogin">← Voltar</a></div>
-    <div id="registerMsg" class="msg"></div>
+<!-- ═══════════════════════════════════════════════════════
+     REGISTER
+     ═══════════════════════════════════════════════════════ -->
+<div id="view-register" class="auth-page">
+  <div class="aurora">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
+  <div class="auth-shell">
+    <div class="auth-brand">
+      <div class="brand-badge"><span class="dot"></span>NOVA CONTA</div>
+      <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
+      <div class="brand-title">Crie sua conta<br>em 30 segundos.</div>
+      <div class="brand-sub">Após o cadastro, um DEV irá aprovar seu acesso e definir seu papel no painel.</div>
+    </div>
+
+    <div class="auth-form-side">
+      <div class="auth-card">
+        <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+        <h1>Criar conta</h1>
+        <p class="sub">Aguardará aprovação do DEV</p>
+
+        <form id="registerForm">
+          <div class="field">
+            <label>E-mail</label>
+            <div class="input-wrap">
+              <span class="ico">📧</span>
+              <input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com">
+            </div>
+          </div>
+          <div class="field">
+            <label>Discord ID (opcional)</label>
+            <div class="input-wrap">
+              <span class="ico">🎮</span>
+              <input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off">
+            </div>
+          </div>
+          <div class="field">
+            <label>Senha (mín. 8 caracteres)</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('regPassword', this)">👁️</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Confirmar senha</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('regConfirm', this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-block">Criar conta</button>
+        </form>
+
+        <div class="links"><a href="#" id="linkBackLogin">← Voltar pro login</a></div>
+        <div id="registerMsg" class="msg"></div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div id="view-reset" class="auth-page" style="display:none">
-  <div class="auth-card">
-    <div class="logo">🔐</div>
-    <h1>Nova Senha</h1>
-    <form id="resetForm">
-      <div class="field"><label>Nova senha</label><input type="password" id="resetPassword" required minlength="8"></div>
-      <div class="field"><label>Confirmar</label><input type="password" id="resetConfirm" required minlength="8"></div>
-      <button type="submit" class="btn btn-block">Salvar</button>
-    </form>
-    <div id="resetMsg" class="msg"></div>
+<!-- ═══════════════════════════════════════════════════════
+     RESET
+     ═══════════════════════════════════════════════════════ -->
+<div id="view-reset" class="auth-page">
+  <div class="aurora">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
+  <div class="auth-shell">
+    <div class="auth-brand">
+      <div class="brand-badge"><span class="dot"></span>SEGURANÇA</div>
+      <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
+      <div class="brand-title">Defina uma<br>nova senha.</div>
+      <div class="brand-sub">Sua nova senha precisa ter no mínimo 8 caracteres. Você será redirecionado pro login depois.</div>
+    </div>
+
+    <div class="auth-form-side">
+      <div class="auth-card">
+        <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+        <h1>Nova senha</h1>
+        <p class="sub">Escolha uma senha forte</p>
+
+        <form id="resetForm">
+          <div class="field">
+            <label>Nova senha</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="resetPassword" required minlength="8" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Confirmar</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-block">Salvar nova senha</button>
+        </form>
+
+        <div id="resetMsg" class="msg"></div>
+      </div>
+    </div>
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     APP
+     ═══════════════════════════════════════════════════════ -->
 <div id="view-app" class="app-layout">
   <header class="app-header">
     <button class="hamburger" id="btnHamburger">☰</button>
-    <div class="brand"><span class="logo">🧊</span><span>Frio Panel</span></div>
+    <div class="brand"><span class="logo"><img src="/assets/logo.png" alt="Frio Panel"></span><span>Frio Panel</span></div>
     <div class="spacer"></div>
     <div class="header-right">
-      <button class="bell" id="btnBell">🔔<span class="badge hidden" id="bellBadge">0</span></button>
+      <button class="bell" id="btnBell" title="Notificações">🔔<span class="badge hidden" id="bellBadge">0</span></button>
       <div class="user-chip">
         <span class="dot"></span>
         <span class="email" id="userEmail">—</span>
@@ -115,18 +250,22 @@
         <h3>➕ Gerar novas keys</h3>
         <form id="genForm">
           <div class="grid-2">
-            <div class="field"><label>Tier</label><select id="genTier">
-              <option value="basic">🥉 Basic</option><option value="premium" selected>🥈 Premium</option>
-              <option value="ultra">🥇 Ultra</option><option value="unlimited">💎 Unlimited</option>
-            </select></div>
-            <div class="field"><label>Duração</label><select id="genDuracao">
-              <option value="7">7d</option><option value="15">15d</option><option value="30" selected>30d</option>
-              <option value="90">90d</option><option value="180">180d</option><option value="365">1 ano</option><option value="0">♾️</option>
-            </select></div>
-            <div class="field"><label>Qtd (1-50)</label><input type="number" id="genQtd" value="1" min="1" max="50"></div>
-            <div class="field"><label>Máx usos</label><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div>
-            <div class="field"><label>Validade (dias)</label><input type="number" id="genValidade" value="0" min="0"></div>
-            <div class="field"><label>Motivo</label><input type="text" id="genMotivo" placeholder="opcional"></div>
+            <div class="field"><label>Tier</label>
+              <div class="input-wrap"><select id="genTier">
+                <option value="basic">🥉 Basic</option><option value="premium" selected>🥈 Premium</option>
+                <option value="ultra">🥇 Ultra</option><option value="unlimited">💎 Unlimited</option>
+              </select></div>
+            </div>
+            <div class="field"><label>Duração</label>
+              <div class="input-wrap"><select id="genDuracao">
+                <option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option>
+                <option value="90">90 dias</option><option value="180">180 dias</option><option value="365">1 ano</option><option value="0">♾️ Permanente</option>
+              </select></div>
+            </div>
+            <div class="field"><label>Qtd (1-50)</label><div class="input-wrap"><input type="number" id="genQtd" value="1" min="1" max="50"></div></div>
+            <div class="field"><label>Máx usos</label><div class="input-wrap"><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div></div>
+            <div class="field"><label>Validade (dias)</label><div class="input-wrap"><input type="number" id="genValidade" value="0" min="0"></div></div>
+            <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="genMotivo" placeholder="opcional"></div></div>
           </div>
           <button type="submit" class="btn">🚀 Gerar</button>
           <div id="genResult" class="result-box"></div>
@@ -160,9 +299,9 @@
     <section class="page" id="page-kill-switch">
       <h2>🚨 Kill Switch</h2>
       <div class="card">
-        <p class="hint">Bloqueia TODOS os comandos do bot em todos os servidores. Use em emergência.</p>
+        <p class="hint">Bloqueia TODOS os comandos do bot em todos os servidores.</p>
         <div id="ksStatus">Carregando…</div>
-        <div class="field"><label>Motivo</label><input type="text" id="ksReason" placeholder="Ex: bug crítico"></div>
+        <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="ksReason" placeholder="Ex: bug crítico"></div></div>
         <button id="btnKillOn" class="btn btn-danger">🔴 ATIVAR</button>
         <button id="btnKillOff" class="btn btn-success">🟢 DESATIVAR</button>
       </div>
@@ -172,9 +311,9 @@
     <section class="page" id="page-maintenance">
       <h2>🔧 Manutenção Global</h2>
       <div class="card">
-        <p class="hint">Bloqueia comandos (exceto DEV) e mostra aviso aos usuários.</p>
+        <p class="hint">Bloqueia comandos (exceto DEV).</p>
         <div id="mtStatus">Carregando…</div>
-        <div class="field"><label>Motivo</label><input type="text" id="mtReason" placeholder="Ex: atualizando DB"></div>
+        <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="mtReason" placeholder="Ex: atualizando DB"></div></div>
         <button id="btnMtOn" class="btn btn-danger">🔴 ATIVAR</button>
         <button id="btnMtOff" class="btn btn-success">🟢 DESATIVAR</button>
       </div>
@@ -186,12 +325,12 @@
       <div class="card">
         <h3>➕ Adicionar</h3>
         <div class="grid-2">
-          <div class="field"><label>Scope</label><select id="fpScope">
+          <div class="field"><label>Scope</label><div class="input-wrap"><select id="fpScope">
             <option value="guild">Servidor</option><option value="user">Usuário</option>
-          </select></div>
-          <div class="field"><label>ID (guild ou user)</label><input type="text" id="fpTarget"></div>
-          <div class="field"><label>Dias (0 = permanente)</label><input type="number" id="fpDays" value="0" min="0"></div>
-          <div class="field"><label>Motivo</label><input type="text" id="fpReason"></div>
+          </select></div></div>
+          <div class="field"><label>ID</label><div class="input-wrap"><input type="text" id="fpTarget"></div></div>
+          <div class="field"><label>Dias (0 = permanente)</label><div class="input-wrap"><input type="number" id="fpDays" value="0" min="0"></div></div>
+          <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="fpReason"></div></div>
         </div>
         <button id="btnFpAdd" class="btn">Adicionar</button>
       </div>
@@ -203,18 +342,17 @@
     <section class="page" id="page-broadcast">
       <h2>📢 Broadcast Global</h2>
       <div class="card">
-        <p class="hint">Envia notificação (sino) para todos os usuários do painel.</p>
-        <div class="field"><label>Título</label><input type="text" id="bcTitle" placeholder="Ex: Nova atualização!"></div>
-        <div class="field"><label>Conteúdo</label><textarea id="bcContent" placeholder="Mensagem..."></textarea></div>
-        <div class="field"><label>Só para role (opcional)</label><select id="bcRole">
+        <div class="field"><label>Título</label><div class="input-wrap"><input type="text" id="bcTitle" placeholder="Ex: Nova atualização!"></div></div>
+        <div class="field"><label>Conteúdo</label><div class="input-wrap"><textarea id="bcContent" placeholder="Mensagem..."></textarea></div></div>
+        <div class="field"><label>Só para role</label><div class="input-wrap"><select id="bcRole">
           <option value="">Todos</option><option value="dev">DEV</option><option value="admin">ADMIN</option>
           <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
-        </select></div>
+        </select></div></div>
         <button id="btnBcSend" class="btn">📤 Enviar</button>
       </div>
       <div class="card">
         <h3>🔄 Forçar broadcast de update do bot</h3>
-        <p class="hint">Reseta o log pra que o bot reenvie o anúncio de atualização no próximo boot.</p>
+        <p class="hint">Reseta o log pra que o bot reenvie o anúncio no próximo boot.</p>
         <button id="btnForceUpdate" class="btn btn-secondary">🔄 Resetar broadcast</button>
       </div>
     </section>
@@ -252,6 +390,7 @@
   </main>
 </div>
 
+<!-- DRAWER NOTIFICAÇÕES -->
 <div id="notifDrawer" class="drawer">
   <div class="drawer-header"><h3>🔔 Notificações</h3><button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button></div>
   <div class="drawer-body" id="drawerBody"></div>
@@ -271,7 +410,7 @@
   <div class="modal-content" style="max-width:420px;position:relative">
     <button class="modal-close" onclick="closeModal('modalForgot')">✕</button>
     <h2>🔐 Recuperar senha</h2>
-    <div class="field"><label>E-mail</label><input type="email" id="forgotEmail"></div>
+    <div class="field"><label>E-mail</label><div class="input-wrap"><input type="email" id="forgotEmail"></div></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalForgot')">Cancelar</button>
       <button class="btn" id="btnSendForgot">Enviar</button>
@@ -287,19 +426,19 @@
     <form id="userForm">
       <input type="hidden" id="modalUserId">
       <div class="grid-2">
-        <div class="field"><label>E-mail *</label><input type="email" id="modalUserEmail" required></div>
-        <div class="field"><label>Discord ID *</label><input type="text" id="modalUserDiscord" required></div>
+        <div class="field"><label>E-mail *</label><div class="input-wrap"><input type="email" id="modalUserEmail" required></div></div>
+        <div class="field"><label>Discord ID *</label><div class="input-wrap"><input type="text" id="modalUserDiscord" required></div></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label>Nome</label><input type="text" id="modalUserNome"></div>
-        <div class="field"><label>Role *</label><select id="modalUserRole">
+        <div class="field"><label>Nome</label><div class="input-wrap"><input type="text" id="modalUserNome"></div></div>
+        <div class="field"><label>Role *</label><div class="input-wrap"><select id="modalUserRole">
           <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
           <option value="admin">ADMIN</option><option value="dev">DEV</option>
-        </select></div>
+        </select></div></div>
       </div>
-      <div class="field" id="fieldPassword"><label>Senha (vazio = gerada)</label><input type="text" id="modalUserPassword"></div>
-      <div class="field"><label>Servidores (IDs, vírgula)</label><input type="text" id="modalUserGuilds"></div>
-      <div class="field"><label>Notas</label><textarea id="modalUserNotes"></textarea></div>
+      <div class="field" id="fieldPassword"><label>Senha (vazio = gerada)</label><div class="input-wrap"><input type="text" id="modalUserPassword"></div></div>
+      <div class="field"><label>Servidores (IDs, vírgula)</label><div class="input-wrap"><input type="text" id="modalUserGuilds"></div></div>
+      <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="modalUserNotes"></textarea></div></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalUser')">Cancelar</button>
         <button type="submit" class="btn" id="btnSaveUser">Criar</button>
@@ -317,12 +456,12 @@
     <p class="sub" id="approveEmail">—</p>
     <form id="approveForm">
       <input type="hidden" id="approveUserId">
-      <div class="field"><label>Role *</label><select id="approveRole">
+      <div class="field"><label>Role *</label><div class="input-wrap"><select id="approveRole">
         <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
         <option value="admin">ADMIN</option>
-      </select></div>
-      <div class="field"><label>Servidores (IDs)</label><input type="text" id="approveGuilds"></div>
-      <div class="field"><label>Notas</label><textarea id="approveNotes"></textarea></div>
+      </select></div></div>
+      <div class="field"><label>Servidores (IDs)</label><div class="input-wrap"><input type="text" id="approveGuilds"></div></div>
+      <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="approveNotes"></textarea></div></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalApprove')">Cancelar</button>
         <button type="submit" class="btn btn-success">Aprovar</button>
@@ -332,8 +471,22 @@
   </div>
 </div>
 
+<!-- TOAST -->
 <div id="toast" class="toast"></div>
 
-<script src="/assets/app.js?v=4"></script>
+<!-- ═══════════════════════════════════════════════════════
+     SCRIPTS
+     ═══════════════════════════════════════════════════════ -->
+<script>
+// Toggle mostrar/ocultar senha
+function togglePass(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isPass = el.type === 'password';
+  el.type = isPass ? 'text' : 'password';
+  btn.textContent = isPass ? '🙈' : '👁️';
+}
+</script>
+<script src="/assets/app.js?v=6"></script>
 </body>
 </html>

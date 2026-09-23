@@ -429,9 +429,86 @@ app.get('/api/me/servers/:guildId/orders', requireAuth, async (req, res) => {
   res.json({ ok: true, orders: data || [] });
 });
 
-// Levar membros
-app.post('/api/me/servers/:guildId/take-members', requireAuth, async (req, res) => {
+// ═══ Levar membros — APENAS DEV/ADMIN ═══
+app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res) => {
   if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+  if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
+    return res.status(500).json({ error: 'DISCORD_CLIENT_ID/SECRET não configurados' });
+  }
+
+  const limit = Math.min(Number(req.body?.limit) || 20, 50);
+  const gid = req.params.guildId;
+
+  const { data: vers } = await supaAdmin
+    .from('verifications')
+    .select('user_id, access_token, refresh_token, expires_at')
+    .limit(limit);
+
+  if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
+
+  let added = 0, failed = 0;
+
+  for (const v of vers) {
+    let token = v.access_token;
+
+    // Renova token se expirado
+    if (v.expires_at && new Date(v.expires_at) <= new Date()) {
+      try {
+        const r = await fetch('https://discord.com/api/oauth2/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: process.env.DISCORD_CLIENT_ID,
+            client_secret: process.env.DISCORD_CLIENT_SECRET,
+            grant_type: 'refresh_token',
+            refresh_token: v.refresh_token,
+          }),
+        });
+        const rd = await r.json();
+        if (rd.access_token) {
+          token = rd.access_token;
+          await supaAdmin.from('verifications').update({
+            access_token: rd.access_token,
+            refresh_token: rd.refresh_token,
+            expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
+          }).eq('user_id', v.user_id);
+        } else {
+          failed++;
+          continue;
+        }
+      } catch {
+        failed++;
+        continue;
+      }
+    }
+
+    // Adiciona ao servidor
+    try {
+      const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ access_token: token }),
+      });
+      if (r.ok || r.status === 204) added++;
+      else failed++;
+    } catch {
+      failed++;
+    }
+
+    // Rate limit: 1 por segundo
+    await new Promise(r => setTimeout(r, 1100));
+  }
+
+  await audit(req, 'take_members', {
+    metadata: { guild_id: gid, added, failed, total: vers.length },
+  });
+
+  res.json({ ok: true, added, failed, total: vers.length });
+});
   if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
   const limit = Math.min(Number(req.body?.limit) || 20, 50);
   const gid = req.params.guildId;

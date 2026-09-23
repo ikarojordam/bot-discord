@@ -77,11 +77,16 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// Middleware combinado: roda requireAuth primeiro, depois checa a role
 function requireRole(...allowed) {
   return (req, res, next) => {
-    if (!req.admin) return res.status(401).json({ error: 'Não autenticado' });
-    if (!allowed.includes(req.admin.role)) return res.status(403).json({ error: `Permissão negada. Requer: ${allowed.join('/')}` });
-    next();
+    requireAuth(req, res, () => {
+      if (!req.admin) return res.status(401).json({ error: 'Não autenticado' });
+      if (!allowed.includes(req.admin.role)) {
+        return res.status(403).json({ error: `Permissão negada. Requer: ${allowed.join('/')}` });
+      }
+      next();
+    });
   };
 }
 const requireDev   = requireRole('dev');

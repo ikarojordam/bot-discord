@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL v2.0 — Frontend
+// FRIO PANEL v2.1 — Frontend (usa Bearer + localStorage)
 // ═══════════════════════════════════════════════════════════
 
 const $  = (s, root = document) => root.querySelector(s);
@@ -20,16 +20,20 @@ function timeAgo(d) {
   return fmtDateShort(d);
 }
 
+// ═══ API (Bearer + localStorage + fallback cookie) ═══
 const api = async (url, opts = {}) => {
-  const r = await fetch(url, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    ...opts,
-  });
+  const token = localStorage.getItem('sb_token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(opts.headers || {}),
+  };
+  const r = await fetch(url, { credentials: 'include', ...opts, headers });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
+    if (r.status === 401) localStorage.removeItem('sb_token');
     const err = new Error(j.error || `HTTP ${r.status}`);
-    err.code = j.code;
+    err.code = j.code; err.hint = j.hint; err.status = r.status;
     throw err;
   }
   return j;
@@ -60,9 +64,6 @@ function showMsg(el, text, type = 'error') {
   if (type === 'ok') setTimeout(() => { e.style.display = 'none'; }, 4500);
 }
 
-// ═══════════════════════════════════════════════════════════
-// VIEWS
-// ═══════════════════════════════════════════════════════════
 function showView(name) {
   ['login', 'register', 'reset'].forEach(v => {
     const el = $(`#view-${v}`);
@@ -72,9 +73,6 @@ function showView(name) {
   if (app) app.classList.toggle('active', name === 'app');
 }
 
-// ═══════════════════════════════════════════════════════════
-// SIDEBAR / NAVEGAÇÃO
-// ═══════════════════════════════════════════════════════════
 function buildSidebar() {
   const role = state.role;
   $$('#sidebar a[data-nav]').forEach(a => {
@@ -100,21 +98,22 @@ function goToPage(name) {
   if (name === 'pending')       loadPending();
   if (name === 'logs')          loadLogs();
 }
-
 function openSidebar()  { $('#sidebar')?.classList.add('open'); $('#sidebarOverlay')?.classList.add('active'); }
 function closeSidebar() { $('#sidebar')?.classList.remove('open'); $('#sidebarOverlay')?.classList.remove('active'); }
 
-// ═══════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════
 async function boot() {
   const hash = new URLSearchParams(window.location.hash.substring(1));
   const resetToken = hash.get('access_token');
   if (resetToken) { window.__RESET_TOKEN__ = resetToken; showView('reset'); return; }
+
+  const token = localStorage.getItem('sb_token');
+  if (!token) { showView('login'); return; }
+
   try {
     const me = await api('/api/auth/me');
     hydrateApp(me);
   } catch (err) {
+    if (err.status === 401) localStorage.removeItem('sb_token');
     showView('login');
   }
 }
@@ -135,9 +134,6 @@ function hydrateApp({ user, admin }) {
   startPolling();
 }
 
-// ═══════════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════════
 async function renderDashboard() {
   const grid = $('#dashStats');
   if (!grid) return;
@@ -164,9 +160,6 @@ async function renderDashboard() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// KEYS
-// ═══════════════════════════════════════════════════════════
 $('#genForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#btnGerar');
@@ -263,9 +256,6 @@ async function loadRedemptions() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SERVIDORES
-// ═══════════════════════════════════════════════════════════
 async function loadServers() {
   const g = $('#serversGrid');
   if (!g) return;
@@ -289,9 +279,6 @@ async function loadServers() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// NOTIFICAÇÕES
-// ═══════════════════════════════════════════════════════════
 async function loadNotifications() {
   try {
     const { notifications, unread } = await api('/api/notifications');
@@ -364,9 +351,6 @@ function startPolling() {
   setInterval(loadPendingBadge, 60000);
 }
 
-// ═══════════════════════════════════════════════════════════
-// USUÁRIOS (DEV)
-// ═══════════════════════════════════════════════════════════
 async function loadUsers() {
   const t = $('#usersTable');
   if (!t) return;
@@ -397,7 +381,6 @@ async function loadUsers() {
           </tr>`).join('')}
         </tbody>
       </table>`;
-    // Bind por dataset (mais seguro que onclick com JSON.stringify)
     t.querySelectorAll('[data-edit-uid]').forEach(btn => {
       btn.addEventListener('click', () => {
         const u = r.usuarios.find(x => x.user_id === btn.dataset.editUid);
@@ -477,9 +460,6 @@ $('#userForm')?.addEventListener('submit', async e => {
   } finally { btn.disabled = false; }
 });
 
-// ═══════════════════════════════════════════════════════════
-// APROVAÇÕES
-// ═══════════════════════════════════════════════════════════
 async function loadPending() {
   const el = $('#pendingList');
   if (!el) return;
@@ -548,9 +528,6 @@ $('#approveForm')?.addEventListener('submit', async e => {
   } finally { btn.disabled = false; }
 });
 
-// ═══════════════════════════════════════════════════════════
-// LOGS
-// ═══════════════════════════════════════════════════════════
 async function loadLogs() {
   const t = $('#logsTable');
   if (!t) return;
@@ -579,9 +556,6 @@ async function loadLogs() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════════════
 $('#loginForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#btnLogin');
@@ -591,6 +565,7 @@ $('#loginForm')?.addEventListener('submit', async e => {
       method: 'POST',
       body: JSON.stringify({ email: $('#loginEmail').value.trim(), password: $('#loginPassword').value }),
     });
+    if (r.token) localStorage.setItem('sb_token', r.token);
     hydrateApp(r);
   } catch (err) {
     showMsg('#loginMsg', err.message);
@@ -653,12 +628,10 @@ $('#resetForm')?.addEventListener('submit', async e => {
 
 $('#btnLogout')?.addEventListener('click', async () => {
   await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  localStorage.removeItem('sb_token');
   window.location.reload();
 });
 
-// ═══════════════════════════════════════════════════════════
-// LISTENERS GLOBAIS
-// ═══════════════════════════════════════════════════════════
 $('#btnHamburger')?.addEventListener('click', openSidebar);
 $('#sidebarOverlay')?.addEventListener('click', closeSidebar);
 $$('#sidebar a[data-nav]').forEach(a => a.addEventListener('click', () => goToPage(a.dataset.nav)));

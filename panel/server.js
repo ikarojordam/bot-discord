@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v2.1
+// 🔑 FRIO PANEL — Backend v2.2
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 const express = require('express');
@@ -32,9 +32,19 @@ function cleanId(s) { return String(s || '').replace(/[<@!>]/g, '').trim(); }
 
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// ═══ AUTH MIDDLEWARE (aceita cookie + Bearer + header) ═══
+// ─── Static com no-store (evita cache do navegador) ───
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  },
+}));
+
+// ═══ AUTH MIDDLEWARE ═══
 async function requireAuth(req, res, next) {
   try {
     let token = null;
@@ -439,4 +449,4 @@ app.get('/api/dev/audit', requireDev, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`🌐 [PANEL v2.1] Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 [PANEL v2.2] Rodando na porta ${PORT}`));

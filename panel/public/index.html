@@ -4,115 +4,72 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════
-     LOGIN
-     ═══════════════════════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="view-login" class="auth-page">
   <div class="auth-card">
     <div class="logo">🧊</div>
     <h1>Frio Panel</h1>
     <p class="sub">Gerencie keys, servidores e clientes</p>
-
     <form id="loginForm">
-      <div class="field">
-        <label>E-mail</label>
-        <input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com">
-      </div>
-      <div class="field">
-        <label>Senha</label>
-        <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
-      </div>
+      <div class="field"><label>E-mail</label><input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com"></div>
+      <div class="field"><label>Senha</label><input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••"></div>
       <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
     </form>
-
     <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
-
     <div class="divider">ou</div>
-
     <div class="register-block">
       <p>Primeira vez aqui?</p>
       <button id="btnShowRegister" class="btn btn-secondary btn-block">Criar conta</button>
     </div>
-
     <div id="loginMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     REGISTER
-     ═══════════════════════════════════════════════════════════ -->
+<!-- REGISTER -->
 <div id="view-register" class="auth-page" style="display:none">
   <div class="auth-card">
     <div class="logo">✨</div>
     <h1>Criar Conta</h1>
     <p class="sub">Aguardará aprovação do DEV</p>
-
     <form id="registerForm">
-      <div class="field">
-        <label>E-mail</label>
-        <input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com">
-      </div>
-      <div class="field">
-        <label>Discord ID (opcional)</label>
-        <input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off">
-      </div>
-      <div class="field">
-        <label>Senha (mín. 8 caracteres)</label>
-        <input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-      </div>
-      <div class="field">
-        <label>Confirmar senha</label>
-        <input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-      </div>
+      <div class="field"><label>E-mail</label><input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com"></div>
+      <div class="field"><label>Discord ID (opcional)</label><input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off"></div>
+      <div class="field"><label>Senha (mín. 8 caracteres)</label><input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••"></div>
+      <div class="field"><label>Confirmar senha</label><input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••"></div>
       <button type="submit" class="btn btn-block" id="btnRegister">Criar conta</button>
     </form>
-
     <div class="links"><a href="#" id="linkBackLogin">← Voltar pro login</a></div>
     <div id="registerMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     RESET
-     ═══════════════════════════════════════════════════════════ -->
+<!-- RESET -->
 <div id="view-reset" class="auth-page" style="display:none">
   <div class="auth-card">
     <div class="logo">🔐</div>
     <h1>Nova Senha</h1>
     <p class="sub">Digite sua nova senha</p>
     <form id="resetForm">
-      <div class="field">
-        <label>Nova senha</label>
-        <input type="password" id="resetPassword" required minlength="8">
-      </div>
-      <div class="field">
-        <label>Confirmar</label>
-        <input type="password" id="resetConfirm" required minlength="8">
-      </div>
+      <div class="field"><label>Nova senha</label><input type="password" id="resetPassword" required minlength="8"></div>
+      <div class="field"><label>Confirmar</label><input type="password" id="resetConfirm" required minlength="8"></div>
       <button type="submit" class="btn btn-block" id="btnResetSubmit">Salvar nova senha</button>
     </form>
     <div id="resetMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     APP
-     ═══════════════════════════════════════════════════════════ -->
+<!-- APP -->
 <div id="view-app" class="app-layout">
-
   <header class="app-header">
     <button class="hamburger" id="btnHamburger">☰</button>
     <div class="brand"><span class="logo">🧊</span><span>Frio Panel</span></div>
     <div class="spacer"></div>
     <div class="header-right">
-      <button class="bell" id="btnBell" title="Notificações">
-        🔔<span class="badge hidden" id="bellBadge">0</span>
-      </button>
+      <button class="bell" id="btnBell" title="Notificações">🔔<span class="badge hidden" id="bellBadge">0</span></button>
       <div class="user-chip">
         <span class="dot"></span>
         <span class="email" id="userEmail">—</span>
@@ -140,8 +97,7 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="app-main">
-
-    <!-- ═══ DASHBOARD ═══ -->
+    <!-- DASHBOARD -->
     <section class="page active" id="page-dashboard">
       <h2>📊 Dashboard</h2>
       <div class="grid-3" id="dashStats"></div>
@@ -151,16 +107,14 @@
       </div>
     </section>
 
-    <!-- ═══ KEYS ═══ -->
+    <!-- KEYS -->
     <section class="page" id="page-keys">
       <h2>🔑 Keys Premium</h2>
-
       <div class="card">
         <h3>➕ Gerar novas keys</h3>
         <form id="genForm">
           <div class="grid-2">
-            <div class="field">
-              <label>Tier</label>
+            <div class="field"><label>Tier</label>
               <select id="genTier" required>
                 <option value="basic">🥉 Basic</option>
                 <option value="premium" selected>🥈 Premium</option>
@@ -168,8 +122,7 @@
                 <option value="unlimited">💎 Unlimited</option>
               </select>
             </div>
-            <div class="field">
-              <label>Duração</label>
+            <div class="field"><label>Duração</label>
               <select id="genDuracao" required>
                 <option value="7">7 dias</option>
                 <option value="15">15 dias</option>
@@ -180,57 +133,33 @@
                 <option value="0">♾️ Permanente</option>
               </select>
             </div>
-            <div class="field">
-              <label>Quantidade (1-50)</label>
-              <input type="number" id="genQtd" value="1" min="1" max="50">
-            </div>
-            <div class="field">
-              <label>Máx. usos por key</label>
-              <input type="number" id="genMaxUsos" value="1" min="1" max="100">
-            </div>
-            <div class="field">
-              <label>Validade (dias, 0=sem)</label>
-              <input type="number" id="genValidade" value="0" min="0">
-            </div>
-            <div class="field">
-              <label>Motivo (opcional)</label>
-              <input type="text" id="genMotivo" placeholder="Ex: Parceria">
-            </div>
+            <div class="field"><label>Quantidade (1-50)</label><input type="number" id="genQtd" value="1" min="1" max="50"></div>
+            <div class="field"><label>Máx. usos por key</label><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div>
+            <div class="field"><label>Validade (dias, 0=sem)</label><input type="number" id="genValidade" value="0" min="0"></div>
+            <div class="field"><label>Motivo (opcional)</label><input type="text" id="genMotivo" placeholder="Ex: Parceria"></div>
           </div>
-          <button type="submit" class="btn">🚀 Gerar Keys</button>
+          <button type="submit" class="btn" id="btnGerar">🚀 Gerar Keys</button>
           <div id="genResult" class="result-box"></div>
         </form>
       </div>
-
       <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys geradas</h3>
       <div class="filters">
-        <select id="filterStatus">
-          <option value="">Todas</option>
-          <option value="active">Só ativas</option>
-          <option value="used">Só esgotadas</option>
-        </select>
-        <select id="filterTier">
-          <option value="">Todos os tiers</option>
-          <option value="basic">Basic</option>
-          <option value="premium">Premium</option>
-          <option value="ultra">Ultra</option>
-          <option value="unlimited">Unlimited</option>
-        </select>
-        <button id="btnRefreshKeys" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+        <select id="filterStatus"><option value="">Todas</option><option value="active">Só ativas</option><option value="used">Só esgotadas</option></select>
+        <select id="filterTier"><option value="">Todos os tiers</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
+        <button type="button" id="btnRefreshKeys" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
       </div>
       <div id="keysTable" class="table-wrap"></div>
-
       <h3 style="margin:24px 0 12px;font-size:16px">🎁 Resgates</h3>
       <div id="redemptionsTable" class="table-wrap"></div>
     </section>
 
-    <!-- ═══ SERVIDORES ═══ -->
+    <!-- SERVIDORES -->
     <section class="page" id="page-servers">
       <h2>🌐 Servidores</h2>
       <div id="serversGrid" class="server-grid"></div>
     </section>
 
-    <!-- ═══ NOTIFICAÇÕES (página) ═══ -->
+    <!-- NOTIFICAÇÕES -->
     <section class="page" id="page-notifications">
       <h2>🔔 Notificações</h2>
       <div style="margin-bottom:12px">
@@ -239,7 +168,7 @@
       <div id="notifList"></div>
     </section>
 
-    <!-- ═══ USUÁRIOS (DEV) ═══ -->
+    <!-- USUÁRIOS (DEV) -->
     <section class="page" id="page-usuarios">
       <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo usuário</button></h2>
       <div class="filters">
@@ -252,24 +181,20 @@
           <option value="cliente">CLIENTE</option>
           <option value="pending">PENDENTE</option>
         </select>
-        <select id="userFilterAtivo">
-          <option value="">Todos</option>
-          <option value="true">Só ativos</option>
-          <option value="false">Só inativos</option>
-        </select>
+        <select id="userFilterAtivo"><option value="">Todos</option><option value="true">Só ativos</option><option value="false">Só inativos</option></select>
         <button id="btnRefreshUsers" class="btn btn-secondary btn-sm">🔄</button>
       </div>
       <div id="usersTable" class="table-wrap"></div>
     </section>
 
-    <!-- ═══ APROVAÇÕES PENDENTES (DEV) ═══ -->
+    <!-- APROVAÇÕES (DEV) -->
     <section class="page" id="page-pending">
       <h2>⏳ Aprovações Pendentes</h2>
       <p class="hint">Cadastros aguardando definição de role.</p>
       <div id="pendingList"></div>
     </section>
 
-    <!-- ═══ LOGS (DEV) ═══ -->
+    <!-- LOGS (DEV) -->
     <section class="page" id="page-logs">
       <h2>📋 Logs de Auditoria</h2>
       <div class="filters">
@@ -278,13 +203,10 @@
       </div>
       <div id="logsTable" class="table-wrap"></div>
     </section>
-
   </main>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     DRAWER NOTIFICAÇÕES
-     ═══════════════════════════════════════════════════════════ -->
+<!-- DRAWER NOTIFICAÇÕES -->
 <div id="notifDrawer" class="drawer">
   <div class="drawer-header">
     <h3>🔔 Notificações</h3>
@@ -296,11 +218,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     MODAIS
-     ═══════════════════════════════════════════════════════════ -->
-
-<!-- Forgot password -->
+<!-- MODAL FORGOT -->
 <div id="modalForgot" class="modal">
   <div class="modal-content" style="max-width:420px;position:relative">
     <button class="modal-close" onclick="closeModal('modalForgot')">✕</button>
@@ -314,7 +232,7 @@
   </div>
 </div>
 
-<!-- Criar usuário (DEV) -->
+<!-- MODAL USER (DEV) -->
 <div id="modalUser" class="modal">
   <div class="modal-content" style="position:relative">
     <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
@@ -337,18 +255,9 @@
           </select>
         </div>
       </div>
-      <div class="field" id="fieldPassword">
-        <label>Senha inicial (deixe vazio pra gerar)</label>
-        <input type="text" id="modalUserPassword" placeholder="Deixe vazio → gerada automaticamente">
-      </div>
-      <div class="field" id="fieldGuilds">
-        <label>Servidores atribuídos (IDs separados por vírgula)</label>
-        <input type="text" id="modalUserGuilds" placeholder="123,456,789">
-      </div>
-      <div class="field">
-        <label>Notas internas</label>
-        <textarea id="modalUserNotes" placeholder="Anotações do DEV..."></textarea>
-      </div>
+      <div class="field" id="fieldPassword"><label>Senha inicial (deixe vazio pra gerar)</label><input type="text" id="modalUserPassword" placeholder="Deixe vazio → gerada automaticamente"></div>
+      <div class="field"><label>Servidores atribuídos (IDs separados por vírgula)</label><input type="text" id="modalUserGuilds" placeholder="123,456,789"></div>
+      <div class="field"><label>Notas internas</label><textarea id="modalUserNotes" placeholder="Anotações do DEV..."></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalUser')">Cancelar</button>
         <button type="submit" class="btn" id="btnSaveUser">Criar usuário</button>
@@ -358,7 +267,7 @@
   </div>
 </div>
 
-<!-- Aprovar usuário (DEV) -->
+<!-- MODAL APPROVE (DEV) -->
 <div id="modalApprove" class="modal">
   <div class="modal-content" style="max-width:480px;position:relative">
     <button class="modal-close" onclick="closeModal('modalApprove')">✕</button>
@@ -373,10 +282,7 @@
           <option value="admin">ADMIN</option>
         </select>
       </div>
-      <div class="field" id="approveGuildsField">
-        <label>Servidores (IDs por vírgula)</label>
-        <input type="text" id="approveGuilds" placeholder="123,456">
-      </div>
+      <div class="field"><label>Servidores (IDs por vírgula)</label><input type="text" id="approveGuilds" placeholder="123,456"></div>
       <div class="field"><label>Notas</label><textarea id="approveNotes"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalApprove')">Cancelar</button>
@@ -390,6 +296,6 @@
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
-<script src="/assets/panel.js"></script>
+<script src="/assets/app.js"></script>
 </body>
 </html>

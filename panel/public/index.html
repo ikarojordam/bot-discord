@@ -97,7 +97,6 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="app-main">
-    <!-- DASHBOARD -->
     <section class="page active" id="page-dashboard">
       <h2>📊 Dashboard</h2>
       <div class="grid-3" id="dashStats"></div>
@@ -107,7 +106,6 @@
       </div>
     </section>
 
-    <!-- KEYS -->
     <section class="page" id="page-keys">
       <h2>🔑 Keys Premium</h2>
       <div class="card">
@@ -153,13 +151,11 @@
       <div id="redemptionsTable" class="table-wrap"></div>
     </section>
 
-    <!-- SERVIDORES -->
     <section class="page" id="page-servers">
       <h2>🌐 Servidores</h2>
       <div id="serversGrid" class="server-grid"></div>
     </section>
 
-    <!-- NOTIFICAÇÕES -->
     <section class="page" id="page-notifications">
       <h2>🔔 Notificações</h2>
       <div style="margin-bottom:12px">
@@ -168,7 +164,6 @@
       <div id="notifList"></div>
     </section>
 
-    <!-- USUÁRIOS (DEV) -->
     <section class="page" id="page-usuarios">
       <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo usuário</button></h2>
       <div class="filters">
@@ -187,14 +182,12 @@
       <div id="usersTable" class="table-wrap"></div>
     </section>
 
-    <!-- APROVAÇÕES (DEV) -->
     <section class="page" id="page-pending">
       <h2>⏳ Aprovações Pendentes</h2>
       <p class="hint">Cadastros aguardando definição de role.</p>
       <div id="pendingList"></div>
     </section>
 
-    <!-- LOGS (DEV) -->
     <section class="page" id="page-logs">
       <h2>📋 Logs de Auditoria</h2>
       <div class="filters">
@@ -206,7 +199,6 @@
   </main>
 </div>
 
-<!-- DRAWER NOTIFICAÇÕES -->
 <div id="notifDrawer" class="drawer">
   <div class="drawer-header">
     <h3>🔔 Notificações</h3>
@@ -218,7 +210,6 @@
   </div>
 </div>
 
-<!-- MODAL FORGOT -->
 <div id="modalForgot" class="modal">
   <div class="modal-content" style="max-width:420px;position:relative">
     <button class="modal-close" onclick="closeModal('modalForgot')">✕</button>
@@ -232,7 +223,6 @@
   </div>
 </div>
 
-<!-- MODAL USER (DEV) -->
 <div id="modalUser" class="modal">
   <div class="modal-content" style="position:relative">
     <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
@@ -267,7 +257,6 @@
   </div>
 </div>
 
-<!-- MODAL APPROVE (DEV) -->
 <div id="modalApprove" class="modal">
   <div class="modal-content" style="max-width:480px;position:relative">
     <button class="modal-close" onclick="closeModal('modalApprove')">✕</button>
@@ -293,7 +282,6 @@
   </div>
 </div>
 
-<!-- TOAST -->
 <div id="toast" class="toast"></div>
 
 <script src="/assets/app.js"></script>

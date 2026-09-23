@@ -4,19 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel</title>
-<link rel="stylesheet" href="/assets/style.css?v=3">
+<link rel="stylesheet" href="/assets/style.css?v=4">
 </head>
 <body>
 
-<!-- LOGIN -->
 <div id="view-login" class="auth-page">
   <div class="auth-card">
     <div class="logo">🧊</div>
     <h1>Frio Panel</h1>
     <p class="sub">Gerencie keys, servidores e clientes</p>
     <form id="loginForm">
-      <div class="field"><label>E-mail</label><input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com"></div>
-      <div class="field"><label>Senha</label><input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••"></div>
+      <div class="field"><label>E-mail</label><input type="email" id="loginEmail" required></div>
+      <div class="field"><label>Senha</label><input type="password" id="loginPassword" required></div>
       <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
     </form>
     <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
@@ -29,47 +28,43 @@
   </div>
 </div>
 
-<!-- REGISTER -->
 <div id="view-register" class="auth-page" style="display:none">
   <div class="auth-card">
     <div class="logo">✨</div>
     <h1>Criar Conta</h1>
     <p class="sub">Aguardará aprovação do DEV</p>
     <form id="registerForm">
-      <div class="field"><label>E-mail</label><input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com"></div>
-      <div class="field"><label>Discord ID (opcional)</label><input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off"></div>
-      <div class="field"><label>Senha (mín. 8 caracteres)</label><input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••"></div>
-      <div class="field"><label>Confirmar senha</label><input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••"></div>
-      <button type="submit" class="btn btn-block" id="btnRegister">Criar conta</button>
+      <div class="field"><label>E-mail</label><input type="email" id="regEmail" required></div>
+      <div class="field"><label>Discord ID (opcional)</label><input type="text" id="regDiscord"></div>
+      <div class="field"><label>Senha (mín. 8)</label><input type="password" id="regPassword" required minlength="8"></div>
+      <div class="field"><label>Confirmar senha</label><input type="password" id="regConfirm" required minlength="8"></div>
+      <button type="submit" class="btn btn-block">Criar conta</button>
     </form>
-    <div class="links"><a href="#" id="linkBackLogin">← Voltar pro login</a></div>
+    <div class="links"><a href="#" id="linkBackLogin">← Voltar</a></div>
     <div id="registerMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- RESET -->
 <div id="view-reset" class="auth-page" style="display:none">
   <div class="auth-card">
     <div class="logo">🔐</div>
     <h1>Nova Senha</h1>
-    <p class="sub">Digite sua nova senha</p>
     <form id="resetForm">
       <div class="field"><label>Nova senha</label><input type="password" id="resetPassword" required minlength="8"></div>
       <div class="field"><label>Confirmar</label><input type="password" id="resetConfirm" required minlength="8"></div>
-      <button type="submit" class="btn btn-block" id="btnResetSubmit">Salvar nova senha</button>
+      <button type="submit" class="btn btn-block">Salvar</button>
     </form>
     <div id="resetMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- APP -->
 <div id="view-app" class="app-layout">
   <header class="app-header">
     <button class="hamburger" id="btnHamburger">☰</button>
     <div class="brand"><span class="logo">🧊</span><span>Frio Panel</span></div>
     <div class="spacer"></div>
     <div class="header-right">
-      <button class="bell" id="btnBell" title="Notificações">🔔<span class="badge hidden" id="bellBadge">0</span></button>
+      <button class="bell" id="btnBell">🔔<span class="badge hidden" id="bellBadge">0</span></button>
       <div class="user-chip">
         <span class="dot"></span>
         <span class="email" id="userEmail">—</span>
@@ -87,7 +82,13 @@
       <a data-nav="servers"><span class="icon">🌐</span>Servidores</a>
       <a data-nav="notifications"><span class="icon">🔔</span>Notificações <span class="badge hidden" id="navNotifBadge" style="margin-left:auto">0</span></a>
 
-      <div class="section-title dev-only">DEV</div>
+      <div class="section-title dev-only">DEV TOOLS</div>
+      <a data-nav="kill-switch" data-roles="dev"><span class="icon">🚨</span>Kill Switch</a>
+      <a data-nav="maintenance" data-roles="dev"><span class="icon">🔧</span>Manutenção</a>
+      <a data-nav="force-premium" data-roles="dev"><span class="icon">💎</span>Force Premium</a>
+      <a data-nav="broadcast" data-roles="dev"><span class="icon">📢</span>Broadcast</a>
+
+      <div class="section-title dev-only">ADMIN</div>
       <a data-nav="usuarios" data-roles="dev"><span class="icon">👥</span>Usuários</a>
       <a data-nav="pending" data-roles="dev"><span class="icon">⏳</span>Aprovações <span class="badge hidden" id="navPendingBadge" style="margin-left:auto">0</span></a>
       <a data-nav="logs" data-roles="dev"><span class="icon">📋</span>Logs</a>
@@ -97,102 +98,154 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="app-main">
+    <!-- DASHBOARD -->
     <section class="page active" id="page-dashboard">
       <h2>📊 Dashboard</h2>
       <div class="grid-3" id="dashStats"></div>
       <div class="card">
         <h3>Bem-vindo(a)</h3>
-        <p class="hint">Use o menu lateral pra navegar. Seu papel: <span class="badge" id="dashRole">—</span></p>
+        <p class="hint">Papel: <span class="badge" id="dashRole">—</span></p>
       </div>
     </section>
 
+    <!-- KEYS -->
     <section class="page" id="page-keys">
       <h2>🔑 Keys Premium</h2>
       <div class="card">
         <h3>➕ Gerar novas keys</h3>
         <form id="genForm">
           <div class="grid-2">
-            <div class="field"><label>Tier</label>
-              <select id="genTier" required>
-                <option value="basic">🥉 Basic</option>
-                <option value="premium" selected>🥈 Premium</option>
-                <option value="ultra">🥇 Ultra</option>
-                <option value="unlimited">💎 Unlimited</option>
-              </select>
-            </div>
-            <div class="field"><label>Duração</label>
-              <select id="genDuracao" required>
-                <option value="7">7 dias</option>
-                <option value="15">15 dias</option>
-                <option value="30" selected>30 dias</option>
-                <option value="90">90 dias</option>
-                <option value="180">180 dias</option>
-                <option value="365">1 ano</option>
-                <option value="0">♾️ Permanente</option>
-              </select>
-            </div>
-            <div class="field"><label>Quantidade (1-50)</label><input type="number" id="genQtd" value="1" min="1" max="50"></div>
-            <div class="field"><label>Máx. usos por key</label><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div>
-            <div class="field"><label>Validade (dias, 0=sem)</label><input type="number" id="genValidade" value="0" min="0"></div>
-            <div class="field"><label>Motivo (opcional)</label><input type="text" id="genMotivo" placeholder="Ex: Parceria"></div>
+            <div class="field"><label>Tier</label><select id="genTier">
+              <option value="basic">🥉 Basic</option><option value="premium" selected>🥈 Premium</option>
+              <option value="ultra">🥇 Ultra</option><option value="unlimited">💎 Unlimited</option>
+            </select></div>
+            <div class="field"><label>Duração</label><select id="genDuracao">
+              <option value="7">7d</option><option value="15">15d</option><option value="30" selected>30d</option>
+              <option value="90">90d</option><option value="180">180d</option><option value="365">1 ano</option><option value="0">♾️</option>
+            </select></div>
+            <div class="field"><label>Qtd (1-50)</label><input type="number" id="genQtd" value="1" min="1" max="50"></div>
+            <div class="field"><label>Máx usos</label><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div>
+            <div class="field"><label>Validade (dias)</label><input type="number" id="genValidade" value="0" min="0"></div>
+            <div class="field"><label>Motivo</label><input type="text" id="genMotivo" placeholder="opcional"></div>
           </div>
-          <button type="submit" class="btn" id="btnGerar">🚀 Gerar Keys</button>
+          <button type="submit" class="btn">🚀 Gerar</button>
           <div id="genResult" class="result-box"></div>
         </form>
       </div>
-      <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys geradas</h3>
+      <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys</h3>
       <div class="filters">
-        <select id="filterStatus"><option value="">Todas</option><option value="active">Só ativas</option><option value="used">Só esgotadas</option></select>
-        <select id="filterTier"><option value="">Todos os tiers</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
-        <button type="button" id="btnRefreshKeys" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+        <select id="filterStatus"><option value="">Todas</option><option value="active">Ativas</option><option value="used">Esgotadas</option></select>
+        <select id="filterTier"><option value="">Tiers</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
+        <button id="btnRefreshKeys" class="btn btn-secondary btn-sm">🔄</button>
       </div>
       <div id="keysTable" class="table-wrap"></div>
       <h3 style="margin:24px 0 12px;font-size:16px">🎁 Resgates</h3>
       <div id="redemptionsTable" class="table-wrap"></div>
     </section>
 
+    <!-- SERVIDORES -->
     <section class="page" id="page-servers">
       <h2>🌐 Servidores</h2>
       <div id="serversGrid" class="server-grid"></div>
     </section>
 
+    <!-- NOTIFICAÇÕES -->
     <section class="page" id="page-notifications">
       <h2>🔔 Notificações</h2>
-      <div style="margin-bottom:12px">
-        <button id="btnMarkAllRead" class="btn btn-secondary btn-sm">✅ Marcar todas como lidas</button>
-      </div>
+      <button id="btnMarkAllRead" class="btn btn-secondary btn-sm" style="margin-bottom:12px">✅ Marcar todas</button>
       <div id="notifList"></div>
     </section>
 
+    <!-- KILL SWITCH -->
+    <section class="page" id="page-kill-switch">
+      <h2>🚨 Kill Switch</h2>
+      <div class="card">
+        <p class="hint">Bloqueia TODOS os comandos do bot em todos os servidores. Use em emergência.</p>
+        <div id="ksStatus">Carregando…</div>
+        <div class="field"><label>Motivo</label><input type="text" id="ksReason" placeholder="Ex: bug crítico"></div>
+        <button id="btnKillOn" class="btn btn-danger">🔴 ATIVAR</button>
+        <button id="btnKillOff" class="btn btn-success">🟢 DESATIVAR</button>
+      </div>
+    </section>
+
+    <!-- MANUTENÇÃO -->
+    <section class="page" id="page-maintenance">
+      <h2>🔧 Manutenção Global</h2>
+      <div class="card">
+        <p class="hint">Bloqueia comandos (exceto DEV) e mostra aviso aos usuários.</p>
+        <div id="mtStatus">Carregando…</div>
+        <div class="field"><label>Motivo</label><input type="text" id="mtReason" placeholder="Ex: atualizando DB"></div>
+        <button id="btnMtOn" class="btn btn-danger">🔴 ATIVAR</button>
+        <button id="btnMtOff" class="btn btn-success">🟢 DESATIVAR</button>
+      </div>
+    </section>
+
+    <!-- FORCE PREMIUM -->
+    <section class="page" id="page-force-premium">
+      <h2>💎 Force Premium</h2>
+      <div class="card">
+        <h3>➕ Adicionar</h3>
+        <div class="grid-2">
+          <div class="field"><label>Scope</label><select id="fpScope">
+            <option value="guild">Servidor</option><option value="user">Usuário</option>
+          </select></div>
+          <div class="field"><label>ID (guild ou user)</label><input type="text" id="fpTarget"></div>
+          <div class="field"><label>Dias (0 = permanente)</label><input type="number" id="fpDays" value="0" min="0"></div>
+          <div class="field"><label>Motivo</label><input type="text" id="fpReason"></div>
+        </div>
+        <button id="btnFpAdd" class="btn">Adicionar</button>
+      </div>
+      <h3 style="margin:24px 0 12px;font-size:16px">📋 Ativos</h3>
+      <div id="fpList" class="table-wrap"></div>
+    </section>
+
+    <!-- BROADCAST -->
+    <section class="page" id="page-broadcast">
+      <h2>📢 Broadcast Global</h2>
+      <div class="card">
+        <p class="hint">Envia notificação (sino) para todos os usuários do painel.</p>
+        <div class="field"><label>Título</label><input type="text" id="bcTitle" placeholder="Ex: Nova atualização!"></div>
+        <div class="field"><label>Conteúdo</label><textarea id="bcContent" placeholder="Mensagem..."></textarea></div>
+        <div class="field"><label>Só para role (opcional)</label><select id="bcRole">
+          <option value="">Todos</option><option value="dev">DEV</option><option value="admin">ADMIN</option>
+          <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
+        </select></div>
+        <button id="btnBcSend" class="btn">📤 Enviar</button>
+      </div>
+      <div class="card">
+        <h3>🔄 Forçar broadcast de update do bot</h3>
+        <p class="hint">Reseta o log pra que o bot reenvie o anúncio de atualização no próximo boot.</p>
+        <button id="btnForceUpdate" class="btn btn-secondary">🔄 Resetar broadcast</button>
+      </div>
+    </section>
+
+    <!-- USUÁRIOS -->
     <section class="page" id="page-usuarios">
-      <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo usuário</button></h2>
+      <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo</button></h2>
       <div class="filters">
-        <input type="text" id="userSearch" placeholder="🔍 Buscar por email, nome ou Discord ID">
-        <select id="userFilterRole">
-          <option value="">Todos os roles</option>
-          <option value="dev">DEV</option>
-          <option value="admin">ADMIN</option>
-          <option value="funcionario">FUNCIONÁRIO</option>
-          <option value="cliente">CLIENTE</option>
-          <option value="pending">PENDENTE</option>
+        <input type="text" id="userSearch" placeholder="🔍 Buscar">
+        <select id="userFilterRole"><option value="">Roles</option>
+          <option value="dev">DEV</option><option value="admin">ADMIN</option>
+          <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
         </select>
-        <select id="userFilterAtivo"><option value="">Todos</option><option value="true">Só ativos</option><option value="false">Só inativos</option></select>
+        <select id="userFilterAtivo"><option value="">Status</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
         <button id="btnRefreshUsers" class="btn btn-secondary btn-sm">🔄</button>
       </div>
       <div id="usersTable" class="table-wrap"></div>
     </section>
 
+    <!-- APROVAÇÕES -->
     <section class="page" id="page-pending">
       <h2>⏳ Aprovações Pendentes</h2>
-      <p class="hint">Cadastros aguardando definição de role.</p>
       <div id="pendingList"></div>
     </section>
 
+    <!-- LOGS -->
     <section class="page" id="page-logs">
-      <h2>📋 Logs de Auditoria</h2>
+      <h2>📋 Logs</h2>
       <div class="filters">
         <input type="text" id="logFilterAction" placeholder="🔍 Filtrar ação">
-        <button id="btnRefreshLogs" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+        <button id="btnRefreshLogs" class="btn btn-secondary btn-sm">🔄</button>
       </div>
       <div id="logsTable" class="table-wrap"></div>
     </section>
@@ -200,82 +253,79 @@
 </div>
 
 <div id="notifDrawer" class="drawer">
-  <div class="drawer-header">
-    <h3>🔔 Notificações</h3>
-    <button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button>
-  </div>
+  <div class="drawer-header"><h3>🔔 Notificações</h3><button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button></div>
   <div class="drawer-body" id="drawerBody"></div>
-  <div class="drawer-footer">
-    <button id="btnMarkAllReadDrawer" class="btn btn-secondary btn-sm" style="flex:1">✅ Marcar todas</button>
+  <div class="drawer-footer"><button id="btnMarkAllReadDrawer" class="btn btn-secondary btn-sm" style="flex:1">✅ Marcar todas</button></div>
+</div>
+
+<!-- MODAL: Server detail -->
+<div id="modalServer" class="modal">
+  <div class="modal-content" style="max-width:800px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalServer')">✕</button>
+    <div id="serverDetail"></div>
   </div>
 </div>
 
+<!-- MODAL: Forgot -->
 <div id="modalForgot" class="modal">
   <div class="modal-content" style="max-width:420px;position:relative">
     <button class="modal-close" onclick="closeModal('modalForgot')">✕</button>
     <h2>🔐 Recuperar senha</h2>
-    <p class="sub">Enviaremos um link pro seu e-mail.</p>
-    <div class="field"><label>E-mail</label><input type="email" id="forgotEmail" placeholder="seu@email.com"></div>
+    <div class="field"><label>E-mail</label><input type="email" id="forgotEmail"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalForgot')">Cancelar</button>
-      <button class="btn" id="btnSendForgot">Enviar link</button>
+      <button class="btn" id="btnSendForgot">Enviar</button>
     </div>
   </div>
 </div>
 
+<!-- MODAL: User -->
 <div id="modalUser" class="modal">
   <div class="modal-content" style="position:relative">
     <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
     <h2 id="modalUserTitle">➕ Novo Usuário</h2>
-    <p class="sub">A conta será criada imediatamente.</p>
     <form id="userForm">
       <input type="hidden" id="modalUserId">
       <div class="grid-2">
         <div class="field"><label>E-mail *</label><input type="email" id="modalUserEmail" required></div>
-        <div class="field"><label>Discord ID *</label><input type="text" id="modalUserDiscord" required placeholder="123456789012345678"></div>
+        <div class="field"><label>Discord ID *</label><input type="text" id="modalUserDiscord" required></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label>Nome</label><input type="text" id="modalUserNome" placeholder="Nome de exibição"></div>
-        <div class="field"><label>Role *</label>
-          <select id="modalUserRole" required>
-            <option value="cliente" selected>CLIENTE</option>
-            <option value="funcionario">FUNCIONÁRIO</option>
-            <option value="admin">ADMIN</option>
-            <option value="dev">DEV</option>
-          </select>
-        </div>
+        <div class="field"><label>Nome</label><input type="text" id="modalUserNome"></div>
+        <div class="field"><label>Role *</label><select id="modalUserRole">
+          <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
+          <option value="admin">ADMIN</option><option value="dev">DEV</option>
+        </select></div>
       </div>
-      <div class="field" id="fieldPassword"><label>Senha inicial (deixe vazio pra gerar)</label><input type="text" id="modalUserPassword" placeholder="Deixe vazio → gerada automaticamente"></div>
-      <div class="field"><label>Servidores atribuídos (IDs separados por vírgula)</label><input type="text" id="modalUserGuilds" placeholder="123,456,789"></div>
-      <div class="field"><label>Notas internas</label><textarea id="modalUserNotes" placeholder="Anotações do DEV..."></textarea></div>
+      <div class="field" id="fieldPassword"><label>Senha (vazio = gerada)</label><input type="text" id="modalUserPassword"></div>
+      <div class="field"><label>Servidores (IDs, vírgula)</label><input type="text" id="modalUserGuilds"></div>
+      <div class="field"><label>Notas</label><textarea id="modalUserNotes"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalUser')">Cancelar</button>
-        <button type="submit" class="btn" id="btnSaveUser">Criar usuário</button>
+        <button type="submit" class="btn" id="btnSaveUser">Criar</button>
       </div>
       <div id="modalUserMsg" class="msg"></div>
     </form>
   </div>
 </div>
 
+<!-- MODAL: Approve -->
 <div id="modalApprove" class="modal">
   <div class="modal-content" style="max-width:480px;position:relative">
     <button class="modal-close" onclick="closeModal('modalApprove')">✕</button>
-    <h2>✅ Aprovar usuário</h2>
+    <h2>✅ Aprovar</h2>
     <p class="sub" id="approveEmail">—</p>
     <form id="approveForm">
       <input type="hidden" id="approveUserId">
-      <div class="field"><label>Role *</label>
-        <select id="approveRole" required>
-          <option value="cliente" selected>CLIENTE</option>
-          <option value="funcionario">FUNCIONÁRIO</option>
-          <option value="admin">ADMIN</option>
-        </select>
-      </div>
-      <div class="field"><label>Servidores (IDs por vírgula)</label><input type="text" id="approveGuilds" placeholder="123,456"></div>
+      <div class="field"><label>Role *</label><select id="approveRole">
+        <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
+        <option value="admin">ADMIN</option>
+      </select></div>
+      <div class="field"><label>Servidores (IDs)</label><input type="text" id="approveGuilds"></div>
       <div class="field"><label>Notas</label><textarea id="approveNotes"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalApprove')">Cancelar</button>
-        <button type="submit" class="btn btn-success" id="btnApprove">Aprovar</button>
+        <button type="submit" class="btn btn-success">Aprovar</button>
       </div>
       <div id="approveMsg" class="msg"></div>
     </form>
@@ -284,6 +334,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="/assets/app.js?v=3"></script>
+<script src="/assets/app.js?v=4"></script>
 </body>
 </html>

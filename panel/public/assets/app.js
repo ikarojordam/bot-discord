@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL v3.1 — Frontend
+// FRIO PANEL v3.2 — Frontend
 // ═══════════════════════════════════════════════════════════
 
 const $  = (s, r = document) => r.querySelector(s);
@@ -47,8 +47,8 @@ const state = {
   cachedKeys: [],
 };
 
-// ═══ Temas por plano ═══
 const PLAN_LABEL = { basic: '🥉 Basic', premium: '🥈 Premium', ultra: '🥇 Ultra', unlimited: '💎 Unlimited', none: '—' };
+
 function applyTheme(plan) {
   const p = ['basic', 'premium', 'ultra', 'unlimited'].includes(plan) ? plan : 'basic';
   document.body.classList.remove('theme-basic', 'theme-premium', 'theme-ultra', 'theme-unlimited');
@@ -175,13 +175,13 @@ async function loadKeys() {
     const r = await api('/api/keys?' + params);
     state.cachedKeys = r.keys;
     if (!r.keys.length) { t.innerHTML = '<div class="empty"><span class="icon">📭</span>Nenhuma key</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Key</th><th>Tier</th><th>Duração</th><th>Usos</th><th>Enviada para</th><th>Status</th><th></th></tr></thead>
+    t.innerHTML = `<table><thead><tr><th>Key</th><th>Tier</th><th>Duração</th><th>Usos</th><th>Enviada</th><th>Status</th><th></th></tr></thead>
       <tbody>${r.keys.map(k => `<tr>
         <td><code>${escapeHtml(k.key_code)}</code></td>
         <td><span class="badge ${escapeHtml(k.tier)}">${escapeHtml(k.tier)}</span></td>
         <td>${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</td>
         <td>${k.usos_atuais}/${k.max_usos}</td>
-        <td>${k.sent_to ? `<code>${escapeHtml(k.sent_to.substring(0, 8))}…</code>` : '—'}</td>
+        <td>${k.sent_to ? `<code>${escapeHtml(String(k.sent_to).substring(0, 8))}…</code>` : '—'}</td>
         <td><span class="badge ${k.ativo ? 'active' : 'used'}">${k.ativo ? 'Ativa' : 'Esgotada'}</span></td>
         <td>
           <button type="button" class="btn btn-sm btn-success" onclick="sendKeyQuick('${escapeHtml(String(k.id))}')" title="Enviar">📤</button>
@@ -209,10 +209,8 @@ async function loadRedemptions() {
 
 // ═══ ENVIAR KEY ═══
 async function loadClientesOptions() {
-  try {
-    const r = await api('/api/dev/usuarios/clientes');
-    return r.clientes || [];
-  } catch { return []; }
+  try { const r = await api('/api/dev/usuarios/clientes'); return r.clientes || []; }
+  catch { return []; }
 }
 window.sendKeyQuick = function (keyId) {
   $('#sendKeyId').innerHTML = state.cachedKeys.map(k => `<option value="${escapeHtml(String(k.id))}" ${String(k.id) === String(keyId) ? 'selected' : ''}>${escapeHtml(k.key_code)} · ${escapeHtml(k.tier)} ${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</option>`).join('');
@@ -594,7 +592,7 @@ async function loadLogs() {
   } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
-// ═══ KILL SWITCH / MANUTENÇÃO / FP / BROADCAST ═══
+// ═══ DEV TOOLS ═══
 async function loadKillSwitch() {
   try { const r = await api('/api/dev/kill-switch');
     $('#ksStatus').innerHTML = `<div class="status-indicator ${r.active ? 'on' : 'off'}">${r.active ? `🔴 ATIVO${r.reason ? ` — ${escapeHtml(r.reason)}` : ''}` : '🟢 Normal'}</div>`;
@@ -668,11 +666,48 @@ $('#btnForceUpdate')?.addEventListener('click', async () => {
 $('#loginForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#btnLogin'); btn.disabled = true;
+  const msgEl = $('#loginMsg');
   try {
-    const r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#loginEmail').value.trim(), password: $('#loginPassword').value }) });
+    const r = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: $('#loginEmail').value.trim(), password: $('#loginPassword').value }),
+    });
     if (r.token) localStorage.setItem('sb_token', r.token);
     hydrateApp(r);
-  } catch (err) { showMsg('#loginMsg', err.message); }
+  } catch (err) {
+    if (err.code === 'EMAIL_NOT_CONFIRMED') {
+      msgEl.innerHTML = `
+        <div style="text-align:left">
+          <b>⚠️ Email não confirmado</b><br>
+          Verifique sua caixa de entrada (e o spam) para o link de confirmação.<br><br>
+          <button type="button" id="btnResendConfirm" class="btn btn-secondary btn-sm" style="margin-top:6px">📧 Reenviar email</button>
+        </div>
+      `;
+      msgEl.className = 'msg error';
+      msgEl.style.display = 'block';
+      const resendBtn = document.getElementById('btnResendConfirm');
+      resendBtn?.addEventListener('click', async () => {
+        resendBtn.disabled = true;
+        resendBtn.textContent = '⏳ Enviando...';
+        try {
+          await api('/api/auth/resend-confirmation', {
+            method: 'POST',
+            body: JSON.stringify({ email: $('#loginEmail').value.trim() }),
+          });
+          resendBtn.textContent = '✅ Email reenviado!';
+          toast('Confira sua caixa de entrada');
+        } catch (e) {
+          resendBtn.textContent = '❌ Erro. Tentar de novo';
+          resendBtn.disabled = false;
+          toast(e.message, 'error');
+        }
+      });
+    } else if (err.code === 'PENDING') {
+      showMsg(msgEl, '⏳ Aguardando aprovação do DEV.', 'info');
+    } else {
+      showMsg(msgEl, err.message);
+    }
+  }
   finally { btn.disabled = false; }
 });
 $('#btnShowRegister')?.addEventListener('click', () => showView('register'));
@@ -682,8 +717,20 @@ $('#registerForm')?.addEventListener('submit', async e => {
   const msg = $('#registerMsg'); const p1 = $('#regPassword').value, p2 = $('#regConfirm').value;
   if (p1 !== p2) return showMsg(msg, 'Senhas diferentes');
   if (p1.length < 8) return showMsg(msg, 'Senha curta');
-  try { const r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: $('#regEmail').value.trim(), password: p1, discord_id: $('#regDiscord').value.trim() || null }) }); showMsg(msg, '✅ ' + (r.message || 'Enviado!'), 'ok'); setTimeout(() => showView('login'), 3000); }
-  catch (err) { showMsg(msg, err.message); }
+  try {
+    const r = await api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: $('#regEmail').value.trim(),
+        password: p1,
+        discord_id: $('#regDiscord').value.trim() || null,
+      }),
+    });
+    msg.innerHTML = `✅ <b>Cadastro criado!</b><br><br>1️⃣ Verifique seu email (olha no spam também) e clique no link de confirmação.<br>2️⃣ Depois aguarde a aprovação do DEV.`;
+    msg.className = 'msg ok';
+    msg.style.display = 'block';
+    setTimeout(() => showView('login'), 6000);
+  } catch (err) { showMsg(msg, err.message); }
 });
 $('#linkForgot')?.addEventListener('click', e => { e.preventDefault(); openModal('modalForgot'); });
 $('#btnSendForgot')?.addEventListener('click', async () => {
@@ -705,7 +752,7 @@ $('#btnLogout')?.addEventListener('click', async () => {
   localStorage.removeItem('sb_token'); window.location.reload();
 });
 
-// ═══ LISTENERS ═══
+// ═══ LISTENERS GLOBAIS ═══
 $('#btnHamburger')?.addEventListener('click', openSidebar);
 $('#sidebarOverlay')?.addEventListener('click', closeSidebar);
 $$('#sidebar a[data-nav]').forEach(a => a.addEventListener('click', () => goToPage(a.dataset.nav)));

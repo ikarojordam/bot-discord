@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL v3.2 — Frontend
+// FRIO PANEL v3.4 — Frontend + Charts
 // ═══════════════════════════════════════════════════════════
 
 const $  = (s, r = document) => r.querySelector(s);
@@ -10,6 +10,7 @@ function escapeHtml(s) {
 }
 function fmtDate(d)      { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
 function fmtDateShort(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
+function brl(v)          { return `R$ ${Number(v || 0).toFixed(2)}`; }
 function timeAgo(d) {
   if (!d) return '—';
   const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
@@ -32,7 +33,7 @@ const api = async (url, opts = {}) => {
   if (!r.ok) {
     if (r.status === 401) localStorage.removeItem('sb_token');
     const err = new Error(j.error || `HTTP ${r.status}`);
-    err.code = j.code; err.hint = j.hint; err.status = r.status;
+    err.code = j.code; err.status = r.status;
     throw err;
   }
   return j;
@@ -43,8 +44,8 @@ const state = {
   pollTimer: null, currentPage: 'dashboard',
   notifications: [], unread: 0,
   currentServer: null,
-  cachedUsers: [],
-  cachedKeys: [],
+  cachedUsers: [], cachedKeys: [],
+  charts: {},
 };
 
 const PLAN_LABEL = { basic: '🥉 Basic', premium: '🥈 Premium', ultra: '🥇 Ultra', unlimited: '💎 Unlimited', none: '—' };
@@ -82,6 +83,7 @@ function buildSidebar() {
   });
   $$('#sidebar .section-title').forEach(st => {
     if (st.classList.contains('dev-only')) st.classList.toggle('hidden', role !== 'dev');
+    if (st.classList.contains('admin-only')) st.classList.toggle('hidden', !['dev','admin'].includes(role));
   });
 }
 function goToPage(name) {
@@ -91,8 +93,12 @@ function goToPage(name) {
   closeSidebar();
   if (name === 'dashboard')     renderDashboard();
   if (name === 'keys')          { loadKeys(); loadRedemptions(); }
+  if (name === 'packs')         loadPacks();
   if (name === 'servers')       loadServers();
+  if (name === 'my-keys')       loadMyKeys();
   if (name === 'notifications') { renderNotifPage(); loadNotifications(); }
+  if (name === 'tickets-global') loadTicketsGlobal();
+  if (name === 'financial')     loadFinancial();
   if (name === 'usuarios')      loadUsers();
   if (name === 'pending')       loadPending();
   if (name === 'logs')          loadLogs();
@@ -121,31 +127,233 @@ function hydrateApp({ user, admin }) {
   const up = $('#userPlan'); if (up) { up.textContent = PLAN_LABEL[admin.plan] || '—'; }
   const dr = $('#dashRole'); if (dr) { dr.textContent = admin.role.toUpperCase(); dr.className = `badge ${admin.role}`; }
   const dp = $('#dashPlan'); if (dp) { dp.textContent = PLAN_LABEL[admin.plan] || '—'; }
+  // Botão sync servers só pra dev
+  const btnSync = $('#btnSyncServers');
+  if (btnSync && admin.role === 'dev') btnSync.style.display = 'inline-flex';
   buildSidebar(); showView('app'); renderDashboard(); loadNotifications(); startPolling();
 }
 
-// ═══ DASHBOARD ═══
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD COM GRÁFICOS
+// ═══════════════════════════════════════════════════════════
 async function renderDashboard() {
-  const grid = $('#dashStats'); if (!grid) return;
+  const grid = $('#dashStats');
+  const charts = $('#dashCharts');
+  if (!grid) return;
   grid.innerHTML = '<div class="loading">Carregando…</div>';
+  charts.innerHTML = '';
+
   try {
-    if (state.role === 'cliente') {
-      const { servers } = await api('/api/me/servers');
-      grid.innerHTML = `<div class="stat-card"><div class="num">${servers.length}</div><div class="lbl">Meus Servidores</div></div>`;
+    const stats = await api('/api/dashboard/stats');
+
+    // ─── CLIENTE / FUNCIONARIO ───
+    if (state.role === 'cliente' || state.role === 'funcionario') {
+      grid.innerHTML = `
+        <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${stats.stats.servers || 0}</div><div class="lbl">Servidores</div></div></div>
+        <div class="stat-mini"><div class="ico-box">🎁</div><div class="info"><div class="num">${stats.stats.keys || 0}</div><div class="lbl">Keys Recebidas</div></div></div>
+        <div class="stat-mini"><div class="ico-box">🔔</div><div class="info"><div class="num">${stats.stats.notifs || 0}</div><div class="lbl">Não Lidas</div></div></div>
+      `;
       return;
     }
-    const [keys, reds] = await Promise.all([api('/api/keys').catch(() => ({ keys: [] })), api('/api/redemptions').catch(() => ({ redemptions: [] }))]);
-    const ativas = keys.keys.filter(k => k.ativo).length;
+
+    // ─── DEV / ADMIN ───
+    const s = stats.stats;
     grid.innerHTML = `
-      <div class="stat-card"><div class="num">${keys.keys.length}</div><div class="lbl">Keys Totais</div></div>
-      <div class="stat-card"><div class="num">${ativas}</div><div class="lbl">Keys Ativas</div></div>
-      <div class="stat-card"><div class="num">${keys.keys.length - ativas}</div><div class="lbl">Esgotadas</div></div>
-      <div class="stat-card"><div class="num">${reds.redemptions.length}</div><div class="lbl">Resgates</div></div>
+      <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${s.guilds || 0}</div><div class="lbl">Servidores</div></div></div>
+      <div class="stat-mini"><div class="ico-box">👥</div><div class="info"><div class="num">${s.users || 0}</div><div class="lbl">Usuários</div></div></div>
+      <div class="stat-mini"><div class="ico-box">🔑</div><div class="info"><div class="num">${s.keys || 0}</div><div class="lbl">Keys Totais</div></div></div>
+      <div class="stat-mini"><div class="ico-box">✅</div><div class="info"><div class="num">${s.active_keys || 0}</div><div class="lbl">Keys Ativas</div></div></div>
+      <div class="stat-mini"><div class="ico-box">🎁</div><div class="info"><div class="num">${s.redemptions || 0}</div><div class="lbl">Resgates</div></div></div>
+      <div class="stat-mini"><div class="ico-box">📊</div><div class="info"><div class="num">${Number(s.total_members || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros Totais</div></div></div>
+      <div class="stat-mini"><div class="ico-box">⏳</div><div class="info"><div class="num">${s.pending || 0}</div><div class="lbl">Pendentes</div></div></div>
+      <div class="stat-mini"><div class="ico-box">🔔</div><div class="info"><div class="num">${s.notifications || 0}</div><div class="lbl">Notificações</div></div></div>
     `;
-  } catch (e) { grid.innerHTML = `<div class="empty">❌ ${escapeHtml(e.message)}</div>`; }
+
+    // ─── GRÁFICOS ───
+    const chartData = await api('/api/dashboard/charts');
+    const c = chartData.charts;
+    charts.innerHTML = `
+      <div class="chart-card"><h4>🔑 Keys geradas (30 dias)</h4><canvas id="chartKeysByDay"></canvas></div>
+      <div class="chart-card"><h4>🥉 Keys por tier</h4><canvas id="chartKeysByTier"></canvas></div>
+      <div class="chart-card"><h4>👥 Usuários por role</h4><canvas id="chartUsersByRole"></canvas></div>
+      <div class="chart-card"><h4>💎 Distribuição de planos</h4><canvas id="chartUsersByPlan"></canvas></div>
+      <div class="chart-card" style="grid-column:1/-1"><h4>🏆 Top 10 servidores (membros)</h4><canvas id="chartTopServers"></canvas></div>
+    `;
+    drawCharts(c);
+  } catch (e) {
+    grid.innerHTML = `<div class="empty">❌ ${escapeHtml(e.message)}</div>`;
+    charts.innerHTML = '';
+  }
 }
 
-// ═══ KEYS ═══
+function destroyChart(key) {
+  if (state.charts[key]) { try { state.charts[key].destroy(); } catch {} state.charts[key] = null; }
+}
+
+function drawCharts(c) {
+  const isDark = true;
+  const textColor = '#9ba0aa';
+  const gridColor = 'rgba(255,255,255,.06)';
+  Chart.defaults.color = textColor;
+  Chart.defaults.font.family = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+  Chart.defaults.font.size = 12;
+
+  // ── Keys geradas por dia ──
+  destroyChart('keysByDay');
+  const ctx1 = $('#chartKeysByDay');
+  if (ctx1) {
+    state.charts.keysByDay = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: c.keys_by_day.map(x => x.date.substring(5)),
+        datasets: [{
+          label: 'Keys',
+          data: c.keys_by_day.map(x => x.count),
+          borderColor: '#5865F2',
+          backgroundColor: 'rgba(88,101,242,.15)',
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#5865F2',
+          pointHoverBorderColor: '#fff',
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+          y: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  // ── Keys por tier ──
+  destroyChart('keysByTier');
+  const ctx2 = $('#chartKeysByTier');
+  if (ctx2) {
+    state.charts.keysByTier = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: ['🥉 Basic', '🥈 Premium', '🥇 Ultra', '💎 Unlimited'],
+        datasets: [{
+          data: [c.keys_by_tier.basic, c.keys_by_tier.premium, c.keys_by_tier.ultra, c.keys_by_tier.unlimited],
+          backgroundColor: ['#92400e', '#8a90a0', '#fbbf24', '#8B5CF6'],
+          borderColor: 'rgba(20,22,27,1)',
+          borderWidth: 4,
+          hoverOffset: 8,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // ── Users por role ──
+  destroyChart('usersByRole');
+  const ctx3 = $('#chartUsersByRole');
+  if (ctx3) {
+    state.charts.usersByRole = new Chart(ctx3, {
+      type: 'doughnut',
+      data: {
+        labels: ['👑 DEV', '🛡️ ADMIN', '🔧 FUNC', '👤 CLIENTE', '⏳ PENDENTE'],
+        datasets: [{
+          data: [c.users_by_role.dev, c.users_by_role.admin, c.users_by_role.funcionario, c.users_by_role.cliente, c.users_by_role.pending],
+          backgroundColor: ['#8B5CF6', '#ED4245', '#5865F2', '#22c55e', '#fbbf24'],
+          borderColor: 'rgba(20,22,27,1)',
+          borderWidth: 4,
+          hoverOffset: 8,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  // ── Users por plano ──
+  destroyChart('usersByPlan');
+  const ctx4 = $('#chartUsersByPlan');
+  if (ctx4) {
+    state.charts.usersByPlan = new Chart(ctx4, {
+      type: 'bar',
+      data: {
+        labels: ['Nenhum', 'Basic', 'Premium', 'Ultra', 'Unlimited'],
+        datasets: [{
+          label: 'Usuários',
+          data: [c.users_by_plan.none, c.users_by_plan.basic, c.users_by_plan.premium, c.users_by_plan.ultra, c.users_by_plan.unlimited],
+          backgroundColor: [
+            'rgba(107,113,128,.6)',
+            'rgba(251,191,122,.75)',
+            'rgba(200,210,225,.75)',
+            'rgba(255,215,80,.75)',
+            'rgba(167,139,250,.8)',
+          ],
+          borderRadius: 8,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  // ── Top servidores ──
+  destroyChart('topServers');
+  const ctx5 = $('#chartTopServers');
+  if (ctx5) {
+    state.charts.topServers = new Chart(ctx5, {
+      type: 'bar',
+      data: {
+        labels: c.top_servers.map(x => x.name?.length > 22 ? x.name.substring(0, 22) + '…' : (x.name || '?')),
+        datasets: [{
+          label: 'Membros',
+          data: c.top_servers.map(x => x.member_count),
+          backgroundColor: 'rgba(139,92,246,.7)',
+          hoverBackgroundColor: 'rgba(167,139,250,.95)',
+          borderRadius: 8,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// KEYS
+// ═══════════════════════════════════════════════════════════
 $('#genForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button[type=submit]'); if (btn) btn.disabled = true;
@@ -162,9 +370,11 @@ $('#genForm')?.addEventListener('submit', async e => {
   } catch (err) { box.innerHTML = `<p style="color:#f87171">❌ ${escapeHtml(err.message)}</p>`; }
   finally { if (btn) btn.disabled = false; }
 });
+
 window.copyText = function (btn, text) {
   navigator.clipboard.writeText(text).then(() => { const o = btn.textContent; btn.textContent = '✅'; setTimeout(() => { btn.textContent = o; }, 1500); });
 };
+
 async function loadKeys() {
   const t = $('#keysTable'); if (!t) return;
   t.innerHTML = '<div class="loading">Carregando…</div>';
@@ -190,6 +400,7 @@ async function loadKeys() {
       </tr>`).join('')}</tbody></table>`;
   } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
 }
+
 async function loadRedemptions() {
   const t = $('#redemptionsTable'); if (!t) return;
   t.innerHTML = '<div class="loading">Carregando…</div>';
@@ -200,8 +411,8 @@ async function loadRedemptions() {
       <tbody>${r.redemptions.map(x => `<tr>
         <td><code>${escapeHtml(x.key_code)}</code></td>
         <td><span class="badge ${escapeHtml(x.tier)}">${escapeHtml(x.tier)}</span></td>
-        <td class="wrap">${escapeHtml(x.guild_name || x.guild_id)}</td>
-        <td class="wrap">${escapeHtml(x.resgatado_por_tag || x.resgatado_por)}</td>
+        <td class="wrap">${escapeHtml(x.guild_name || x.guild_id || '—')}</td>
+        <td class="wrap">${escapeHtml(x.resgatado_por_tag || x.resgatado_por || '—')}</td>
         <td>${x.premium_expires_at ? fmtDateShort(x.premium_expires_at) : '♾️'}</td>
       </tr>`).join('')}</tbody></table>`;
   } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
@@ -241,13 +452,64 @@ $('#btnConfirmSendKey')?.addEventListener('click', async () => {
   finally { btn.disabled = false; }
 });
 
+// ═══ PACKS ═══
+$('#btnGerarPack')?.addEventListener('click', async () => {
+  const btn = $('#btnGerarPack'); btn.disabled = true;
+  const box = $('#packResult'); box.innerHTML = '<div class="loading">Gerando packs…</div>';
+  try {
+    const r = await api('/api/keys/generate-pack', { method: 'POST', body: JSON.stringify({
+      quantidade: Number($('#packQtd').value),
+      motivo: $('#packMotivo').value.trim() || null,
+    })});
+    box.innerHTML = `<p style="margin-bottom:12px;color:#4ade80;font-size:14px">✅ <b>${r.packs.length}</b> pack(s) gerado(s)</p>` +
+      r.packs.map(p => `<div class="key-row"><div><span class="code">${escapeHtml(p.key_code)}</span><span class="meta">· 📦 Pack (60 keys)</span></div><button type="button" onclick="copyText(this,'${escapeHtml(p.key_code)}')">📋</button></div>`).join('');
+    toast(`${r.packs.length} pack(s) criado(s)!`); loadPacks();
+  } catch (err) { box.innerHTML = `<p style="color:#f87171">❌ ${escapeHtml(err.message)}</p>`; }
+  finally { btn.disabled = false; }
+});
+
+async function loadPacks() {
+  const t = $('#packsTable'); if (!t) return;
+  t.innerHTML = '<div class="loading">Carregando…</div>';
+  try {
+    const r = await api('/api/keys/packs');
+    if (!r.packs.length) { t.innerHTML = '<div class="empty"><span class="icon">📦</span>Nenhum pack</div>'; return; }
+    t.innerHTML = `<table><thead><tr><th>Pack</th><th>Conteúdo</th><th>Enviado</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody>${r.packs.map(p => `<tr>
+        <td><code>${escapeHtml(p.key_code)}</code></td>
+        <td><span class="badge pack">60 keys</span></td>
+        <td>${p.sent_to ? `<code>${escapeHtml(String(p.sent_to).substring(0, 8))}…</code>` : '—'}</td>
+        <td><span class="badge ${p.ativo ? 'active' : 'used'}">${p.ativo ? 'Disponível' : 'Resgatado'}</span></td>
+        <td>
+          <button type="button" class="btn btn-sm btn-success" onclick="sendPackQuick('${escapeHtml(String(p.id))}')">📤</button>
+          <button type="button" class="btn btn-sm" onclick="copyText(this,'${escapeHtml(p.key_code)}')">📋</button>
+          ${p.ativo ? `<button type="button" class="btn btn-sm" onclick="redeemPack('${escapeHtml(String(p.id))}')">✨ Redeem</button>` : ''}
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
+}
+window.sendPackQuick = function (id) {
+  const pack = state.cachedKeys.find(x => String(x.id) === String(id));
+  $('#sendKeyId').innerHTML = `<option value="${escapeHtml(String(id))}" selected>📦 Pack</option>`;
+  openSendKey();
+};
+window.redeemPack = async function (id) {
+  if (!confirm('Gerar 60 keys deste pack? Essa ação é irreversível.')) return;
+  try {
+    const r = await api('/api/keys/redeem-pack', { method: 'POST', body: JSON.stringify({ key_id: id }) });
+    toast(`✅ ${r.total} keys geradas!`);
+    loadPacks(); loadKeys();
+  } catch (e) { toast(e.message, 'error'); }
+};
+$('#btnRefreshPacks')?.addEventListener('click', loadPacks);
+
 // ═══ SERVIDORES ═══
 async function loadServers() {
   const g = $('#serversGrid'); if (!g) return;
   g.innerHTML = '<div class="loading">Carregando…</div>';
   try {
     const { servers } = await api('/api/me/servers');
-    if (!servers.length) { g.innerHTML = '<div class="empty"><span class="icon">🌐</span>Nenhum</div>'; return; }
+    if (!servers.length) { g.innerHTML = '<div class="empty"><span class="icon">🌐</span>Nenhum servidor</div>'; return; }
     g.innerHTML = servers.map(s => {
       const gid = s.guild_id || s.id;
       return `<div class="server-card" data-guild="${escapeHtml(gid)}">
@@ -258,19 +520,23 @@ async function loadServers() {
             <div class="meta">${escapeHtml(String(gid))}</div>
           </div>
         </div>
-        <div class="stats"><span>👥 ${s.member_count ?? '—'}</span></div>
+        <div class="stats"><span>👥 ${Number(s.member_count || 0).toLocaleString('pt-BR')}</span></div>
       </div>`;
     }).join('');
     g.querySelectorAll('[data-guild]').forEach(el => el.addEventListener('click', () => openServerDetail(el.dataset.guild)));
   } catch (err) { g.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
 }
+
 async function openServerDetail(guildId) {
   state.currentServer = guildId;
   $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
   openModal('modalServer');
   try {
-    const [info, stats] = await Promise.all([api(`/api/me/servers/${guildId}`), api(`/api/me/servers/${guildId}/stats`)]);
-    const g = info.guild || {};
+    const [info, stats] = await Promise.all([
+      api(`/api/me/servers/${guildId}/stats`).catch(() => ({})),
+      api(`/api/me/servers/${guildId}/stats`).catch(() => ({})),
+    ]);
+    const g = stats.guild || {};
     const s = stats.stats || {};
     const canManage = ['dev', 'admin'].includes(state.role);
     const actionsTabBtn = canManage ? `<button class="detail-tab" data-tab="actions">⚡ Ações</button>` : '';
@@ -287,7 +553,7 @@ async function openServerDetail(guildId) {
         <div><h2>${escapeHtml(g.name || 'Servidor')}</h2><p>${escapeHtml(guildId)}</p></div>
       </div>
       <div class="mini-stats">
-        <div class="mini-stat"><div class="num">${s.members || 0}</div><div class="lbl">Membros</div></div>
+        <div class="mini-stat"><div class="num">${Number(s.members || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
         <div class="mini-stat"><div class="num">${s.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
         <div class="mini-stat"><div class="num">${s.bets_30d || 0}</div><div class="lbl">Apostas 30d</div></div>
         <div class="mini-stat"><div class="num">${s.orders_30d || 0}</div><div class="lbl">Vendas 30d</div></div>
@@ -315,6 +581,7 @@ async function openServerDetail(guildId) {
     if (canManage) $('#btnTakeMembers')?.addEventListener('click', takeMembers);
   } catch (e) { $('#serverDetail').innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
+
 async function loadServerTickets(gid) {
   const el = $('#dt-tickets'); if (!el) return;
   el.innerHTML = '<div class="loading">Carregando…</div>';
@@ -332,7 +599,7 @@ async function loadServerProducts(gid) {
     const { products } = await api(`/api/me/servers/${gid}/products`);
     if (!products.length) { el.innerHTML = '<div class="empty">Sem produtos</div>'; return; }
     el.innerHTML = `<table><thead><tr><th>Nome</th><th>Preço</th><th>Ativo</th></tr></thead>
-      <tbody>${products.map(p => `<tr><td class="wrap">${escapeHtml(p.name)}</td><td>R$ ${Number(p.price || 0).toFixed(2)}</td><td>${p.active ? '✅' : '❌'}</td></tr>`).join('')}</tbody></table>`;
+      <tbody>${products.map(p => `<tr><td class="wrap">${escapeHtml(p.name)}</td><td>${brl(p.price)}</td><td>${p.active ? '✅' : '❌'}</td></tr>`).join('')}</tbody></table>`;
   } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 async function loadServerOrders(gid) {
@@ -342,7 +609,7 @@ async function loadServerOrders(gid) {
     const { orders } = await api(`/api/me/servers/${gid}/orders`);
     if (!orders.length) { el.innerHTML = '<div class="empty">Sem pedidos</div>'; return; }
     el.innerHTML = `<table><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Status</th></tr></thead>
-      <tbody>${orders.map(o => `<tr><td>${o.id}</td><td class="wrap">${escapeHtml(o.user_id || '—')}</td><td>R$ ${Number(o.total || 0).toFixed(2)}</td><td>${escapeHtml(o.status || '—')}</td></tr>`).join('')}</tbody></table>`;
+      <tbody>${orders.map(o => `<tr><td>${o.id}</td><td class="wrap">${escapeHtml(o.user_id || '—')}</td><td>${brl(o.total)}</td><td>${escapeHtml(o.status || '—')}</td></tr>`).join('')}</tbody></table>`;
   } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 async function takeMembers() {
@@ -358,6 +625,88 @@ async function takeMembers() {
     res.className = 'msg ok'; res.textContent = `✅ Add: ${r.added} | ❌ Falhas: ${r.failed} | Total: ${r.total}`;
   } catch (e) { res.className = 'msg error'; res.textContent = `❌ ${e.message}`; }
   finally { btn.disabled = false; btn.textContent = '🚀 Levar membros'; }
+}
+
+// ═══ MINHAS KEYS ═══
+async function loadMyKeys() {
+  const el = $('#myKeysList'); if (!el) return;
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  try {
+    const r = await api('/api/me/keys-sent');
+    if (!r.keys.length) { el.innerHTML = '<div class="empty"><span class="icon">📭</span>Nenhuma key recebida</div>'; return; }
+    el.innerHTML = `<div class="my-key-grid">${r.keys.map(k => `
+      <div class="my-key-card">
+        <div class="head">
+          <span class="badge ${k.is_pack ? 'pack' : escapeHtml(k.tier)}">${k.is_pack ? '📦 Pack' : escapeHtml(k.tier.toUpperCase())}</span>
+          <span class="badge ${k.ativo ? 'active' : 'used'}">${k.ativo ? 'Ativa' : 'Usada'}</span>
+        </div>
+        <div class="code">${escapeHtml(k.key_code)}</div>
+        <div class="meta">
+          <span>⏱️ ${k.duracao_dias === 0 ? 'Permanente' : k.duracao_dias + ' dias'}</span>
+          <span>📅 ${timeAgo(k.sent_at)}</span>
+        </div>
+        <button class="copy-btn" onclick="copyText(this,'${escapeHtml(k.key_code)}')">📋 Copiar código</button>
+      </div>`).join('')}</div>`;
+  } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+// ═══ TICKETS GLOBAL ═══
+async function loadTicketsGlobal() {
+  const t = $('#ticketsGlobalTable'); if (!t) return;
+  t.innerHTML = '<div class="loading">Carregando…</div>';
+  try {
+    const r = await api('/api/admin/tickets-global');
+    if (!r.tickets.length) { t.innerHTML = '<div class="empty"><span class="icon">✅</span>Nenhum ticket aberto</div>'; return; }
+    t.innerHTML = `<table><thead><tr><th>Servidor</th><th>Autor</th><th>Aberto em</th><th>Status</th></tr></thead>
+      <tbody>${r.tickets.map(x => `<tr>
+        <td class="wrap"><code>${escapeHtml(x.guild_id)}</code></td>
+        <td class="wrap">${escapeHtml(x.user_id || '—')}</td>
+        <td>${fmtDate(x.opened_at || x.created_at)}</td>
+        <td><span class="badge active">Aberto</span></td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+// ═══ FINANCEIRO ═══
+async function loadFinancial() {
+  const stats = $('#financialStats');
+  stats.innerHTML = '<div class="loading">Carregando…</div>';
+  try {
+    const r = await api('/api/admin/financial');
+    stats.innerHTML = `
+      <div class="stat-mini"><div class="ico-box">💰</div><div class="info"><div class="num">${brl(r.total)}</div><div class="lbl">Total 30d</div></div></div>
+      <div class="stat-mini"><div class="ico-box">🛒</div><div class="info"><div class="num">${r.count}</div><div class="lbl">Vendas</div></div></div>
+      <div class="stat-mini"><div class="ico-box">📊</div><div class="info"><div class="num">${brl(r.avg)}</div><div class="lbl">Ticket Médio</div></div></div>
+    `;
+    destroyChart('financial');
+    const ctx = $('#chartFinancial');
+    if (ctx && r.daily.length) {
+      state.charts.financial = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: r.daily.map(x => x.date.substring(5)),
+          datasets: [{
+            label: 'Vendas (R$)',
+            data: r.daily.map(x => x.value),
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34,197,94,.15)',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2.5,
+            pointRadius: 0,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: 'rgba(255,255,255,.06)' }, beginAtZero: true, ticks: { callback: v => 'R$ ' + v } },
+          },
+        },
+      });
+    }
+  } catch (e) { stats.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
 // ═══ NOTIFICAÇÕES ═══
@@ -445,7 +794,7 @@ async function loadUsers() {
   } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
 }
 async function changePlan(uid) {
-  const plan = prompt('Novo plano:\n(none / basic / premium / ultra / unlimited)', 'basic');
+  const plan = prompt('Novo plano (none/basic/premium/ultra/unlimited):', 'basic');
   if (!plan) return;
   if (!['none', 'basic', 'premium', 'ultra', 'unlimited'].includes(plan)) return toast('Plano inválido', 'error');
   try {
@@ -505,7 +854,6 @@ $('#userForm')?.addEventListener('submit', async e => {
   finally { btn.disabled = false; }
 });
 
-// ═══ NOTIFICAÇÃO POR USUÁRIO ═══
 function openSendNotif(userId, email) {
   $('#sendNotifUserId').value = userId;
   $('#sendNotifTarget').textContent = email;
@@ -662,53 +1010,58 @@ $('#btnForceUpdate')?.addEventListener('click', async () => {
   catch (e) { toast(e.message, 'error'); }
 });
 
+// ═══ BACKUP ═══
+$('#btnDownloadBackup')?.addEventListener('click', async () => {
+  try {
+    const token = localStorage.getItem('sb_token');
+    const r = await fetch('/api/dev/backup', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Erro no download');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `frio-backup-${new Date().toISOString().substring(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Backup baixado!');
+  } catch (e) { toast(e.message, 'error'); }
+});
+$('#btnForceSync')?.addEventListener('click', async () => {
+  try {
+    const r = await api('/api/dev/sync-servers', { method: 'POST' });
+    toast(r.message || 'Sync agendado!');
+  } catch (e) { toast(e.message, 'error'); }
+});
+$('#btnSyncServers')?.addEventListener('click', async () => {
+  try { await api('/api/dev/sync-servers', { method: 'POST' }); toast('Sync agendado!'); }
+  catch (e) { toast(e.message, 'error'); }
+});
+
 // ═══ AUTH ═══
 $('#loginForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#btnLogin'); btn.disabled = true;
   const msgEl = $('#loginMsg');
   try {
-    const r = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: $('#loginEmail').value.trim(), password: $('#loginPassword').value }),
-    });
+    const r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#loginEmail').value.trim(), password: $('#loginPassword').value }) });
     if (r.token) localStorage.setItem('sb_token', r.token);
     hydrateApp(r);
   } catch (err) {
     if (err.code === 'EMAIL_NOT_CONFIRMED') {
-      msgEl.innerHTML = `
-        <div style="text-align:left">
-          <b>⚠️ Email não confirmado</b><br>
-          Verifique sua caixa de entrada (e o spam) para o link de confirmação.<br><br>
-          <button type="button" id="btnResendConfirm" class="btn btn-secondary btn-sm" style="margin-top:6px">📧 Reenviar email</button>
-        </div>
-      `;
-      msgEl.className = 'msg error';
-      msgEl.style.display = 'block';
-      const resendBtn = document.getElementById('btnResendConfirm');
-      resendBtn?.addEventListener('click', async () => {
-        resendBtn.disabled = true;
-        resendBtn.textContent = '⏳ Enviando...';
+      msgEl.innerHTML = `<div style="text-align:left"><b>⚠️ Email não confirmado</b><br>Verifique sua caixa de entrada.<br><br><button type="button" id="btnResendConfirm" class="btn btn-secondary btn-sm">📧 Reenviar</button></div>`;
+      msgEl.className = 'msg error'; msgEl.style.display = 'block';
+      document.getElementById('btnResendConfirm')?.addEventListener('click', async () => {
+        const rb = document.getElementById('btnResendConfirm');
+        rb.disabled = true; rb.textContent = '⏳ Enviando...';
         try {
-          await api('/api/auth/resend-confirmation', {
-            method: 'POST',
-            body: JSON.stringify({ email: $('#loginEmail').value.trim() }),
-          });
-          resendBtn.textContent = '✅ Email reenviado!';
-          toast('Confira sua caixa de entrada');
-        } catch (e) {
-          resendBtn.textContent = '❌ Erro. Tentar de novo';
-          resendBtn.disabled = false;
-          toast(e.message, 'error');
-        }
+          await api('/api/auth/resend-confirmation', { method: 'POST', body: JSON.stringify({ email: $('#loginEmail').value.trim() }) });
+          rb.textContent = '✅ Reenviado!';
+        } catch (e) { rb.textContent = '❌ Erro'; rb.disabled = false; toast(e.message, 'error'); }
       });
     } else if (err.code === 'PENDING') {
       showMsg(msgEl, '⏳ Aguardando aprovação do DEV.', 'info');
-    } else {
-      showMsg(msgEl, err.message);
-    }
-  }
-  finally { btn.disabled = false; }
+    } else { showMsg(msgEl, err.message); }
+  } finally { btn.disabled = false; }
 });
 $('#btnShowRegister')?.addEventListener('click', () => showView('register'));
 $('#linkBackLogin')?.addEventListener('click', e => { e.preventDefault(); showView('login'); });
@@ -718,17 +1071,9 @@ $('#registerForm')?.addEventListener('submit', async e => {
   if (p1 !== p2) return showMsg(msg, 'Senhas diferentes');
   if (p1.length < 8) return showMsg(msg, 'Senha curta');
   try {
-    const r = await api('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({
-        email: $('#regEmail').value.trim(),
-        password: p1,
-        discord_id: $('#regDiscord').value.trim() || null,
-      }),
-    });
-    msg.innerHTML = `✅ <b>Cadastro criado!</b><br><br>1️⃣ Verifique seu email (olha no spam também) e clique no link de confirmação.<br>2️⃣ Depois aguarde a aprovação do DEV.`;
-    msg.className = 'msg ok';
-    msg.style.display = 'block';
+    const r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: $('#regEmail').value.trim(), password: p1, discord_id: $('#regDiscord').value.trim() || null }) });
+    msg.innerHTML = `✅ <b>Cadastro criado!</b><br><br>1️⃣ Verifique seu email (olha no spam).<br>2️⃣ Depois aguarde aprovação do DEV.`;
+    msg.className = 'msg ok'; msg.style.display = 'block';
     setTimeout(() => showView('login'), 6000);
   } catch (err) { showMsg(msg, err.message); }
 });

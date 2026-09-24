@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=8">
+<link rel="stylesheet" href="/assets/style.css?v=9">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -21,7 +22,7 @@
       <div class="brand-features">
         <div class="brand-feature"><div class="ico">🔑</div>Keys ilimitadas por tier</div>
         <div class="brand-feature"><div class="ico">🌐</div>Multi-servidores com OAuth</div>
-        <div class="brand-feature"><div class="ico">🚨</div>Kill switch + manutenção global</div>
+        <div class="brand-feature"><div class="ico">📊</div>Dashboard com gráficos em tempo real</div>
       </div>
     </div>
     <div class="auth-form-side">
@@ -124,16 +125,23 @@
       <div class="section-title">Geral</div>
       <a data-nav="dashboard" class="active"><span class="icon">📊</span>Dashboard</a>
       <a data-nav="keys" data-roles="dev,admin,funcionario"><span class="icon">🔑</span>Keys</a>
+      <a data-nav="packs" data-roles="dev"><span class="icon">📦</span>Packs</a>
       <a data-nav="servers"><span class="icon">🌐</span>Servidores</a>
+      <a data-nav="my-keys"><span class="icon">🎁</span>Minhas Keys</a>
       <a data-nav="notifications"><span class="icon">🔔</span>Notificações <span class="badge hidden" id="navNotifBadge" style="margin-left:auto">0</span></a>
+
+      <div class="section-title admin-only">ADMIN</div>
+      <a data-nav="tickets-global" data-roles="dev,admin"><span class="icon">🎫</span>Tickets Global</a>
+      <a data-nav="financial" data-roles="dev,admin"><span class="icon">💰</span>Financeiro</a>
 
       <div class="section-title dev-only">DEV TOOLS</div>
       <a data-nav="kill-switch" data-roles="dev"><span class="icon">🚨</span>Kill Switch</a>
       <a data-nav="maintenance" data-roles="dev"><span class="icon">🔧</span>Manutenção</a>
       <a data-nav="force-premium" data-roles="dev"><span class="icon">💎</span>Force Premium</a>
       <a data-nav="broadcast" data-roles="dev"><span class="icon">📢</span>Broadcast</a>
+      <a data-nav="backup" data-roles="dev"><span class="icon">💾</span>Backup</a>
 
-      <div class="section-title dev-only">ADMIN</div>
+      <div class="section-title dev-only">USUÁRIOS</div>
       <a data-nav="usuarios" data-roles="dev"><span class="icon">👥</span>Usuários</a>
       <a data-nav="pending" data-roles="dev"><span class="icon">⏳</span>Aprovações <span class="badge hidden" id="navPendingBadge" style="margin-left:auto">0</span></a>
       <a data-nav="logs" data-roles="dev"><span class="icon">📋</span>Logs</a>
@@ -143,15 +151,18 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="app-main">
+    <!-- DASHBOARD -->
     <section class="page active" id="page-dashboard">
       <h2>📊 Dashboard</h2>
       <div class="grid-3" id="dashStats"></div>
-      <div class="card">
+      <div class="chart-grid" id="dashCharts"></div>
+      <div class="card" id="dashWelcome">
         <h3>Bem-vindo(a)</h3>
         <p class="hint">Papel: <span class="badge" id="dashRole">—</span> · Plano: <span class="badge" id="dashPlan">—</span></p>
       </div>
     </section>
 
+    <!-- KEYS -->
     <section class="page" id="page-keys">
       <h2>🔑 Keys Premium</h2>
       <div class="card">
@@ -186,17 +197,66 @@
       <div id="redemptionsTable" class="table-wrap"></div>
     </section>
 
+    <!-- PACKS -->
+    <section class="page" id="page-packs">
+      <h2>📦 Pack de Keys</h2>
+      <div class="card">
+        <h3>➕ Gerar Pack (60 keys)</h3>
+        <p class="hint">Cada pack contém: <b>5 keys × 4 tiers × 3 durações = 60 keys</b> (Basic, Premium, Ultra, Unlimited × 7, 15 e 30 dias)</p>
+        <div class="grid-2">
+          <div class="field"><label>Quantidade de packs</label><div class="input-wrap"><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
+          <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="packMotivo" placeholder="opcional"></div></div>
+        </div>
+        <button id="btnGerarPack" class="btn">📦 Gerar Pack</button>
+        <div id="packResult" class="result-box"></div>
+      </div>
+      <h3 style="margin:24px 0 12px;font-size:16px">📋 Packs gerados</h3>
+      <div class="filters">
+        <button id="btnRefreshPacks" class="btn btn-secondary btn-sm">🔄</button>
+      </div>
+      <div id="packsTable" class="table-wrap"></div>
+    </section>
+
+    <!-- SERVIDORES -->
     <section class="page" id="page-servers">
-      <h2>🌐 Servidores</h2>
+      <h2>🌐 Servidores <button id="btnSyncServers" class="btn btn-sm" style="margin-left:auto;display:none" data-roles="dev">🔄 Sync</button></h2>
       <div id="serversGrid" class="server-grid"></div>
     </section>
 
+    <!-- MINHAS KEYS -->
+    <section class="page" id="page-my-keys">
+      <h2>🎁 Minhas Keys</h2>
+      <p class="hint">Keys enviadas pra você pelo DEV/ADMIN.</p>
+      <div id="myKeysList"></div>
+    </section>
+
+    <!-- NOTIFICAÇÕES -->
     <section class="page" id="page-notifications">
       <h2>🔔 Notificações</h2>
       <button id="btnMarkAllRead" class="btn btn-secondary btn-sm" style="margin-bottom:12px">✅ Marcar todas</button>
       <div id="notifList"></div>
     </section>
 
+    <!-- TICKETS GLOBAL -->
+    <section class="page" id="page-tickets-global">
+      <h2>🎫 Tickets Abertos (Global)</h2>
+      <p class="hint">Todos os tickets abertos em todos os servidores.</p>
+      <div id="ticketsGlobalTable" class="table-wrap"></div>
+    </section>
+
+    <!-- FINANCEIRO -->
+    <section class="page" id="page-financial">
+      <h2>💰 Financeiro (últimos 30 dias)</h2>
+      <div class="grid-3" id="financialStats"></div>
+      <div class="chart-grid">
+        <div class="chart-card" style="grid-column:1/-1">
+          <h4>Vendas por dia</h4>
+          <canvas id="chartFinancial"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- KILL SWITCH -->
     <section class="page" id="page-kill-switch">
       <h2>🚨 Kill Switch</h2>
       <div class="card">
@@ -208,6 +268,7 @@
       </div>
     </section>
 
+    <!-- MANUTENÇÃO -->
     <section class="page" id="page-maintenance">
       <h2>🔧 Manutenção Global</h2>
       <div class="card">
@@ -219,6 +280,7 @@
       </div>
     </section>
 
+    <!-- FORCE PREMIUM -->
     <section class="page" id="page-force-premium">
       <h2>💎 Force Premium</h2>
       <div class="card">
@@ -237,6 +299,7 @@
       <div id="fpList" class="table-wrap"></div>
     </section>
 
+    <!-- BROADCAST -->
     <section class="page" id="page-broadcast">
       <h2>📢 Broadcast Global</h2>
       <div class="card">
@@ -255,6 +318,21 @@
       </div>
     </section>
 
+    <!-- BACKUP -->
+    <section class="page" id="page-backup">
+      <h2>💾 Backup</h2>
+      <div class="card">
+        <p class="hint">Baixa um JSON com todas as tabelas principais do painel.</p>
+        <button id="btnDownloadBackup" class="btn">💾 Baixar backup completo</button>
+      </div>
+      <div class="card">
+        <h3>🔄 Sincronizar servidores</h3>
+        <p class="hint">Força o bot a reescanear todos os servidores e atualizar a tabela user_guilds.</p>
+        <button id="btnForceSync" class="btn btn-secondary">🔄 Forçar sync</button>
+      </div>
+    </section>
+
+    <!-- USUÁRIOS -->
     <section class="page" id="page-usuarios">
       <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo</button></h2>
       <div class="filters">
@@ -273,11 +351,13 @@
       <div id="usersTable" class="table-wrap"></div>
     </section>
 
+    <!-- APROVAÇÕES -->
     <section class="page" id="page-pending">
       <h2>⏳ Aprovações Pendentes</h2>
       <div id="pendingList"></div>
     </section>
 
+    <!-- LOGS -->
     <section class="page" id="page-logs">
       <h2>📋 Logs</h2>
       <div class="filters">
@@ -420,7 +500,6 @@
   </div>
 </div>
 
-<!-- TOAST -->
 <div id="toast" class="toast"></div>
 
 <script>
@@ -432,6 +511,6 @@ function togglePass(id, btn) {
   btn.textContent = isPass ? '🙈' : '👁️';
 }
 </script>
-<script src="/assets/app.js?v=8"></script>
+<script src="/assets/app.js?v=9"></script>
 </body>
 </html>

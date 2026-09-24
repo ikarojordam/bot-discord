@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v3.0
+// 🔑 FRIO PANEL — Backend v3.1
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 const express = require('express');
@@ -23,6 +23,7 @@ const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON);
 const supaAdmin  = createClient(SUPABASE_URL, SUPABASE_SERVICE, { auth: { persistSession: false } });
 
 const ROLES = ['dev', 'admin', 'funcionario', 'cliente'];
+const PLANS = ['none', 'basic', 'premium', 'ultra', 'unlimited'];
 
 function genPassword(len = 12) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
@@ -41,7 +42,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// ═══ AUTH MIDDLEWARE ═══
+// ═══ AUTH ═══
 async function requireAuth(req, res, next) {
   try {
     let token = null;
@@ -73,7 +74,6 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// Roda requireAuth ANTES de checar role
 function requireRole(...allowed) {
   return (req, res, next) => {
     requireAuth(req, res, () => {
@@ -106,7 +106,7 @@ function ownsGuild(req, guildId) {
   return (req.admin.assigned_guilds || []).includes(guildId);
 }
 
-// ═══ PUBLIC CONFIG ═══
+// ═══ PUBLIC ═══
 app.get('/api/public-config', (req, res) => res.json({ supabase_url: SUPABASE_URL, supabase_anon: SUPABASE_ANON }));
 
 // ═══ AUTH ═══
@@ -136,7 +136,8 @@ app.post('/api/auth/login', async (req, res) => {
       token: data.session.access_token,
       user: { id: data.user.id, email: data.user.email },
       admin: {
-        nome: admin.nome, role: admin.role, is_owner: admin.role === 'dev',
+        nome: admin.nome, role: admin.role, plan: admin.plan || 'basic',
+        is_owner: admin.role === 'dev',
         pode_gerar_keys: ['dev', 'admin', 'funcionario'].includes(admin.role),
         assigned_guilds: admin.assigned_guilds || [],
         discord_id: admin.discord_id || null,
@@ -155,7 +156,8 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({
     user: { id: req.user.id, email: req.user.email },
     admin: {
-      nome: a.nome, role: a.role, is_owner: a.role === 'dev',
+      nome: a.nome, role: a.role, plan: a.plan || 'basic',
+      is_owner: a.role === 'dev',
       pode_gerar_keys: ['dev', 'admin', 'funcionario'].includes(a.role),
       assigned_guilds: a.assigned_guilds || [],
       discord_id: a.discord_id || null,
@@ -174,7 +176,7 @@ app.post('/api/auth/register', async (req, res) => {
     if (authErr) return res.status(400).json({ error: authErr.message });
     const { error: dbErr } = await supaAdmin.from('panel_admins').insert({
       user_id: authData.user.id, email, nome: email.split('@')[0],
-      role: 'pending', ativo: false, is_owner: false,
+      role: 'pending', plan: 'basic', ativo: false, is_owner: false,
       discord_id: discord_id ? cleanId(discord_id) : null,
     });
     if (dbErr) { await supaAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {}); return res.status(500).json({ error: dbErr.message }); }
@@ -212,15 +214,23 @@ app.post('/api/auth/update-password', async (req, res) => {
 // ═══ DEV — USUÁRIOS ═══
 app.get('/api/dev/usuarios', requireDev, async (req, res) => {
   try {
-    const { role, ativo, search, limit = 100, offset = 0 } = req.query;
+    const { role, ativo, plan, search, limit = 100, offset = 0 } = req.query;
     let q = supaAdmin.from('panel_admins').select('*', { count: 'exact' }).order('created_at', { ascending: false });
     if (role) q = q.eq('role', role);
+    if (plan) q = q.eq('plan', plan);
     if (ativo === 'true') q = q.eq('ativo', true);
     if (ativo === 'false') q = q.eq('ativo', false);
     if (search) q = q.or(`email.ilike.%${search}%,nome.ilike.%${search}%,discord_id.eq.${search}`);
     const { data, error, count } = await q.range(Number(offset), Number(offset) + Number(limit) - 1);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true, usuarios: data || [], total: count || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/dev/usuarios/clientes', requireStaff, async (req, res) => {
+  try {
+    const { data } = await supaAdmin.from('panel_admins').select('user_id,email,nome,discord_id,role,plan,assigned_guilds').eq('ativo', true).in('role', ['cliente', 'funcionario']).order('nome', { ascending: true });
+    res.json({ ok: true, clientes: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -233,9 +243,10 @@ app.get('/api/dev/usuarios/pending', requireDev, async (req, res) => {
 
 app.post('/api/dev/usuarios', requireDev, async (req, res) => {
   try {
-    const { email, discord_id, password, role, assigned_guilds, notes, nome } = req.body || {};
+    const { email, discord_id, password, role, plan, assigned_guilds, notes, nome } = req.body || {};
     if (!email || !role) return res.status(400).json({ error: 'Email e role obrigatórios' });
     if (!ROLES.includes(role)) return res.status(400).json({ error: 'Role inválido' });
+    if (plan && !PLANS.includes(plan)) return res.status(400).json({ error: 'Plano inválido' });
     if (!discord_id) return res.status(400).json({ error: 'Discord ID obrigatório' });
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id').eq('email', email).maybeSingle();
     if (existing) return res.status(400).json({ error: 'E-mail já cadastrado' });
@@ -244,25 +255,26 @@ app.post('/api/dev/usuarios', requireDev, async (req, res) => {
     if (authErr) return res.status(400).json({ error: authErr.message });
     const { error: dbErr } = await supaAdmin.from('panel_admins').insert({
       user_id: authData.user.id, email, nome: nome || email.split('@')[0],
-      role, ativo: true, is_owner: false,
+      role, plan: plan || 'basic', ativo: true, is_owner: false,
       pode_gerar_keys: ['dev', 'admin', 'funcionario'].includes(role),
       discord_id: cleanId(discord_id),
       assigned_guilds: Array.isArray(assigned_guilds) ? assigned_guilds : [],
       notes: notes || null, approved_at: new Date().toISOString(), approved_by: req.user.email,
     });
     if (dbErr) { await supaAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {}); return res.status(500).json({ error: dbErr.message }); }
-    await audit(req, `add_${role}`, { target_id: authData.user.id, target_role: role, metadata: { email } });
-    await notify(authData.user.id, 'system', '👋 Bem-vindo!', `Conta (${role}) criada. Senha: ${finalPassword}`, { role });
+    await audit(req, `add_${role}`, { target_id: authData.user.id, target_role: role, metadata: { email, plan } });
+    await notify(authData.user.id, 'system', '👋 Bem-vindo!', `Conta (${role} · ${plan || 'basic'}) criada. Senha: ${finalPassword}`, { role, plan });
     res.json({ ok: true, user_id: authData.user.id, temp_password: finalPassword });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/dev/usuarios/:userId/approve', requireDev, async (req, res) => {
   try {
-    const { role, assigned_guilds, notes } = req.body || {};
+    const { role, plan, assigned_guilds, notes } = req.body || {};
     if (!ROLES.includes(role)) return res.status(400).json({ error: 'Role inválido' });
+    if (plan && !PLANS.includes(plan)) return res.status(400).json({ error: 'Plano inválido' });
     const { error } = await supaAdmin.from('panel_admins').update({
-      role, ativo: true,
+      role, plan: plan || 'basic', ativo: true,
       pode_gerar_keys: ['dev', 'admin', 'funcionario'].includes(role),
       assigned_guilds: Array.isArray(assigned_guilds) ? assigned_guilds : [],
       notes: notes || null,
@@ -271,16 +283,32 @@ app.post('/api/dev/usuarios/:userId/approve', requireDev, async (req, res) => {
     }).eq('user_id', req.params.userId);
     if (error) return res.status(500).json({ error: error.message });
     await audit(req, 'approve_user', { target_id: req.params.userId, target_role: role });
-    await notify(req.params.userId, 'system', '✅ Aprovado!', `Você é ${role}.`, { role });
+    await notify(req.params.userId, 'system', '✅ Aprovado!', `Você é ${role} · ${plan || 'basic'}.`, { role, plan });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Atualiza plano de um usuário
+app.patch('/api/dev/usuarios/:userId/plan', requireDev, async (req, res) => {
+  try {
+    const { plan } = req.body || {};
+    if (!PLANS.includes(plan)) return res.status(400).json({ error: 'Plano inválido' });
+    const { error } = await supaAdmin.from('panel_admins').update({
+      plan, updated_at: new Date().toISOString(),
+    }).eq('user_id', req.params.userId);
+    if (error) return res.status(500).json({ error: error.message });
+    await audit(req, 'change_plan', { target_id: req.params.userId, metadata: { plan } });
+    await notify(req.params.userId, 'system', '💎 Plano alterado!', `Seu plano agora é ${plan.toUpperCase()}.`, { plan });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.patch('/api/dev/usuarios/:userId', requireDev, async (req, res) => {
   try {
-    const { role, ativo, nome, discord_id, assigned_guilds, notes } = req.body || {};
+    const { role, ativo, nome, discord_id, assigned_guilds, notes, plan } = req.body || {};
     const patch = { updated_at: new Date().toISOString() };
     if (role && ROLES.includes(role)) { patch.role = role; patch.pode_gerar_keys = ['dev', 'admin', 'funcionario'].includes(role); }
+    if (plan && PLANS.includes(plan)) patch.plan = plan;
     if (typeof ativo === 'boolean') patch.ativo = ativo;
     if (nome) patch.nome = nome;
     if (discord_id !== undefined) patch.discord_id = discord_id ? cleanId(discord_id) : null;
@@ -347,6 +375,36 @@ app.get('/api/keys', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Envia uma key para um usuário (com notificação)
+app.post('/api/keys/send', requireStaff, async (req, res) => {
+  try {
+    const { key_id, user_id } = req.body || {};
+    if (!key_id || !user_id) return res.status(400).json({ error: 'key_id e user_id obrigatórios' });
+
+    const { data: key } = await supaAdmin.from('premium_keys').select('*').eq('id', key_id).maybeSingle();
+    if (!key) return res.status(404).json({ error: 'Key não encontrada' });
+
+    const { data: target } = await supaAdmin.from('panel_admins').select('user_id,email,nome,role,ativo').eq('user_id', user_id).maybeSingle();
+    if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (!target.ativo) return res.status(400).json({ error: 'Usuário inativo' });
+
+    // Marca key como enviada
+    await supaAdmin.from('premium_keys').update({
+      sent_to: user_id,
+      sent_at: new Date().toISOString(),
+    }).eq('id', key_id);
+
+    // Notificação
+    await notify(user_id, 'key_received', '🔑 Você recebeu uma key!', `Key: ${key.key_code}\nTier: ${key.tier.toUpperCase()}\nDuração: ${key.duracao_dias === 0 ? 'Permanente' : key.duracao_dias + ' dias'}`, {
+      key_id, key_code: key.key_code, tier: key.tier, duracao_dias: key.duracao_dias,
+    });
+
+    await audit(req, 'send_key', { target_id: user_id, metadata: { key_id, key_code: key.key_code } });
+
+    res.json({ ok: true, sent_to: target.email, key_code: key.key_code });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/keys/:id', requireDev, async (req, res) => {
   try {
     await supaAdmin.from('premium_keys').delete().eq('id', req.params.id);
@@ -363,7 +421,7 @@ app.get('/api/redemptions', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ═══ SERVIDORES (lista) ═══
+// ═══ SERVIDORES ═══
 app.get('/api/me/servers', requireAuth, async (req, res) => {
   try {
     if (['cliente', 'funcionario'].includes(req.admin.role)) {
@@ -377,7 +435,6 @@ app.get('/api/me/servers', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ═══ SERVIDOR — detalhes + stats ═══
 app.get('/api/me/servers/:guildId', requireAuth, async (req, res) => {
   try {
     if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
@@ -463,7 +520,6 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
     for (const v of vers) {
       let token = v.access_token;
 
-      // Renova token se expirado
       if (v.expires_at && new Date(v.expires_at) <= new Date()) {
         try {
           const r = await fetch('https://discord.com/api/oauth2/token', {
@@ -484,17 +540,10 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
               refresh_token: rd.refresh_token,
               expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
             }).eq('user_id', v.user_id);
-          } else {
-            failed++;
-            continue;
-          }
-        } catch {
-          failed++;
-          continue;
-        }
+          } else { failed++; continue; }
+        } catch { failed++; continue; }
       }
 
-      // Adiciona ao servidor
       try {
         const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
           method: 'PUT',
@@ -506,18 +555,12 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
         });
         if (r.ok || r.status === 204) added++;
         else failed++;
-      } catch {
-        failed++;
-      }
+      } catch { failed++; }
 
-      // Rate limit: 1 por segundo
       await new Promise(r => setTimeout(r, 1100));
     }
 
-    await audit(req, 'take_members', {
-      metadata: { guild_id: gid, added, failed, total: vers.length },
-    });
-
+    await audit(req, 'take_members', { metadata: { guild_id: gid, added, failed, total: vers.length } });
     res.json({ ok: true, added, failed, total: vers.length });
   } catch (e) {
     console.error('[TAKE-MEMBERS]', e);
@@ -526,8 +569,6 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
 });
 
 // ═══ DEV TOOLS ═══
-
-// Kill Switch
 app.get('/api/dev/kill-switch', requireDev, async (req, res) => {
   const { data } = await supaAdmin.from('kill_switch').select('*').eq('id', 1).maybeSingle();
   res.json({ ok: true, active: !!data?.active, reason: data?.reason, enabled_by: data?.enabled_by, enabled_at: data?.enabled_at });
@@ -542,7 +583,6 @@ app.post('/api/dev/kill-switch', requireDev, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Manutenção Global
 app.get('/api/dev/maintenance', requireDev, async (req, res) => {
   const { data } = await supaAdmin.from('maintenance_mode').select('*').eq('id', 1).maybeSingle();
   res.json({ ok: true, active: !!data?.active, reason: data?.reason, by: data?.by, started_at: data?.started_at });
@@ -558,7 +598,6 @@ app.post('/api/dev/maintenance', requireDev, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Force Premium
 app.get('/api/dev/force-premium', requireDev, async (req, res) => {
   const { data } = await supaAdmin.from('force_premium').select('*').order('granted_at', { ascending: false }).limit(200);
   res.json({ ok: true, items: data || [] });
@@ -581,7 +620,6 @@ app.delete('/api/dev/force-premium/:id', requireDev, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Broadcast global notification
 app.post('/api/dev/broadcast', requireDev, async (req, res) => {
   const { title, content, role } = req.body || {};
   if (!title || !content) return res.status(400).json({ error: 'title e content obrigatórios' });
@@ -593,7 +631,6 @@ app.post('/api/dev/broadcast', requireDev, async (req, res) => {
   res.json({ ok: true, sent: (users || []).length });
 });
 
-// Force update broadcast
 app.post('/api/dev/force-update', requireDev, async (req, res) => {
   await supaAdmin.from('bot_meta').delete().eq('key', 'last_update_broadcast');
   await supaAdmin.from('guild_update_log').delete().neq('guild_id', 'x');
@@ -619,17 +656,23 @@ app.post('/api/notifications/read-all', requireAuth, async (req, res) => {
   await supaAdmin.from('site_notifications').update({ read: true }).eq('user_id', req.user.id).eq('read', false);
   res.json({ ok: true });
 });
+
+// Envia notificação para um usuário
 app.post('/api/dev/notifications', requireStaff, async (req, res) => {
-  const { user_id, type = 'system', title, content, broadcast_to_role } = req.body || {};
-  if (broadcast_to_role) {
-    const { data: targets } = await supaAdmin.from('panel_admins').select('user_id').eq('role', broadcast_to_role).eq('ativo', true);
-    for (const t of targets || []) await notify(t.user_id, type, title, content);
-    await audit(req, 'broadcast_notification', { target_role: broadcast_to_role });
-    return res.json({ ok: true, sent: (targets || []).length });
-  }
-  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
-  await notify(user_id, type, title, content);
-  res.json({ ok: true });
+  try {
+    const { user_id, type = 'system', title, content, broadcast_to_role } = req.body || {};
+    if (broadcast_to_role) {
+      const { data: targets } = await supaAdmin.from('panel_admins').select('user_id').eq('role', broadcast_to_role).eq('ativo', true);
+      for (const t of targets || []) await notify(t.user_id, type, title, content);
+      await audit(req, 'broadcast_notification', { target_role: broadcast_to_role });
+      return res.json({ ok: true, sent: (targets || []).length });
+    }
+    if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+    if (!title || !content) return res.status(400).json({ error: 'title e content obrigatórios' });
+    await notify(user_id, type, title, content);
+    await audit(req, 'send_notification', { target_id: user_id, metadata: { title, type } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══ AUDIT ═══
@@ -642,4 +685,4 @@ app.get('/api/dev/audit', requireDev, async (req, res) => {
   res.json({ ok: true, logs: data || [] });
 });
 
-app.listen(PORT, () => console.log(`🌐 [PANEL v3.0] Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 [PANEL v3.1] Rodando na porta ${PORT}`));

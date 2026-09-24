@@ -1,6 +1,6 @@
 // ============================================================
 // 🤖 FRIOBOT — index.js
-// v6.5.0 — Completo, corrigido e otimizado
+// v6.5.1 — Completo, corrigido e otimizado
 // ============================================================
 // ESTRUTURA EM 7 PARTES
 //   PARTE 1: Base, Supabase, configs, logs, cargos
@@ -43,7 +43,7 @@ const os = require('os');
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.get('/', (req, res) => res.send('Bot está online!'));
-app.get('/health', (req, res) => res.json({ ok: true, uptime: process.uptime(), version: 'v6.5.0' }));
+app.get('/health', (req, res) => res.json({ ok: true, uptime: process.uptime(), version: 'v6.5.1' }));
 const port = process.env.PORT || process.env.WEBHOOK_PORT || 3000;
 app.listen(port, () => console.log(`🌐 Web rodando na porta ${port}`));
 
@@ -118,7 +118,7 @@ function isDeveloper(id) { return DEVELOPER_IDS.includes(id) || id === OWNER_ID;
 // ═══════════════════════════════════════════════════════════
 // VERSION
 // ═══════════════════════════════════════════════════════════
-const BOT_VERSION = 'v6.5.0';
+const BOT_VERSION = 'v6.5.1';
 const UPDATE_NOTES = [
   { tag: 'ticket', text: 'editor completo com 6 abas + tipos + formulário' },
   { tag: 'loja', text: 'loja moderna + painéis + estoque + pedidos' },
@@ -170,6 +170,38 @@ function normalizeHex(s, def = '#5865F2') {
   return s.startsWith('#') ? s : `#${s}`;
 }
 function isValidUrl(s) { return /^https?:\/\/.+/i.test(s || ''); }
+
+// ═══════════════════════════════════════════════════════════
+// RESOLVERS TOLERANTES (aceita <@&123>, 123, #nome, nome) — v6.5.1
+// ═══════════════════════════════════════════════════════════
+function extractId(input) {
+  if (!input) return null;
+  const s = String(input).trim();
+  const m = s.match(/^<[@#]!?&?(\d{15,25})>$/);
+  if (m) return m[1];
+  if (/^\d{15,25}$/.test(s)) return s;
+  return null;
+}
+function resolveChannel(guild, input) {
+  if (!guild || !input) return null;
+  const s = String(input).trim();
+  const id = extractId(s);
+  if (id) return guild.channels.cache.get(id) || null;
+  const name = s.startsWith('#') ? s.slice(1) : s;
+  return guild.channels.cache.find(c => c.name === name)
+      || guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase())
+      || null;
+}
+function resolveRole(guild, input) {
+  if (!guild || !input) return null;
+  const s = String(input).trim();
+  const id = extractId(s);
+  if (id) return guild.roles.cache.get(id) || null;
+  const name = s.replace(/^@/, '');
+  return guild.roles.cache.find(r => r.name === name)
+      || guild.roles.cache.find(r => r.name.toLowerCase() === name.toLowerCase())
+      || null;
+}
 
 function safeInterval(fn, ms, label = 'interval') {
   let running = false;
@@ -729,6 +761,7 @@ async function logDevAction(userId, action, guildId = null, details = {}) {
       'panic': 'Panic ativado', 'lockdown': 'Lockdown aplicado',
       'global_ban': 'Ban global', 'global_unban': 'Ban global removido',
       'spy_add': 'Spy iniciado', 'spy_remove': 'Spy parado',
+      'levar_membros': 'Membros levados via OAuth',
     };
     const title = labels[action] || `Ação dev: \`${action}\``;
     await logImportant('DEV', title, {
@@ -828,6 +861,59 @@ async function checkDevRoles() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// SYNC USER_GUILDS — popula tabela do site (v6.5.1)
+// ═══════════════════════════════════════════════════════════
+async function syncUserGuilds() {
+  let total = 0, errors = 0;
+  for (const g of client.guilds.cache.values()) {
+    try {
+      const owner = await g.fetchOwner().catch(() => null);
+      if (owner) {
+        await supabase.from('user_guilds').upsert({
+          user_id: owner.id,
+          guild_id: g.id,
+          is_owner: true,
+          is_admin: true,
+          guild_name: g.name,
+          guild_icon: g.iconURL({ size: 256 }),
+          member_count: g.memberCount,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,guild_id' });
+        total++;
+      }
+      const members = await g.members.fetch({ limit: 100 }).catch(() => null);
+      if (members) {
+        let admCount = 0;
+        for (const m of members.values()) {
+          if (admCount >= 10) break;
+          if (m.user.bot) continue;
+          if (m.id === g.ownerId) continue;
+          if (!m.permissions.has(PermissionFlagsBits.Administrator)) continue;
+          await supabase.from('user_guilds').upsert({
+            user_id: m.id,
+            guild_id: g.id,
+            is_owner: false,
+            is_admin: true,
+            guild_name: g.name,
+            guild_icon: g.iconURL({ size: 256 }),
+            member_count: g.memberCount,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,guild_id' });
+          admCount++;
+          total++;
+        }
+      }
+      await sleep(300);
+    } catch (e) {
+      errors++;
+      console.error(`[SYNC-USER-GUILDS] ${g.id}:`, e.message);
+    }
+  }
+  console.log(`✅ [SYNC-USER-GUILDS] ${total} registros, ${errors} erros`);
+  return { total, errors };
+}
+
+// ═══════════════════════════════════════════════════════════
 // FIM DA PARTE 1/7
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
@@ -838,7 +924,7 @@ async function checkDevRoles() {
 // Locale, Voz, Música, Sorteios, Temproles, Shop Panels base
 // ═══════════════════════════════════════════════════════════
 
-// ───── REJOIN ─────
+// ───── REJOIN (PATCH 3: owner_id adicionado) ─────
 async function saveGuildForRejoin(g) {
   let invite = null;
   try {
@@ -852,6 +938,7 @@ async function saveGuildForRejoin(g) {
     await supabase.from('bot_guilds').upsert({
       guild_id: g.id, name: g.name, member_count: g.memberCount,
       icon: g.iconURL(), invite, in_guild: true,
+      owner_id: g.ownerId, // 🆕 v6.5.1
     }, { onConflict: 'guild_id' });
   } catch {}
 }
@@ -1100,7 +1187,7 @@ async function getSupabaseInfo() {
     const start = Date.now();
     const { error } = await supabase.from('guilds').select('id', { count: 'exact', head: true });
     const ping = Date.now() - start;
-    const tables = ['guilds', 'configs', 'settings', 'products', 'inventory', 'orders', 'customers', 'ff_bets', 'ff_matches', 'ff_transcripts', 'ff_logs', 'ff_players', 'ticket_data', 'error_logs', 'verifications', 'force_premium', 'dev_alerts', 'dev_audit', 'guild_notes', 'manual_broadcasts', 'ff_streamer_queue', 'ff_analyst_queue', 'ff_mediator_queue', 'ff_streamer_mediations', 'ff_streamer_mediator_queue'];
+    const tables = ['guilds', 'configs', 'settings', 'products', 'inventory', 'orders', 'customers', 'ff_bets', 'ff_matches', 'ff_transcripts', 'ff_logs', 'ff_players', 'ticket_data', 'error_logs', 'verifications', 'force_premium', 'dev_alerts', 'dev_audit', 'guild_notes', 'manual_broadcasts', 'ff_streamer_queue', 'ff_analyst_queue', 'ff_mediator_queue', 'ff_streamer_mediations', 'ff_streamer_mediator_queue', 'user_guilds'];
     const counts = {};
     await Promise.allSettled(tables.map(async (t) => {
       try { const { count } = await supabase.from(t).select('*', { count: 'exact', head: true }); counts[t] = count || 0; }
@@ -2680,9 +2767,23 @@ function ticketCooldownCheck(userId, ms = 5000) {
   if (TICKET_COOLDOWN.size > 500) TICKET_COOLDOWN.clear();
   return true;
 }
+
+// ═══════════════════════════════════════════════════════════
+// openTicket — v6.5.1 COM VALIDAÇÃO PRÉVIA (PATCH 10)
+// ═══════════════════════════════════════════════════════════
 async function openTicket(i, panel, tipo, formAnswers = []) {
   const guild = i.guild;
   const cfg = await getConfig(guild.id);
+
+  // 🆕 v6.5.1 — valida permissão do bot ANTES de tentar criar thread
+  const me = guild.members.me;
+  if (!me.permissions.has(PermissionFlagsBits.CreatePrivateThreads)) {
+    throw new Error('Bot sem permissão **Criar Tópicos Privados**. Ative nas permissões do servidor.');
+  }
+  if (!me.permissions.has(PermissionFlagsBits.ManageThreads)) {
+    throw new Error('Bot sem permissão **Gerenciar Tópicos**. Ative nas permissões do servidor.');
+  }
+
   let parentCh = null;
   if (safeStr(tipo?.canal_id)) parentCh = guild.channels.cache.get(tipo.canal_id) || await guild.channels.fetch(tipo.canal_id).catch(() => null);
   if (!parentCh && safeStr(panel?.canal_id)) parentCh = guild.channels.cache.get(panel.canal_id) || await guild.channels.fetch(panel.canal_id).catch(() => null);
@@ -3196,8 +3297,7 @@ async function checkTicketsMemberLeave(guild, member) {
 // FIM DA PARTE 3/7
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [PARTE 4/7] SETUPS + COMANDOS SECRETOS
-// Modelos EXATOS da v6.4.0
+// [PARTE 4/7] SETUPS + COMANDO SECRETO FF
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
@@ -3269,7 +3369,7 @@ async function createRolesSequential(guild, roleDefs, errors) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SETUP LOJA — MODELO EXATO v6.4.0
+// SETUP LOJA
 // ═══════════════════════════════════════════════════════════
 async function setupLojaServer(guild, onProgress = null) {
   const bot = guild.members.me;
@@ -3449,7 +3549,6 @@ async function setupLojaServer(guild, onProgress = null) {
 
     const tasks = [];
 
-    // Ticket
     const tpCh = created['📩・suporte'] || guild.channels.cache.find(c => c.name === '📩・suporte');
     if (tpCh) {
       const panel = await createTicketPanel(guild.id, {
@@ -3467,7 +3566,6 @@ async function setupLojaServer(guild, onProgress = null) {
       if (msg) await updateTicketPanel(guild.id, panel.id, { canal_id: tpCh.id, mensagem_id: msg.id });
     }
 
-    // Verificação
     const vCh = created['✅・verificação'] || guild.channels.cache.find(c => c.name === '✅・verificação');
     if (vCh) {
       const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guild.id)}`;
@@ -3478,7 +3576,6 @@ async function setupLojaServer(guild, onProgress = null) {
       }).catch(() => {}));
     }
 
-    // Painéis por canal
     for (const [channelName, category] of [
       ['🛒・n1tradas', 'D1SCORD'], ['🛒・l1nk', 'D1SCORD'], ['🛒・impuls0s', 'D1SCORD'],
       ['🛒・at1vações', 'D1SCORD'], ['⭐・g1ft', 'D1SCORD'],
@@ -3537,7 +3634,7 @@ async function setupLojaServer(guild, onProgress = null) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SETUP COMUNIDADE — MODELO EXATO v6.4.0
+// SETUP COMUNIDADE
 // ═══════════════════════════════════════════════════════════
 async function setupComunidadeServer(guild, onProgress = null) {
   const bot = guild.members.me;
@@ -3742,7 +3839,7 @@ async function setupComunidadeServer(guild, onProgress = null) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SETUP ORGANIZAÇÃO — MODELO EXATO v6.4.0
+// SETUP ORGANIZAÇÃO
 // ═══════════════════════════════════════════════════════════
 async function setupOrganizacaoServer(guild, onProgress = null, opts = {}) {
   const skipPosting = !!opts.skipPosting;
@@ -5898,7 +5995,6 @@ function buildAjudaHome() {
     .setThumbnail(client.user.displayAvatarURL())
     .setFooter({ text: `Frio Bot ${BOT_VERSION} • ${client.guilds.cache.size} servidores` })
     .setTimestamp();
-
   const menu = new StringSelectMenuBuilder().setCustomId('ajuda_pick').setPlaceholder('📚 Escolha um tópico')
     .addOptions(
       { label: 'Comandos Públicos', value: 'publicos', emoji: '🌟' },
@@ -6097,7 +6193,7 @@ async function handleResgatar(i) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// INTERACTION CREATE — HANDLER PRINCIPAL
+// INTERACTION CREATE — HANDLER PRINCIPAL (parte 1)
 // ═══════════════════════════════════════════════════════════
 client.on('interactionCreate', async (i) => {
   try {
@@ -6336,6 +6432,32 @@ client.on('interactionCreate', async (i) => {
         return i.showModal(m);
       }
 
+      // ═══════════════════════════════════════════════════════════
+      // 🆕 PATCH 5 — CFGSET (movido do isButton → isStringSelectMenu)
+      // ═══════════════════════════════════════════════════════════
+      if (cid.startsWith('cfgset_')) {
+        if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const key = cid.replace('cfgset_', '');
+        const c = await getConfig(guild.id);
+        const v = i.values?.[0];
+        if (!v) return i.reply({ content: '❌ Nada selecionado.', flags: EPHEMERAL });
+
+        const isChannelKey = ['ticket_log_channel', 'log_channel', 'welcome_channel', 'suggestion_channel'].includes(key);
+        const isRoleKey    = ['admin_role', 'membro_role', 'ticket_cargo', 'autorole_role'].includes(key);
+
+        if (isChannelKey && !guild.channels.cache.has(v))
+          return i.reply({ content: '❌ Canal inválido.', flags: EPHEMERAL });
+        if (isRoleKey && !guild.roles.cache.has(v))
+          return i.reply({ content: '❌ Cargo inválido.', flags: EPHEMERAL });
+
+        c[key] = v;
+        await setConfig(guild.id, c);
+        await logConfig(guild, i.user.id, `SET_${key}`, { value: v });
+
+        const label = isChannelKey ? `<#${v}>` : `<@&${v}>`;
+        return i.reply({ content: `✅ \`${key}\` → ${label}`, flags: EPHEMERAL });
+      }
+
       // Loja: comprar
       if (cid === 'loja:pickproduct') {
         if (await blockIfMaintenance(i)) return;
@@ -6525,13 +6647,19 @@ client.on('interactionCreate', async (i) => {
         return i.update({ content: `✅ Tipo removido.`, embeds: [], components: [] });
       }
 
-      // Ticket pick type (abrir)
+      // ═══════════════════════════════════════════════════════════
+      // 🆕 PATCH 7 — ticket_pick_type NÃO destrói painel em erro
+      // ═══════════════════════════════════════════════════════════
       if (cid.startsWith('ticket_pick_type:')) {
         const panelId = cid.split(':')[1];
         const panel = await getTicketPanel(guild.id, panelId);
-        if (!panel) return i.update({ content: '❌', embeds: [], components: [] });
+        if (!panel) {
+          return i.reply({ content: '❌ Painel não encontrado.', flags: EPHEMERAL });
+        }
         const tipo = panel.tipos.find(t => String(t.id) === String(value));
-        if (!tipo) return i.update({ content: '❌', embeds: [], components: [] });
+        if (!tipo) {
+          return i.reply({ content: '❌ Tipo inválido.', flags: EPHEMERAL });
+        }
         if (!ticketCooldownCheck(i.user.id, 3000)) return i.reply({ content: '⏳ Aguarde.', flags: EPHEMERAL });
         const lim = await canUserOpenTicket(guild, i.member, panel);
         if (!lim.ok) return i.reply({ content: lim.reason, flags: EPHEMERAL });
@@ -6776,6 +6904,105 @@ client.on('interactionCreate', async (i) => {
         );
         return i.reply({ embeds: [e], components: [row], flags: EPHEMERAL });
       }
+
+      // Staff blacklist add
+      if (cid.startsWith('dev_staff_pick')) return;
+
+      // Broadcast scope
+      if (cid.startsWith('broadcast_scope:')) {
+        if (!isDev) return;
+        const tempId = cid.split(':')[1];
+        const draft = BROADCAST_DRAFTS.get(tempId);
+        if (!draft) return i.update({ content: '❌ Rascunho expirou.', embeds: [], components: [] });
+        const escopo = value;
+        if (escopo === 'guild_pick') {
+          const m = new ModalBuilder().setCustomId(`modal_broadcast_send:guild:${tempId}`).setTitle('📍 Servidor');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('guild_id').setLabel('ID do servidor').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        const target = escopo === 'all' ? 'all' : escopo.replace('guild:', '');
+        const isAll = escopo === 'all';
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`broadcast_confirm:${tempId}:${target}`).setLabel(isAll ? `Confirmar em ${client.guilds.cache.size} servidores` : 'Confirmar').setEmoji('✅').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('broadcast_cancel').setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Secondary),
+        );
+        return i.update({
+          content: isAll
+            ? `⚠️ **Atenção!** Vai enviar em **${client.guilds.cache.size} servidores**.\n\n> ${draft.titulo}\n> ${draft.mudancas.length} itens`
+            : `📍 Enviar no servidor \`${target}\`?`,
+          embeds: [], components: [confirmRow],
+        });
+      }
+
+      // FF config panels — dropdown de edição
+      if (cid === 'ffcfg:coin_edit_pick') {
+        const { data: item } = await supabase.from('ff_coin_shop').select('*').eq('id', value).maybeSingle();
+        if (!item) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const m = new ModalBuilder().setCustomId(`ffcfg_modal:coin_edit:${item.id}`).setTitle('Editar item');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(item.name).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('price').setLabel('Preço').setStyle(TextInputStyle.Short).setValue(String(item.price)).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(item.emoji || '🎁').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(item.description || '').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setValue(item.role_id || '').setRequired(false)),
+        );
+        return i.showModal(m);
+      }
+      if (cid === 'ffcfg:coin_toggle_pick') {
+        const { data: item } = await supabase.from('ff_coin_shop').select('*').eq('id', value).maybeSingle();
+        if (!item) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await supabase.from('ff_coin_shop').update({ active: !item.active }).eq('id', item.id);
+        return i.update(await ffPanelLojaCoins(guild.id));
+      }
+      if (cid === 'ffcfg:coin_del_pick') {
+        await supabase.from('ff_coin_shop').delete().eq('id', value);
+        return i.update(await ffPanelLojaCoins(guild.id));
+      }
+
+      // FFBL remove pick
+      if (cid === 'ffbl:remove_pick') {
+        await supabase.from('ff_blacklist').delete().eq('id', value);
+        return i.update(await ffBuildBlacklistEmbed(guild.id));
+      }
+
+      // TKTBLK remove pick
+      if (cid.startsWith('tktblk:removepick:')) {
+        const panelId = cid.split(':')[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        panel.bloqueio_usuarios_ids = panel.bloqueio_usuarios_ids.filter(u => u !== value);
+        await updateTicketPanel(guild.id, panelId, { bloqueio_usuarios_ids: panel.bloqueio_usuarios_ids });
+        return i.update(await ticketBlocksPanel(guild.id, panelId));
+      }
+
+      // TKTTYPE editpick
+      if (cid.startsWith('tkttype:editpick:')) {
+        const panelId = cid.split(':')[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const tipo = panel.tipos.find(t => String(t.id) === String(value));
+        if (!tipo) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const m = new ModalBuilder().setCustomId(`tkttype_modal:edit:${panelId}:${value}`).setTitle('Editar tipo');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(tipo.label || '').setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(tipo.emoji || '🎫').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Short).setValue(tipo.descricao || '').setRequired(false).setMaxLength(100)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal').setStyle(TextInputStyle.Short).setValue(tipo.canal_id || '').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setValue(tipo.cargo_responsavel_id || '').setRequired(false)),
+        );
+        return i.showModal(m);
+      }
+      // TKTTYPE delpick
+      if (cid.startsWith('tkttype:delpick:')) {
+        const panelId = cid.split(':')[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        panel.tipos = panel.tipos.filter(t => String(t.id) !== String(value));
+        await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
+        return i.update(await ticketTypesPanel(guild.id, panelId));
+      }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -6832,2848 +7059,2815 @@ client.on('interactionCreate', async (i) => {
       });
     }
 
-    if (i.isStringSelectMenu() && i.customId.startsWith('broadcast_scope:')) {
-      if (!isDev) return;
-      const tempId = i.customId.split(':')[1];
-      const draft = BROADCAST_DRAFTS.get(tempId);
-      if (!draft) return i.update({ content: '❌ Rascunho expirou.', embeds: [], components: [] });
-      const escopo = i.values[0];
-      if (escopo === 'guild_pick') {
-        const m = new ModalBuilder().setCustomId(`modal_broadcast_send:guild:${tempId}`).setTitle('📍 Servidor');
+// ═══════════════════════════════════════════════════════════
+// FIM DA PARTE 6/7 — CONTINUA NA PARTE 7 (botões, modais, eventos, HTTP)
+// ⚠️ NÃO feche o try/catch aqui — a Parte 7 continua dentro do interactionCreate
+// ═══════════════════════════════════════════════════════════
+      // ═══════════════════════════════════════════════════════════
+    // [PARTE 7/7 - BLOCO A] BUTTONS
+    // ═══════════════════════════════════════════════════════════
+    if (i.isButton()) {
+      const cid = i.customId;
+      const [ns, action, ...rest] = cid.split(':');
+
+      // ───── AJUDA ─────
+      if (cid === 'ajuda_back') return i.update(buildAjudaHome());
+
+      // ───── UPDATES ─────
+      if (cid === 'updates_test') {
+        if (!await isAdmin(i.user, guild)) return;
+        await i.deferReply({ flags: EPHEMERAL });
+        const s = await getSettings(guild.id);
+        const canal = await findOrCreateUpdateChannel(guild, s);
+        if (!canal) return i.editReply({ content: '❌' });
+        const topRole = getTopRole(guild);
+        const pingRole = topRole ? `<@&${topRole.id}>` : `<@${guild.ownerId}>`;
+        const e = new EmbedBuilder().setTitle(`🧪 Teste — Frio Bot ${BOT_VERSION}`).setColor('#5865F2')
+          .setDescription(`${pingRole}, **teste!**\n\n🎫 Tickets\n> Cada ticket tem embed próprio\n\n🎮 Hub de apostas\n> Ordenação MAIOR→MENOR`)
+          .setFooter({ text: 'Frio Bot • Teste' }).setTimestamp();
+        if (client.user.displayAvatarURL()) e.setThumbnail(client.user.displayAvatarURL());
+        try {
+          await canal.send({ content: pingRole, embeds: [e], allowedMentions: { roles: topRole ? [topRole.id] : [], users: topRole ? [] : [guild.ownerId] } });
+          return i.editReply({ content: `✅ Em <#${canal.id}>` });
+        } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
+      }
+      if (cid === 'updates_reset') {
+        if (!await isAdmin(i.user, guild)) return;
+        try { await supabase.from('settings').upsert({ guild_id: guild.id, update_channel_id: null, updated_at: new Date().toISOString() }, { onConflict: 'guild_id' }); } catch {}
+        return i.reply({ content: '✅ Canal resetado.', flags: EPHEMERAL });
+      }
+
+      // ───── LOJA (público) ─────
+      if (ns === 'loja') {
+        if (await blockIfMaintenance(i)) return;
+        if (action === 'comprar') {
+          const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).eq('active', true).limit(25);
+          const list = [];
+          for (const p of prods || []) {
+            if (p.infinite_content) { list.push(p); continue; }
+            const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).eq('product_id', p.id).eq('status', 'available');
+            if ((count || 0) > 0) list.push(p);
+          }
+          if (!list.length) return i.reply({ content: '😢 Sem estoque.', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('loja:pickproduct').setPlaceholder('Escolha');
+          for (const p of list) {
+            const pr = Number(p.price) > 0 ? brl(p.price) : 'definir';
+            menu.addOptions({ label: `${p.name} — ${pr}`.slice(0, 90), value: String(p.id) });
+          }
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🛍️ Produtos').setColor('#5865F2')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'meus_pedidos') {
+          const { data: ords } = await supabase.from('orders').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).order('id', { ascending: false }).limit(10);
+          const e = new EmbedBuilder().setTitle('🧾 Meus pedidos').setColor('#5865F2');
+          for (const o of ords || []) e.addFields({ name: `#${o.id} — ${brl(o.total)}`, value: o.status });
+          if (!ords?.length) e.setDescription('Nenhum.');
+          return i.reply({ embeds: [e], flags: EPHEMERAL });
+        }
+      }
+
+      // ───── ORDER ─────
+      if (ns === 'order') {
+        const oid = rest[0];
+        const { data: o } = await supabase.from('orders').select('*').eq('id', oid).maybeSingle();
+        if (!o) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'cancel') {
+          await supabase.from('orders').update({ status: 'cancelled' }).eq('id', oid);
+          await i.reply({ content: '❌', flags: EPHEMERAL });
+          setTimeout(() => i.channel.delete().catch(() => {}), 5000);
+          return;
+        }
+        if (action === 'approve') {
+          if (!await requireShopAdmin(i)) return;
+          await supabase.from('orders').update({ status: 'delivered', paid_at: new Date().toISOString() }).eq('id', oid);
+          return i.update({ content: '✅', embeds: [], components: [] });
+        }
+        if (action === 'reject') {
+          if (!await requireShopAdmin(i)) return;
+          await supabase.from('orders').update({ status: 'cancelled' }).eq('id', oid);
+          return i.update({ content: '❌', embeds: [], components: [] });
+        }
+        if (action === 'addmore') {
+          const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).eq('active', true).limit(25);
+          const menu = new StringSelectMenuBuilder().setCustomId(`order:addtopick:${oid}`).setPlaceholder('Add');
+          for (const p of prods || []) menu.addOptions({ label: `${p.name} — ${brl(p.price)}`.slice(0, 90), value: String(p.id) });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🛍️ Add')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'coupon') {
+          const m = new ModalBuilder().setCustomId(`order_modal:coupon:${oid}`).setTitle('Cupom');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('code').setLabel('Código').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'finish') {
+          const s = await getSettings(guild.id);
+          await i.update({ content: '💳 Gerando...', embeds: [], components: [] });
+          try {
+            const pag = await criarPagamento(Number(o.total), oid, s, 'Pedido', 'loja');
+            if (pag.tipo === 'mercadopago') {
+              await supabase.from('orders').update({ status: 'awaiting_payment', payment_gateway: 'mercadopago', mp_payment_id: String(pag.payment_id), mp_ticket_url: pag.ticket_url || null, pix_payload: pag.payload }).eq('id', oid);
+              const e = new EmbedBuilder().setTitle('💳 Pagamento MP').setColor('#22c55e')
+                .setDescription(`Pedido \`#${oid}\` — **${brl(o.total)}**\n\nUse QR Code ou botão Pagar no MP.`)
+                .addFields(
+                  { name: '🔑 PIX', value: `\`\`\`${pag.payload}\`\`\`` },
+                  { name: '🆔', value: `\`${pag.payment_id}\``, inline: true },
+                )
+                .setImage('attachment://pix.png');
+              const btns = [
+                new ButtonBuilder().setCustomId(`pix:paid:${oid}`).setLabel('Já paguei').setEmoji('✅').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`pix:show_copy:${oid}`).setLabel('Copiar').setEmoji('📋').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`order:cancel:${oid}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+              ];
+              if (pag.ticket_url) btns.unshift(new ButtonBuilder().setLabel('Pagar no MP').setEmoji('🔗').setStyle(ButtonStyle.Link).setURL(pag.ticket_url));
+              return i.editReply({
+                embeds: [e],
+                files: [new AttachmentBuilder(pag.qrBuf, { name: 'pix.png' })],
+                components: [new ActionRowBuilder().addComponents(btns.slice(0, 5))],
+              });
+            } else {
+              await supabase.from('orders').update({ status: 'awaiting_payment', payment_gateway: 'pix_static', pix_payload: pag.payload }).eq('id', oid);
+              const e = new EmbedBuilder().setTitle('💳 Pagamento PIX').setColor('#22c55e')
+                .setDescription(`Pedido \`#${oid}\` — **${brl(o.total)}**`)
+                .addFields(
+                  { name: '🔑', value: `\`\`\`${pag.payload}\`\`\`` },
+                  { name: '👤', value: s?.pix_name || '—', inline: true },
+                )
+                .setImage('attachment://pix.png');
+              const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`pix:paid:${oid}`).setLabel('Já paguei').setEmoji('✅').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`pix:show_copy:${oid}`).setLabel('Copiar').setEmoji('📋').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`order:cancel:${oid}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+              );
+              return i.editReply({
+                embeds: [e],
+                files: [new AttachmentBuilder(pag.qrBuf, { name: 'pix.png' })],
+                components: [row],
+              });
+            }
+          } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
+        }
+      }
+
+      // ───── PIX ─────
+      if (ns === 'pix') {
+        if (action === 'paid') {
+          await supabase.from('orders').update({ status: 'awaiting_approval', paid_at: new Date().toISOString() }).eq('id', rest[0]);
+          await i.reply({ content: '✅ Avisamos!', flags: EPHEMERAL });
+          const s = await getSettings(guild.id);
+          if (s?.log_channel_id) {
+            const ch = guild.channels.cache.get(s.log_channel_id);
+            if (ch) {
+              const { data: o } = await supabase.from('orders').select('*').eq('id', rest[0]).maybeSingle();
+              const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`order:approve:${rest[0]}`).setLabel('Aprovar').setEmoji('✅').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`order:reject:${rest[0]}`).setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+              );
+              await ch.send({ content: `🟡 #${rest[0]} (${brl(o?.total || 0)}) — <@${i.user.id}>`, components: [row] }).catch(() => {});
+            }
+          }
+          return;
+        }
+        if (action === 'show_copy') {
+          const { data: o } = await supabase.from('orders').select('*').eq('id', rest[0]).maybeSingle();
+          if (!o?.pix_payload) return i.reply({ content: '❌', flags: EPHEMERAL });
+          return i.reply({ content: `📋 **PIX copia e cola:**\n\`\`\`\n${o.pix_payload}\n\`\`\``, flags: EPHEMERAL });
+        }
+      }
+
+      // ───── PANEL LOJA ─────
+      if (ns === 'panel') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'home') return i.update(await panelHome(guild.id));
+        if (action === 'products') return i.update(await panelProducts(guild.id));
+        if (action === 'stock') return i.update(await panelStock(guild.id));
+        if (action === 'cats') return i.update(await panelCats(guild.id));
+        if (action === 'coupons') return i.update(await panelCoupons(guild.id));
+        if (action === 'promos') return i.update(await panelPromos(guild.id));
+        if (action === 'clients') return i.update(await panelClients(guild.id));
+        if (action === 'stats') return i.update(await panelStats(guild.id));
+        if (action === 'settings') return i.update(setupHome(await getSettings(guild.id)));
+        if (action === 'pedidos') return i.update(await ordersPanel(guild.id, 'pending'));
+        if (action === 'top') return i.update(await panelTop(guild.id));
+        if (action === 'shop_panels') return i.update(await panelShopPanels(guild.id));
+        if (action === 'export') {
+          const { data: ords } = await supabase.from('orders').select('*').eq('guild_id', guild.id).eq('status', 'delivered').limit(500);
+          if (!ords?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          let csv = 'id,user_id,total,status,created_at\n';
+          for (const o of ords) csv += `${o.id},${o.user_id},${o.total},${o.status},${o.created_at}\n`;
+          return i.reply({ files: [new AttachmentBuilder(Buffer.from(csv), { name: 'pedidos.csv' })], flags: EPHEMERAL });
+        }
+      }
+
+      // ───── SHOP PANEL ─────
+      if (ns === 'shop_panel') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'create') {
+          const m = new ModalBuilder().setCustomId('shop_panel_modal:create').setTitle('Criar painel');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('catid').setLabel('ID cat').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'list') return i.update(await panelShopPanels(guild.id));
+        if (action === 'send') {
+          const panels = await getShopPanels(guild.id);
+          if (!panels.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('shop_panel:send_pick').setPlaceholder('Painel');
+          for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.name}`.slice(0, 90), value: String(p.id) });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('📢')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+        if (action === 'delete') {
+          const panels = await getShopPanels(guild.id);
+          if (!panels.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('shop_panel:del_pick').setPlaceholder('Excluir');
+          for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.name}`.slice(0, 90), value: String(p.id) });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('🗑️')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+      }
+
+      // ───── PROD ─────
+      if (ns === 'prod') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'create') {
+          const cats = await getCats(guild.id);
+          const menu = new StringSelectMenuBuilder().setCustomId('prod:pickcat').setPlaceholder('Categoria');
+          menu.addOptions({ label: 'Sem categoria', value: '0' });
+          for (const c of cats) menu.addOptions({ label: c.name.slice(0, 90), value: String(c.id) });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '➕ Criar')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+        if (action === 'edit') {
+          const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
+          const menu = new StringSelectMenuBuilder().setCustomId('prod:editpick').setPlaceholder('Produto');
+          for (const p of prods || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '✏️')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+        if (action === 'del') {
+          const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
+          const menu = new StringSelectMenuBuilder().setCustomId('prod:delpick').setPlaceholder('Produto');
+          for (const p of prods || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+        if (action === 'toggle') {
+          const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
+          const menu = new StringSelectMenuBuilder().setCustomId('prod:togglepick').setPlaceholder('Produto');
+          for (const p of prods || []) menu.addOptions({ label: `${p.name} ${p.active ? '✅' : '❌'}`.slice(0, 90), value: String(p.id) });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '🔁')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+      }
+
+      // ───── STOCK ─────
+      if (ns === 'stock') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'add') {
+          const m = new ModalBuilder().setCustomId(`stock_modal:add:${rest[0]}`).setTitle('Add estoque');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('items').setLabel('Um por linha').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'addfile') {
+          const m = new ModalBuilder().setCustomId(`stock_modal:addfile:${rest[0]}`).setTitle('Add arquivo');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('fname').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'clear') {
+          await supabase.from('inventory').delete().eq('product_id', rest[0]).eq('status', 'available');
+          return i.update(await stockProductView(guild.id, rest[0]));
+        }
+        if (action === 'infinite') {
+          const { data: p } = await supabase.from('products').select('*').eq('id', rest[0]).maybeSingle();
+          const m = new ModalBuilder().setCustomId(`stock_modal:infinite:${rest[0]}`).setTitle(p?.infinite_content ? 'Editar' : 'Config');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('key/link/text/file').setStyle(TextInputStyle.Short).setValue(p?.infinite_type || 'key').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('Conteúdo').setStyle(TextInputStyle.Paragraph).setValue(p?.infinite_content || '').setMaxLength(4000).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'infinite_off') {
+          await supabase.from('products').update({ infinite_content: null, infinite_type: 'key' }).eq('id', rest[0]);
+          return i.update(await stockProductView(guild.id, rest[0]));
+        }
+      }
+
+      // ───── CAT ─────
+      if (ns === 'cat') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'create') {
+          const m = new ModalBuilder().setCustomId('cat_modal:create').setTitle('Categoria');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'del') {
+          const cats = await getCats(guild.id);
+          const menu = new StringSelectMenuBuilder().setCustomId('cat:delpick').setPlaceholder('Cat');
+          for (const c of cats) menu.addOptions({ label: c.name.slice(0, 90), value: String(c.id) });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:cats').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+      }
+
+      // ───── COUPON ─────
+      if (ns === 'coupon') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'create') {
+          const m = new ModalBuilder().setCustomId('coupon_modal:create').setTitle('Cupom');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('code').setLabel('Código').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('percent/fixed').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('value').setLabel('Valor').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('maxuses').setLabel('Máx usos (0=∞)').setStyle(TextInputStyle.Short).setValue('0').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'del') {
+          const { data: list } = await supabase.from('coupons').select('*').eq('guild_id', guild.id).limit(25);
+          const menu = new StringSelectMenuBuilder().setCustomId('coupon:delpick').setPlaceholder('Cupom');
+          for (const c of list || []) menu.addOptions({ label: c.code, value: c.code });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:coupons').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+      }
+
+      // ───── PROMO ─────
+      if (ns === 'promo') {
+        if (!await requireShopAdmin(i)) return;
+        if (action === 'create') {
+          const m = new ModalBuilder().setCustomId('promo_modal:create').setTitle('Promoção');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('value').setLabel('% Desc').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('7').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'del') {
+          const { data: list } = await supabase.from('promotions').select('*').eq('guild_id', guild.id).limit(25);
+          const menu = new StringSelectMenuBuilder().setCustomId('promo:delpick').setPlaceholder('Promo');
+          for (const p of list || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
+          return i.update({
+            embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:promos').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+      }
+
+      // ───── PEDIDOS ─────
+      if (ns === 'pedidos') {
+        if (!await requireShopAdmin(i)) return;
+        return i.update(await ordersPanel(guild.id, action));
+      }
+
+      // ───── CLIENT ─────
+      if (ns === 'client' && action === 'baladd') {
+        if (!await requireShopAdmin(i)) return;
+        const m = new ModalBuilder().setCustomId(`client_modal:baladd:${rest[0]}`).setTitle('Saldo');
         m.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('guild_id').setLabel('ID do servidor').setStyle(TextInputStyle.Short).setRequired(true)
+          new TextInputBuilder().setCustomId('amount').setLabel('Valor').setStyle(TextInputStyle.Short).setRequired(true)
         ));
         return i.showModal(m);
       }
-      const target = escopo === 'all' ? 'all' : escopo.replace('guild:', '');
-      const isAll = escopo === 'all';
-      const confirmRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`broadcast_confirm:${tempId}:${target}`).setLabel(isAll ? `Confirmar em ${client.guilds.cache.size} servidores` : 'Confirmar').setEmoji('✅').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('broadcast_cancel').setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Secondary),
-      );
-      return i.update({
-        content: isAll
-          ? `⚠️ **Atenção!** Vai enviar em **${client.guilds.cache.size} servidores**.\n\n> ${draft.titulo}\n> ${draft.mudancas.length} itens`
-          : `📍 Enviar no servidor \`${target}\`?`,
-        embeds: [], components: [confirmRow],
-      });
-    }
 
-// ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 6/7 — CONTINUA NA PARTE 7 (dentro do mesmo try)
-// ═══════════════════════════════════════════════════════════
-// ⚠️ NÃO FECHE O try AQUI — a Parte 7 continua dentro do interactionCreate
-// ═══════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════
-// [PARTE 7 - BLOCO A] BUTTONS
-// ═══════════════════════════════════════════════════════════
-if (i.isButton()) {
-  const cid = i.customId;
-  const [ns, action, ...rest] = cid.split(':');
-
-  // ───── AJUDA ─────
-  if (cid === 'ajuda_back') return i.update(buildAjudaHome());
-
-  // ───── UPDATES ─────
-  if (cid === 'updates_test') {
-    if (!await isAdmin(i.user, guild)) return;
-    await i.deferReply({ flags: EPHEMERAL });
-    const s = await getSettings(guild.id);
-    const canal = await findOrCreateUpdateChannel(guild, s);
-    if (!canal) return i.editReply({ content: '❌' });
-    const topRole = getTopRole(guild);
-    const pingRole = topRole ? `<@&${topRole.id}>` : `<@${guild.ownerId}>`;
-    const e = new EmbedBuilder().setTitle(`🧪 Teste — Frio Bot ${BOT_VERSION}`).setColor('#5865F2')
-      .setDescription(`${pingRole}, **teste!**\n\n🎫 Tickets\n> Cada ticket tem embed próprio\n\n🎮 Hub de apostas\n> Ordenação MAIOR→MENOR`)
-      .setFooter({ text: 'Frio Bot • Teste' }).setTimestamp();
-    if (client.user.displayAvatarURL()) e.setThumbnail(client.user.displayAvatarURL());
-    try {
-      await canal.send({ content: pingRole, embeds: [e], allowedMentions: { roles: topRole ? [topRole.id] : [], users: topRole ? [] : [guild.ownerId] } });
-      return i.editReply({ content: `✅ Em <#${canal.id}>` });
-    } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
-  }
-  if (cid === 'updates_reset') {
-    if (!await isAdmin(i.user, guild)) return;
-    try { await supabase.from('settings').upsert({ guild_id: guild.id, update_channel_id: null, updated_at: new Date().toISOString() }, { onConflict: 'guild_id' }); } catch {}
-    return i.reply({ content: '✅ Canal resetado.', flags: EPHEMERAL });
-  }
-
-  // ───── LOJA (público) ─────
-  if (ns === 'loja') {
-    if (await blockIfMaintenance(i)) return;
-    if (action === 'comprar') {
-      const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).eq('active', true).limit(25);
-      const list = [];
-      for (const p of prods || []) {
-        if (p.infinite_content) { list.push(p); continue; }
-        const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).eq('product_id', p.id).eq('status', 'available');
-        if ((count || 0) > 0) list.push(p);
-      }
-      if (!list.length) return i.reply({ content: '😢 Sem estoque.', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('loja:pickproduct').setPlaceholder('Escolha');
-      for (const p of list) {
-        const pr = Number(p.price) > 0 ? brl(p.price) : 'definir';
-        menu.addOptions({ label: `${p.name} — ${pr}`.slice(0, 90), value: String(p.id) });
-      }
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🛍️ Produtos').setColor('#5865F2')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'meus_pedidos') {
-      const { data: ords } = await supabase.from('orders').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).order('id', { ascending: false }).limit(10);
-      const e = new EmbedBuilder().setTitle('🧾 Meus pedidos').setColor('#5865F2');
-      for (const o of ords || []) e.addFields({ name: `#${o.id} — ${brl(o.total)}`, value: o.status });
-      if (!ords?.length) e.setDescription('Nenhum.');
-      return i.reply({ embeds: [e], flags: EPHEMERAL });
-    }
-  }
-
-  // ───── ORDER ─────
-  if (ns === 'order') {
-    const oid = rest[0];
-    const { data: o } = await supabase.from('orders').select('*').eq('id', oid).maybeSingle();
-    if (!o) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'cancel') {
-      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', oid);
-      await i.reply({ content: '❌', flags: EPHEMERAL });
-      setTimeout(() => i.channel.delete().catch(() => {}), 5000);
-      return;
-    }
-    if (action === 'approve') {
-      if (!await requireShopAdmin(i)) return;
-      await supabase.from('orders').update({ status: 'delivered', paid_at: new Date().toISOString() }).eq('id', oid);
-      return i.update({ content: '✅', embeds: [], components: [] });
-    }
-    if (action === 'reject') {
-      if (!await requireShopAdmin(i)) return;
-      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', oid);
-      return i.update({ content: '❌', embeds: [], components: [] });
-    }
-    if (action === 'addmore') {
-      const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).eq('active', true).limit(25);
-      const menu = new StringSelectMenuBuilder().setCustomId(`order:addtopick:${oid}`).setPlaceholder('Add');
-      for (const p of prods || []) menu.addOptions({ label: `${p.name} — ${brl(p.price)}`.slice(0, 90), value: String(p.id) });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🛍️ Add')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'coupon') {
-      const m = new ModalBuilder().setCustomId(`order_modal:coupon:${oid}`).setTitle('Cupom');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('code').setLabel('Código').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'finish') {
-      const s = await getSettings(guild.id);
-      await i.update({ content: '💳 Gerando...', embeds: [], components: [] });
-      try {
-        const pag = await criarPagamento(Number(o.total), oid, s, 'Pedido', 'loja');
-        if (pag.tipo === 'mercadopago') {
-          await supabase.from('orders').update({ status: 'awaiting_payment', payment_gateway: 'mercadopago', mp_payment_id: String(pag.payment_id), mp_ticket_url: pag.ticket_url || null, pix_payload: pag.payload }).eq('id', oid);
-          const e = new EmbedBuilder().setTitle('💳 Pagamento MP').setColor('#22c55e')
-            .setDescription(`Pedido \`#${oid}\` — **${brl(o.total)}**\n\nUse QR Code ou botão Pagar no MP.`)
+      // ───── SETUP LOJA ─────
+      if (ns === 'setup') {
+        if (!await requireShopAdmin(i)) return;
+        const s = await getSettings(guild.id);
+        if (action === 'home') return i.update(setupHome(s));
+        if (action === 'store') {
+          const m = new ModalBuilder().setCustomId('setup_modal:store').setTitle('Loja');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(s?.store_name || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(s?.store_description || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'payment') {
+          const usandoMP = !!s?.mp_access_token;
+          const e = baseEmbed(s, '💳 Pagamentos')
+            .setDescription(usandoMP ? '🟢 **MP ativo**' : (s?.pix_key ? '🟡 PIX estático' : '🔴 Nenhum'))
             .addFields(
-              { name: '🔑 PIX', value: `\`\`\`${pag.payload}\`\`\`` },
-              { name: '🆔', value: `\`${pag.payment_id}\``, inline: true },
-            )
-            .setImage('attachment://pix.png');
-          const btns = [
-            new ButtonBuilder().setCustomId(`pix:paid:${oid}`).setLabel('Já paguei').setEmoji('✅').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`pix:show_copy:${oid}`).setLabel('Copiar').setEmoji('📋').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`order:cancel:${oid}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+              { name: '🔑 PIX', value: s?.pix_key ? `\`${maskToken(s.pix_key)}\`` : '*—*', inline: false },
+              { name: '💳 MP', value: usandoMP ? `🟢 \`${maskToken(s.mp_access_token)}\`` : '🔴', inline: false },
+            );
+          return i.update({
+            embeds: [e],
+            components: [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:mp_config').setLabel(usandoMP ? 'Editar MP' : 'Configurar MP').setEmoji('💳').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('setup:mp_test').setLabel('Testar').setEmoji('🧪').setStyle(ButtonStyle.Primary).setDisabled(!usandoMP),
+                new ButtonBuilder().setCustomId('setup:mp_remove').setLabel('Remover').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!usandoMP),
+              ),
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:edit_pix').setLabel('PIX estático').setEmoji('🔑').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger),
+              ),
+            ],
+          });
+        }
+        if (action === 'mp_config') {
+          const m = new ModalBuilder().setCustomId('setup_modal:mp_token').setTitle('Configurar MP');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_token').setLabel('Access Token').setStyle(TextInputStyle.Short).setPlaceholder('APP_USR-...').setValue(s?.mp_access_token || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_public_key').setLabel('Public Key (opc)').setStyle(TextInputStyle.Short).setValue(s?.mp_public_key || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'mp_test') {
+          await i.deferReply({ flags: EPHEMERAL });
+          const st = await getSettings(guild.id);
+          if (!st?.mp_access_token) return i.editReply({ content: '❌ Sem token.' });
+          const test = await criarPixMercadoPago(0.01, `TESTE${Date.now()}`, 'Teste', st.mp_access_token);
+          if (test?.ok) return i.editReply({ content: `✅ OK!\n> 🆔 \`${test.payment_id}\`` });
+          return i.editReply({ content: `❌ ${test?.error || 'erro'}` });
+        }
+        if (action === 'mp_remove') {
+          await setGuildMPToken(guild.id, null, null);
+          await logConfig(guild, i.user.id, 'MP_TOKEN_REMOVED', {});
+          return i.update(setupHome(await getSettings(guild.id)));
+        }
+        if (action === 'edit_pix') {
+          const m = new ModalBuilder().setCustomId('setup_modal:pix').setTitle('Pix');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(s?.pix_key || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(s?.pix_name || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(s?.pix_city || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'logs') {
+          return i.update({
+            embeds: [baseEmbed(s, '🖼️ Logs')],
+            components: [
+              new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('setup_ch:log_channel_id').setPlaceholder('Logs').setChannelTypes(ChannelType.GuildText)),
+              new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('setup_ch:sales_channel_id').setPlaceholder('Vendas').setChannelTypes(ChannelType.GuildText)),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+        if (action === 'permissions') {
+          return i.update({
+            embeds: [baseEmbed(s, '👑 Permissões')],
+            components: [
+              new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('setup_role:admin_role_id').setPlaceholder('Admin')),
+              new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('setup_role:manager_role_id').setPlaceholder('Gerente')),
+              new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('setup_role:customer_role_id').setPlaceholder('Cliente')),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
+            ],
+          });
+        }
+      }
+
+      // ───── CFG ─────
+      if (cid.startsWith('cfg_')) {
+        if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (cid === 'cfg_canais') {
+          const opts = guild.channels.cache.filter(c => c.type === ChannelType.GuildText).map(c => new StringSelectMenuOptionBuilder().setLabel('#' + c.name).setValue(c.id)).slice(0, 25);
+          if (!opts.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menus = [
+            { id: 'cfgset_ticket_log_channel', ph: 'Logs ticket' },
+            { id: 'cfgset_log_channel', ph: 'Logs' },
+            { id: 'cfgset_welcome_channel', ph: 'Bem-vindo' },
+            { id: 'cfgset_suggestion_channel', ph: 'Sugestões' },
           ];
-          if (pag.ticket_url) btns.unshift(new ButtonBuilder().setLabel('Pagar no MP').setEmoji('🔗').setStyle(ButtonStyle.Link).setURL(pag.ticket_url));
-          return i.editReply({
-            embeds: [e],
-            files: [new AttachmentBuilder(pag.qrBuf, { name: 'pix.png' })],
-            components: [new ActionRowBuilder().addComponents(btns.slice(0, 5))],
-          });
-        } else {
-          await supabase.from('orders').update({ status: 'awaiting_payment', payment_gateway: 'pix_static', pix_payload: pag.payload }).eq('id', oid);
-          const e = new EmbedBuilder().setTitle('💳 Pagamento PIX').setColor('#22c55e')
-            .setDescription(`Pedido \`#${oid}\` — **${brl(o.total)}**`)
-            .addFields(
-              { name: '🔑', value: `\`\`\`${pag.payload}\`\`\`` },
-              { name: '👤', value: s?.pix_name || '—', inline: true },
-            )
-            .setImage('attachment://pix.png');
-          const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`pix:paid:${oid}`).setLabel('Já paguei').setEmoji('✅').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`pix:show_copy:${oid}`).setLabel('Copiar').setEmoji('📋').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`order:cancel:${oid}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
-          );
-          return i.editReply({
-            embeds: [e],
-            files: [new AttachmentBuilder(pag.qrBuf, { name: 'pix.png' })],
-            components: [row],
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('📢')],
+            components: menus.map(m => new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(m.id).setPlaceholder(m.ph).addOptions(opts))),
+            flags: EPHEMERAL,
           });
         }
-      } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
-    }
-  }
-
-  // ───── PIX ─────
-  if (ns === 'pix') {
-    if (action === 'paid') {
-      await supabase.from('orders').update({ status: 'awaiting_approval', paid_at: new Date().toISOString() }).eq('id', rest[0]);
-      await i.reply({ content: '✅ Avisamos!', flags: EPHEMERAL });
-      const s = await getSettings(guild.id);
-      if (s?.log_channel_id) {
-        const ch = guild.channels.cache.get(s.log_channel_id);
-        if (ch) {
-          const { data: o } = await supabase.from('orders').select('*').eq('id', rest[0]).maybeSingle();
-          const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`order:approve:${rest[0]}`).setLabel('Aprovar').setEmoji('✅').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`order:reject:${rest[0]}`).setLabel('Recusar').setEmoji('❌').setStyle(ButtonStyle.Danger),
-          );
-          await ch.send({ content: `🟡 #${rest[0]} (${brl(o?.total || 0)}) — <@${i.user.id}>`, components: [row] }).catch(() => {});
+        if (cid === 'cfg_cargos') {
+          const opts = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id && !r.managed).map(r => new StringSelectMenuOptionBuilder().setLabel(r.name).setValue(r.id)).slice(0, 25);
+          if (!opts.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menus = [
+            { id: 'cfgset_admin_role', ph: 'Admin' },
+            { id: 'cfgset_membro_role', ph: 'Membro' },
+            { id: 'cfgset_ticket_cargo', ph: 'Suporte' },
+            { id: 'cfgset_autorole_role', ph: 'AutoRole' },
+          ];
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🎭')],
+            components: menus.map(m => new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(m.id).setPlaceholder(m.ph).addOptions(opts))),
+            flags: EPHEMERAL,
+          });
+        }
+        if (cid === 'cfg_moderacao') {
+          const c = await getConfig(guild.id);
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🛡️ Moderação').addFields(
+              { name: 'Antilink', value: c.anti_link ? '✅' : '❌', inline: true },
+              { name: 'Anti-convite', value: c.anti_invite ? '✅' : '❌', inline: true },
+            )],
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId('cfg_toggle_antilink').setLabel(c.anti_link ? 'Desativar' : 'Ativar').setStyle(c.anti_link ? ButtonStyle.Danger : ButtonStyle.Success),
+              new ButtonBuilder().setCustomId('cfg_toggle_antiinvite').setLabel(c.anti_invite ? 'Desativar' : 'Ativar').setStyle(c.anti_invite ? ButtonStyle.Danger : ButtonStyle.Success),
+            )],
+            flags: EPHEMERAL,
+          });
+        }
+        if (cid === 'cfg_toggle_antilink') {
+          const c = await getConfig(guild.id);
+          c.anti_link = !c.anti_link;
+          await setConfig(guild.id, c);
+          return i.update(await admPanelAutomacao(guild));
+        }
+        if (cid === 'cfg_toggle_antiinvite') {
+          const c = await getConfig(guild.id);
+          c.anti_invite = !c.anti_invite;
+          await setConfig(guild.id, c);
+          return i.update(await admPanelAutomacao(guild));
         }
       }
-      return;
-    }
-    if (action === 'show_copy') {
-      const { data: o } = await supabase.from('orders').select('*').eq('id', rest[0]).maybeSingle();
-      if (!o?.pix_payload) return i.reply({ content: '❌', flags: EPHEMERAL });
-      return i.reply({ content: `📋 **PIX copia e cola:**\n\`\`\`\n${o.pix_payload}\n\`\`\``, flags: EPHEMERAL });
-    }
-  }
 
-  // ───── PANEL LOJA ─────
-  if (ns === 'panel') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'home') return i.update(await panelHome(guild.id));
-    if (action === 'products') return i.update(await panelProducts(guild.id));
-    if (action === 'stock') return i.update(await panelStock(guild.id));
-    if (action === 'cats') return i.update(await panelCats(guild.id));
-    if (action === 'coupons') return i.update(await panelCoupons(guild.id));
-    if (action === 'promos') return i.update(await panelPromos(guild.id));
-    if (action === 'clients') return i.update(await panelClients(guild.id));
-    if (action === 'stats') return i.update(await panelStats(guild.id));
-    if (action === 'settings') return i.update(setupHome(await getSettings(guild.id)));
-    if (action === 'pedidos') return i.update(await ordersPanel(guild.id, 'pending'));
-    if (action === 'top') return i.update(await panelTop(guild.id));
-    if (action === 'shop_panels') return i.update(await panelShopPanels(guild.id));
-    if (action === 'export') {
-      const { data: ords } = await supabase.from('orders').select('*').eq('guild_id', guild.id).eq('status', 'delivered').limit(500);
-      if (!ords?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      let csv = 'id,user_id,total,status,created_at\n';
-      for (const o of ords) csv += `${o.id},${o.user_id},${o.total},${o.status},${o.created_at}\n`;
-      return i.reply({ files: [new AttachmentBuilder(Buffer.from(csv), { name: 'pedidos.csv' })], flags: EPHEMERAL });
-    }
-  }
-
-  // ───── SHOP PANEL ─────
-  if (ns === 'shop_panel') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'create') {
-      const m = new ModalBuilder().setCustomId('shop_panel_modal:create').setTitle('Criar painel');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('catid').setLabel('ID cat').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'list') return i.update(await panelShopPanels(guild.id));
-    if (action === 'send') {
-      const panels = await getShopPanels(guild.id);
-      if (!panels.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('shop_panel:send_pick').setPlaceholder('Painel');
-      for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.name}`.slice(0, 90), value: String(p.id) });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('📢')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-    if (action === 'delete') {
-      const panels = await getShopPanels(guild.id);
-      if (!panels.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('shop_panel:del_pick').setPlaceholder('Excluir');
-      for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.name}`.slice(0, 90), value: String(p.id) });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('🗑️')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-  }
-
-  // ───── PROD ─────
-  if (ns === 'prod') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'create') {
-      const cats = await getCats(guild.id);
-      const menu = new StringSelectMenuBuilder().setCustomId('prod:pickcat').setPlaceholder('Categoria');
-      menu.addOptions({ label: 'Sem categoria', value: '0' });
-      for (const c of cats) menu.addOptions({ label: c.name.slice(0, 90), value: String(c.id) });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '➕ Criar')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-    if (action === 'edit') {
-      const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
-      const menu = new StringSelectMenuBuilder().setCustomId('prod:editpick').setPlaceholder('Produto');
-      for (const p of prods || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '✏️')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-    if (action === 'del') {
-      const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
-      const menu = new StringSelectMenuBuilder().setCustomId('prod:delpick').setPlaceholder('Produto');
-      for (const p of prods || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-    if (action === 'toggle') {
-      const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).limit(25);
-      const menu = new StringSelectMenuBuilder().setCustomId('prod:togglepick').setPlaceholder('Produto');
-      for (const p of prods || []) menu.addOptions({ label: `${p.name} ${p.active ? '✅' : '❌'}`.slice(0, 90), value: String(p.id) });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '🔁')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:products').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-  }
-
-  // ───── STOCK ─────
-  if (ns === 'stock') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'add') {
-      const m = new ModalBuilder().setCustomId(`stock_modal:add:${rest[0]}`).setTitle('Add estoque');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('items').setLabel('Um por linha').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'addfile') {
-      const m = new ModalBuilder().setCustomId(`stock_modal:addfile:${rest[0]}`).setTitle('Add arquivo');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('fname').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'clear') {
-      await supabase.from('inventory').delete().eq('product_id', rest[0]).eq('status', 'available');
-      return i.update(await stockProductView(guild.id, rest[0]));
-    }
-    if (action === 'infinite') {
-      const { data: p } = await supabase.from('products').select('*').eq('id', rest[0]).maybeSingle();
-      const m = new ModalBuilder().setCustomId(`stock_modal:infinite:${rest[0]}`).setTitle(p?.infinite_content ? 'Editar' : 'Config');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('key/link/text/file').setStyle(TextInputStyle.Short).setValue(p?.infinite_type || 'key').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('Conteúdo').setStyle(TextInputStyle.Paragraph).setValue(p?.infinite_content || '').setMaxLength(4000).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'infinite_off') {
-      await supabase.from('products').update({ infinite_content: null, infinite_type: 'key' }).eq('id', rest[0]);
-      return i.update(await stockProductView(guild.id, rest[0]));
-    }
-  }
-
-  // ───── CAT ─────
-  if (ns === 'cat') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'create') {
-      const m = new ModalBuilder().setCustomId('cat_modal:create').setTitle('Categoria');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'del') {
-      const cats = await getCats(guild.id);
-      const menu = new StringSelectMenuBuilder().setCustomId('cat:delpick').setPlaceholder('Cat');
-      for (const c of cats) menu.addOptions({ label: c.name.slice(0, 90), value: String(c.id) });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:cats').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-  }
-
-  // ───── COUPON ─────
-  if (ns === 'coupon') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'create') {
-      const m = new ModalBuilder().setCustomId('coupon_modal:create').setTitle('Cupom');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('code').setLabel('Código').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('percent/fixed').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('value').setLabel('Valor').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('maxuses').setLabel('Máx usos (0=∞)').setStyle(TextInputStyle.Short).setValue('0').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'del') {
-      const { data: list } = await supabase.from('coupons').select('*').eq('guild_id', guild.id).limit(25);
-      const menu = new StringSelectMenuBuilder().setCustomId('coupon:delpick').setPlaceholder('Cupom');
-      for (const c of list || []) menu.addOptions({ label: c.code, value: c.code });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:coupons').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-  }
-
-  // ───── PROMO ─────
-  if (ns === 'promo') {
-    if (!await requireShopAdmin(i)) return;
-    if (action === 'create') {
-      const m = new ModalBuilder().setCustomId('promo_modal:create').setTitle('Promoção');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('value').setLabel('% Desc').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('7').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'del') {
-      const { data: list } = await supabase.from('promotions').select('*').eq('guild_id', guild.id).limit(25);
-      const menu = new StringSelectMenuBuilder().setCustomId('promo:delpick').setPlaceholder('Promo');
-      for (const p of list || []) menu.addOptions({ label: p.name.slice(0, 90), value: String(p.id) });
-      return i.update({
-        embeds: [baseEmbed(await getSettings(guild.id), '🗑️')],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel:promos').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-  }
-
-  // ───── PEDIDOS ─────
-  if (ns === 'pedidos') {
-    if (!await requireShopAdmin(i)) return;
-    return i.update(await ordersPanel(guild.id, action));
-  }
-
-  // ───── CLIENT ─────
-  if (ns === 'client' && action === 'baladd') {
-    if (!await requireShopAdmin(i)) return;
-    const m = new ModalBuilder().setCustomId(`client_modal:baladd:${rest[0]}`).setTitle('Saldo');
-    m.addComponents(new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('amount').setLabel('Valor').setStyle(TextInputStyle.Short).setRequired(true)
-    ));
-    return i.showModal(m);
-  }
-
-  // ───── SETUP LOJA ─────
-  if (ns === 'setup') {
-    if (!await requireShopAdmin(i)) return;
-    const s = await getSettings(guild.id);
-    if (action === 'home') return i.update(setupHome(s));
-    if (action === 'store') {
-      const m = new ModalBuilder().setCustomId('setup_modal:store').setTitle('Loja');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(s?.store_name || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('desc').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(s?.store_description || '').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'payment') {
-      const usandoMP = !!s?.mp_access_token;
-      const e = baseEmbed(s, '💳 Pagamentos')
-        .setDescription(usandoMP ? '🟢 **MP ativo**' : (s?.pix_key ? '🟡 PIX estático' : '🔴 Nenhum'))
-        .addFields(
-          { name: '🔑 PIX', value: s?.pix_key ? `\`${maskToken(s.pix_key)}\`` : '*—*', inline: false },
-          { name: '💳 MP', value: usandoMP ? `🟢 \`${maskToken(s.mp_access_token)}\`` : '🔴', inline: false },
-        );
-      return i.update({
-        embeds: [e],
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('setup:mp_config').setLabel(usandoMP ? 'Editar MP' : 'Configurar MP').setEmoji('💳').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('setup:mp_test').setLabel('Testar').setEmoji('🧪').setStyle(ButtonStyle.Primary).setDisabled(!usandoMP),
-            new ButtonBuilder().setCustomId('setup:mp_remove').setLabel('Remover').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!usandoMP),
-          ),
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('setup:edit_pix').setLabel('PIX estático').setEmoji('🔑').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger),
-          ),
-        ],
-      });
-    }
-    if (action === 'mp_config') {
-      const m = new ModalBuilder().setCustomId('setup_modal:mp_token').setTitle('Configurar MP');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_token').setLabel('Access Token').setStyle(TextInputStyle.Short).setPlaceholder('APP_USR-...').setValue(s?.mp_access_token || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_public_key').setLabel('Public Key (opc)').setStyle(TextInputStyle.Short).setValue(s?.mp_public_key || '').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'mp_test') {
-      await i.deferReply({ flags: EPHEMERAL });
-      const st = await getSettings(guild.id);
-      if (!st?.mp_access_token) return i.editReply({ content: '❌ Sem token.' });
-      const test = await criarPixMercadoPago(0.01, `TESTE${Date.now()}`, 'Teste', st.mp_access_token);
-      if (test?.ok) return i.editReply({ content: `✅ OK!\n> 🆔 \`${test.payment_id}\`` });
-      return i.editReply({ content: `❌ ${test?.error || 'erro'}` });
-    }
-    if (action === 'mp_remove') {
-      await setGuildMPToken(guild.id, null, null);
-      await logConfig(guild, i.user.id, 'MP_TOKEN_REMOVED', {});
-      return i.update(setupHome(await getSettings(guild.id)));
-    }
-    if (action === 'edit_pix') {
-      const m = new ModalBuilder().setCustomId('setup_modal:pix').setTitle('Pix');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(s?.pix_key || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(s?.pix_name || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(s?.pix_city || '').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'logs') {
-      return i.update({
-        embeds: [baseEmbed(s, '🖼️ Logs')],
-        components: [
-          new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('setup_ch:log_channel_id').setPlaceholder('Logs').setChannelTypes(ChannelType.GuildText)),
-          new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('setup_ch:sales_channel_id').setPlaceholder('Vendas').setChannelTypes(ChannelType.GuildText)),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-    if (action === 'permissions') {
-      return i.update({
-        embeds: [baseEmbed(s, '👑 Permissões')],
-        components: [
-          new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('setup_role:admin_role_id').setPlaceholder('Admin')),
-          new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('setup_role:manager_role_id').setPlaceholder('Gerente')),
-          new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('setup_role:customer_role_id').setPlaceholder('Cliente')),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('setup:home').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Danger)),
-        ],
-      });
-    }
-  }
-
-  // ───── CFG ─────
-  if (cid.startsWith('cfg_')) {
-    if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (cid === 'cfg_canais') {
-      const opts = guild.channels.cache.filter(c => c.type === ChannelType.GuildText).map(c => new StringSelectMenuOptionBuilder().setLabel('#' + c.name).setValue(c.id)).slice(0, 25);
-      if (!opts.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menus = [
-        { id: 'cfgset_ticket_log_channel', ph: 'Logs ticket' },
-        { id: 'cfgset_log_channel', ph: 'Logs' },
-        { id: 'cfgset_welcome_channel', ph: 'Bem-vindo' },
-        { id: 'cfgset_suggestion_channel', ph: 'Sugestões' },
-      ];
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('📢')],
-        components: menus.map(m => new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(m.id).setPlaceholder(m.ph).addOptions(opts))),
-        flags: EPHEMERAL,
-      });
-    }
-    if (cid === 'cfg_cargos') {
-      const opts = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id && !r.managed).map(r => new StringSelectMenuOptionBuilder().setLabel(r.name).setValue(r.id)).slice(0, 25);
-      if (!opts.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menus = [
-        { id: 'cfgset_admin_role', ph: 'Admin' },
-        { id: 'cfgset_membro_role', ph: 'Membro' },
-        { id: 'cfgset_ticket_cargo', ph: 'Suporte' },
-        { id: 'cfgset_autorole_role', ph: 'AutoRole' },
-      ];
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🎭')],
-        components: menus.map(m => new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(m.id).setPlaceholder(m.ph).addOptions(opts))),
-        flags: EPHEMERAL,
-      });
-    }
-    if (cid === 'cfg_moderacao') {
-      const c = await getConfig(guild.id);
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🛡️ Moderação').addFields(
-          { name: 'Antilink', value: c.anti_link ? '✅' : '❌', inline: true },
-          { name: 'Anti-convite', value: c.anti_invite ? '✅' : '❌', inline: true },
-        )],
-        components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('cfg_toggle_antilink').setLabel(c.anti_link ? 'Desativar' : 'Ativar').setStyle(c.anti_link ? ButtonStyle.Danger : ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('cfg_toggle_antiinvite').setLabel(c.anti_invite ? 'Desativar' : 'Ativar').setStyle(c.anti_invite ? ButtonStyle.Danger : ButtonStyle.Success),
-        )],
-        flags: EPHEMERAL,
-      });
-    }
-    if (cid === 'cfg_toggle_antilink') {
-      const c = await getConfig(guild.id);
-      c.anti_link = !c.anti_link;
-      await setConfig(guild.id, c);
-      return i.update(await admPanelAutomacao(guild));
-    }
-    if (cid === 'cfg_toggle_antiinvite') {
-      const c = await getConfig(guild.id);
-      c.anti_invite = !c.anti_invite;
-      await setConfig(guild.id, c);
-      return i.update(await admPanelAutomacao(guild));
-    }
-  }
-
-  // ───── CFGSET ─────
-  if (cid.startsWith('cfgset_')) {
-    const key = cid.replace('cfgset_', '');
-    const c = await getConfig(guild.id);
-    const v = i.values?.[0];
-    if (key === 'ticket_log_channel') { c.ticket_log_channel = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Logs em <#${v}>`, flags: EPHEMERAL }); }
-    if (key === 'log_channel') { c.log_channel = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Logs em <#${v}>`, flags: EPHEMERAL }); }
-    if (key === 'welcome_channel') { c.welcome_channel = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Welcome em <#${v}>`, flags: EPHEMERAL }); }
-    if (key === 'suggestion_channel') { c.suggestion_channel = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Sugestões em <#${v}>`, flags: EPHEMERAL }); }
-    if (key === 'admin_role') { c.admin_role = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Admin <@&${v}>`, flags: EPHEMERAL }); }
-    if (key === 'membro_role') { c.membro_role = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Membro <@&${v}>`, flags: EPHEMERAL }); }
-    if (key === 'ticket_cargo') { c.ticket_cargo = v; await setConfig(guild.id, c); return i.reply({ content: `✅ Suporte <@&${v}>`, flags: EPHEMERAL }); }
-    if (key === 'autorole_role') { c.autorole_role = v; await setConfig(guild.id, c); return i.reply({ content: `✅ AutoRole <@&${v}>`, flags: EPHEMERAL }); }
-  }
-
-  // ───── ADMIN ─────
-  if (cid.startsWith('adm_')) {
-    if (cid === 'adm_back') {
-      if (!await isAdmin(i.user, guild)) return;
-      return i.update(adminHub());
-    }
-    if (cid === 'adm_loja') {
-      if (!await isAdmin(i.user, guild)) return;
-      return i.update(await panelHome(guild.id));
-    }
-    if (cid === 'adm_paineis') {
-      if (!await isAdmin(i.user, guild)) return;
-      return i.update({
-        embeds: [new EmbedBuilder().setTitle('🎫 Painéis').setColor('#9B59B6')],
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('adm_p_ticket').setLabel('Ticket').setEmoji('🎫').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('adm_p_verif').setLabel('Verif').setEmoji('✅').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('adm_p_updates').setLabel('Updates').setEmoji('📢').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('adm_p_loja').setLabel('Loja').setEmoji('🛒').setStyle(ButtonStyle.Success),
-          ),
-          new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('adm_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary)),
-        ],
-      });
-    }
-    if (cid === 'adm_p_ticket') {
-      if (!await isAdmin(i.user, guild)) return;
-      const panels = await getTicketPanels(guild.id);
-      if (!panels.length) return i.reply({ content: '❌ Nenhum painel criado.', flags: EPHEMERAL });
-      const panel = panels[0];
-      const msg = await channel.send({ embeds: [buildTicketPanelEmbed(panel)], components: buildTicketPanelComponents(panel) });
-      await updateTicketPanel(guild.id, panel.id, { canal_id: channel.id, mensagem_id: msg.id });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (cid === 'adm_p_verif') {
-      if (!await isAdmin(i.user, guild)) return;
-      const c = await getConfig(guild.id);
-      const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guild.id)}`;
-      const b = new ButtonBuilder().setLabel(c.verificacao_botao || 'Verificar').setEmoji('✅').setStyle(ButtonStyle.Link).setURL(oauthUrl);
-      await channel.send({
-        embeds: [new EmbedBuilder().setColor(c.verificacao_cor || '#00FF00').setTitle(c.verificacao_titulo || 'Verificação').setDescription(c.verificacao_descricao || 'Clique para verificar.')],
-        components: [new ActionRowBuilder().addComponents(b)],
-      });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (cid === 'adm_p_updates') {
-      if (!await isAdmin(i.user, guild)) return;
-      const s = await getSettings(guild.id);
-      const atual = s?.update_channel_id ? `<#${s.update_channel_id}>` : '*não configurado*';
-      const topRole = getTopRole(guild);
-      const e = new EmbedBuilder().setTitle('📢 Canal de Updates').setColor('#5865F2')
-        .setDescription(`Configure onde o bot avisa sobre **atualizações**.\n\n**Canal:** ${atual}\n**Cargo marcado:** ${topRole ? `<@&${topRole.id}>` : 'dono'}`)
-        .setFooter({ text: 'Se não existir, o bot cria automaticamente' });
-      const menu = new ChannelSelectMenuBuilder().setCustomId('updates_channel_pick').setPlaceholder('Escolha o canal').setChannelTypes(ChannelType.GuildText);
-      return i.reply({
-        embeds: [e],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('updates_test').setLabel('Testar').setEmoji('🧪').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('updates_reset').setLabel('Resetar').setEmoji('🔄').setStyle(ButtonStyle.Danger),
-          ),
-        ],
-        flags: EPHEMERAL,
-      });
-    }
-    if (cid === 'adm_p_loja') {
-      if (!await isAdmin(i.user, guild)) return;
-      const s = await getSettings(guild.id);
-      const e = baseEmbed(s, `🛒 ${s?.store_name || 'Loja'}`, s?.store_description || '');
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('loja:comprar').setLabel('Comprar').setEmoji('🛒').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('loja:meus_pedidos').setLabel('Meus pedidos').setEmoji('🧾').setStyle(ButtonStyle.Secondary),
-      );
-      await channel.send({ embeds: [e], components: [row] });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (cid === 'adm_configurar') {
-      if (!await isAdmin(i.user, guild)) return;
-      return i.update({
-        embeds: [new EmbedBuilder().setTitle('⚙️ Configurar').setColor('#5865F2')],
-        components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('cfg_canais').setLabel('Canais').setEmoji('📢').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('cfg_cargos').setLabel('Cargos').setEmoji('🎭').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('cfg_moderacao').setLabel('Moderação').setEmoji('🛡️').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('adm_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-        )],
-      });
-    }
-    if (cid === 'adm_servidor') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelServidor(guild)); }
-    if (cid === 'adm_anuncios') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAnuncios()); }
-    if (cid === 'adm_utilidades') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelUtilidades()); }
-    if (cid === 'adm_call') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelCall()); }
-    if (cid === 'adm_antiraid') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAntiRaid()); }
-    if (cid === 'adm_musica') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelMusica(guild)); }
-    if (cid === 'adm_manutencao') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelManutencao(guild)); }
-    if (cid === 'adm_tickets') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelTickets(guild)); }
-    if (cid === 'adm_usuarios') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelUsuarios()); }
-    if (cid === 'adm_automacao') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAutomacao(guild)); }
-    if (cid === 'adm_sorteios') {
-      if (!await isAdmin(i.user, guild)) return;
-      const m = new ModalBuilder().setCustomId('modal_adm_sorteio').setTitle('Criar sorteio');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('premio').setLabel('Prêmio').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('duracao').setLabel('Duração (min)').setStyle(TextInputStyle.Short).setValue('60').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('vencedores').setLabel('Nº vencedores').setStyle(TextInputStyle.Short).setValue('1').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'adm_maint_toggle') {
-      if (!await isAdmin(i.user, guild)) return;
-      const cfg = await getConfig(guild.id);
-      const nv = !cfg.admin_maintenance;
-      await setConfig(guild.id, { ...cfg, admin_maintenance: nv, admin_maintenance_by: i.user.id, admin_maintenance_since: nv ? new Date().toISOString() : null });
-      await logConfig(guild, i.user.id, nv ? 'ADMIN_MAINT_ON' : 'ADMIN_MAINT_OFF', {});
-      return i.update(await admPanelManutencao(guild));
-    }
-    if (cid === 'adm_maint_reason') {
-      if (!await isAdmin(i.user, guild)) return;
-      const m = new ModalBuilder().setCustomId('adm_maint_reason_modal').setTitle('Motivo');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('r').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'adm_lockdown') {
-      if (!await isAdmin(i.user, guild)) return;
-      for (const c of guild.channels.cache.values()) if (c.type === ChannelType.GuildText) await c.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => {});
-      return i.reply({ content: '🔒 Lockdown.', flags: EPHEMERAL });
-    }
-    if (cid === 'adm_sv_backup') {
-      if (!await isAdmin(i.user, guild)) return;
-      const data = { name: guild.name, roles: guild.roles.cache.map(r => ({ name: r.name })), channels: guild.channels.cache.map(c => ({ name: c.name, type: c.type })) };
-      try { await supabase.from('guild_backups').insert({ guild_id: guild.id, data }); } catch {}
-      return i.reply({ content: '💾 Salvo.', flags: EPHEMERAL });
-    }
-    if (cid === 'adm_say') {
-      if (!await isAdmin(i.user, guild)) return;
-      const m = new ModalBuilder().setCustomId('modal_adm_say').setTitle('Say');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('msg').setLabel('Msg').setStyle(TextInputStyle.Paragraph).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'adm_anunciar') {
-      if (!await isAdmin(i.user, guild)) return;
-      const m = new ModalBuilder().setCustomId('modal_adm_anunciar').setTitle('Anunciar');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg').setLabel('Msg').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'adm_embed') {
-      if (!await isAdmin(i.user, guild)) return;
-      const m = new ModalBuilder().setCustomId('modal_adm_embed').setTitle('Embed');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'adm_global') {
-      if (!isDev) return;
-      const m = new ModalBuilder().setCustomId('modal_global').setTitle('Aviso global');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg').setLabel('Msg').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'util_dado') return i.reply({ content: `🎲 **${Math.floor(Math.random() * 6) + 1}**`, flags: EPHEMERAL });
-    if (cid === 'util_ping') return i.reply({ content: `🏓 ${client.ws.ping}ms`, flags: EPHEMERAL });
-    if (cid === 'util_sorteio') {
-      const m = new ModalBuilder().setCustomId('modal_util_sorteio').setTitle('Sortear');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('opcoes').setLabel('Uma por linha').setStyle(TextInputStyle.Paragraph).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'util_enquete') {
-      const m = new ModalBuilder().setCustomId('modal_util_enquete').setTitle('Enquete');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('pergunta').setLabel('Pergunta').setStyle(TextInputStyle.Paragraph).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'adm_call_join') {
-      if (!await isAdmin(i.user, guild)) return;
-      const vc = member.voice?.channel;
-      if (!vc) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await entrarNaCall(guild, vc.id);
-      await salvarCanalVoz(guild.id, vc.id);
-      return i.reply({ content: `🔊 ${vc}`, flags: EPHEMERAL });
-    }
-    if (cid === 'adm_call_leave') {
-      if (!await isAdmin(i.user, guild)) return;
-      getVoiceConnection(guild.id)?.destroy();
-      await removerCanalVoz(guild.id);
-      return i.reply({ content: '👋', flags: EPHEMERAL });
-    }
-    if (cid === 'adm_u_info') {
-      const m = new ModalBuilder().setCustomId('modal_u_info').setTitle('Info');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'adm_u_warns') {
-      const m = new ModalBuilder().setCustomId('modal_u_warns').setTitle('Warns');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'adm_u_role') {
-      const m = new ModalBuilder().setCustomId('modal_u_role').setTitle('Cargo');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rid').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'adm_u_bl') {
-      const m = new ModalBuilder().setCustomId('modal_u_bl').setTitle('BL');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('acao').setLabel('add/del').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'adm_ticket_create') {
-      if (!await isAdmin(i.user, guild)) return;
-      const m = new ModalBuilder().setCustomId('ticket_panel_modal:create').setTitle('Criar painel de ticket');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Central de Suporte').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue('Clique abaixo').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#9B59B6').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('botao').setLabel('Botão').setStyle(TextInputStyle.Short).setValue('Abrir Ticket').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'adm_ticket_panels') {
-      if (!await isAdmin(i.user, guild)) return;
-      const panels = await getTicketPanels(guild.id);
-      const e = new EmbedBuilder().setTitle('🎨 Painéis').setColor('#9B59B6')
-        .setDescription(`**Total:** ${panels.length}/${MAX_TICKET_PANELS}\n\n${panels.length ? panels.map(p => `**#${p.id} — ${p.nome}**\n> Tipos: ${p.tipos.length}`).join('\n\n') : '*Nenhum.*'}`);
-      const rows = [];
-      if (panels.length) {
-        const menu = new StringSelectMenuBuilder().setCustomId('adm_ticket_edit_pick').setPlaceholder('Editar');
-        for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.nome}`.slice(0, 90), value: String(p.id) });
-        rows.push(new ActionRowBuilder().addComponents(menu));
-      }
-      rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('adm_ticket_create').setLabel('Criar novo').setEmoji('➕').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('adm_tickets').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ));
-      return i.update({ embeds: [e], components: rows });
-    }
-  }
-
-  // ───── TICKET PANEL (editor) ─────
-  if (cid.startsWith('ticket_panel_')) {
-    if (!await isAdmin(i.user, guild)) return;
-    const parts = cid.split(':');
-    const a2 = parts[0].replace('ticket_panel_', '');
-    const panelId = parts[1];
-    if (a2 === 'edit') {
-      const panel = await getTicketPanel(guild.id, panelId);
-      if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const m = new ModalBuilder().setCustomId(`ticket_panel_modal:edit:${panelId}`).setTitle('Editar painel');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(panel.nome || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue(panel.titulo || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(panel.descricao || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(panel.cor || '#9B59B6').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('botao').setLabel('Botão').setStyle(TextInputStyle.Short).setValue(panel.botao_label || 'Abrir Ticket').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (a2 === 'edit_extras') {
-      const panel = await getTicketPanel(guild.id, panelId);
-      if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const m = new ModalBuilder().setCustomId(`ticket_panel_modal:edit_extras:${panelId}`).setTitle('Imagens');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner').setStyle(TextInputStyle.Short).setValue(panel.banner || '').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb').setStyle(TextInputStyle.Short).setValue(panel.thumbnail || '').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(panel.botao_emoji || '🎫').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cargo').setLabel('ID cargo').setStyle(TextInputStyle.Short).setValue(panel.cargo_id || '').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('log').setLabel('ID canal log').setStyle(TextInputStyle.Short).setValue(panel.log_channel_id || '').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (a2 === 'type_add') {
-      const panel = await getTicketPanel(guild.id, panelId);
-      if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (panel.tipos.length >= MAX_TICKET_TYPES_PER_PANEL) return i.reply({ content: `❌ Limite ${MAX_TICKET_TYPES_PER_PANEL}.`, flags: EPHEMERAL });
-      const m = new ModalBuilder().setCustomId(`ticket_panel_modal:type_add:${panelId}`).setTitle('Add tipo');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Nome do tipo').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎫').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (a2 === 'send') {
-      const panel = await getTicketPanel(guild.id, panelId);
-      if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-      let alvo = panel.canal_id ? guild.channels.cache.get(panel.canal_id) : null;
-      if (!alvo) alvo = i.channel;
-      try {
-        const msg = await alvo.send({ embeds: [buildTicketPanelEmbed(panel)], components: buildTicketPanelComponents(panel) });
-        await updateTicketPanel(guild.id, panel.id, { canal_id: alvo.id, mensagem_id: msg.id });
-        return i.reply({ content: `✅ Em <#${alvo.id}>`, flags: EPHEMERAL });
-      } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-    }
-    if (a2 === 'delete') {
-      const panel = await getTicketPanel(guild.id, panelId);
-      if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (panel.canal_id && panel.mensagem_id) {
-        try {
-          const ch = await guild.channels.fetch(panel.canal_id).catch(() => null);
-          if (ch) {
-            const m = await ch.messages.fetch(panel.mensagem_id).catch(() => null);
-            if (m) await m.delete().catch(() => {});
+      // ───── ADMIN ─────
+      if (cid.startsWith('adm_')) {
+        if (cid === 'adm_back') {
+          if (!await isAdmin(i.user, guild)) return;
+          return i.update(adminHub());
+        }
+        if (cid === 'adm_loja') {
+          if (!await isAdmin(i.user, guild)) return;
+          return i.update(await panelHome(guild.id));
+        }
+        if (cid === 'adm_paineis') {
+          if (!await isAdmin(i.user, guild)) return;
+          return i.update({
+            embeds: [new EmbedBuilder().setTitle('🎫 Painéis').setColor('#9B59B6')],
+            components: [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('adm_p_ticket').setLabel('Ticket').setEmoji('🎫').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('adm_p_verif').setLabel('Verif').setEmoji('✅').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('adm_p_updates').setLabel('Updates').setEmoji('📢').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('adm_p_loja').setLabel('Loja').setEmoji('🛒').setStyle(ButtonStyle.Success),
+              ),
+              new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('adm_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary)),
+            ],
+          });
+        }
+        if (cid === 'adm_p_ticket') {
+          if (!await isAdmin(i.user, guild)) return;
+          const panels = await getTicketPanels(guild.id);
+          if (!panels.length) return i.reply({ content: '❌ Nenhum painel criado.', flags: EPHEMERAL });
+          const panel = panels[0];
+          const msg = await channel.send({ embeds: [buildTicketPanelEmbed(panel)], components: buildTicketPanelComponents(panel) });
+          await updateTicketPanel(guild.id, panel.id, { canal_id: channel.id, mensagem_id: msg.id });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (cid === 'adm_p_verif') {
+          if (!await isAdmin(i.user, guild)) return;
+          const c = await getConfig(guild.id);
+          const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20guilds.join&state=${encodeURIComponent('verify:' + guild.id)}`;
+          const b = new ButtonBuilder().setLabel(c.verificacao_botao || 'Verificar').setEmoji('✅').setStyle(ButtonStyle.Link).setURL(oauthUrl);
+          await channel.send({
+            embeds: [new EmbedBuilder().setColor(c.verificacao_cor || '#00FF00').setTitle(c.verificacao_titulo || 'Verificação').setDescription(c.verificacao_descricao || 'Clique para verificar.')],
+            components: [new ActionRowBuilder().addComponents(b)],
+          });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (cid === 'adm_p_updates') {
+          if (!await isAdmin(i.user, guild)) return;
+          const s = await getSettings(guild.id);
+          const atual = s?.update_channel_id ? `<#${s.update_channel_id}>` : '*não configurado*';
+          const topRole = getTopRole(guild);
+          const e = new EmbedBuilder().setTitle('📢 Canal de Updates').setColor('#5865F2')
+            .setDescription(`Configure onde o bot avisa sobre **atualizações**.\n\n**Canal:** ${atual}\n**Cargo marcado:** ${topRole ? `<@&${topRole.id}>` : 'dono'}`)
+            .setFooter({ text: 'Se não existir, o bot cria automaticamente' });
+          const menu = new ChannelSelectMenuBuilder().setCustomId('updates_channel_pick').setPlaceholder('Escolha o canal').setChannelTypes(ChannelType.GuildText);
+          return i.reply({
+            embeds: [e],
+            components: [
+              new ActionRowBuilder().addComponents(menu),
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('updates_test').setLabel('Testar').setEmoji('🧪').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('updates_reset').setLabel('Resetar').setEmoji('🔄').setStyle(ButtonStyle.Danger),
+              ),
+            ],
+            flags: EPHEMERAL,
+          });
+        }
+        if (cid === 'adm_p_loja') {
+          if (!await isAdmin(i.user, guild)) return;
+          const s = await getSettings(guild.id);
+          const e = baseEmbed(s, `🛒 ${s?.store_name || 'Loja'}`, s?.store_description || '');
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('loja:comprar').setLabel('Comprar').setEmoji('🛒').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('loja:meus_pedidos').setLabel('Meus pedidos').setEmoji('🧾').setStyle(ButtonStyle.Secondary),
+          );
+          await channel.send({ embeds: [e], components: [row] });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (cid === 'adm_configurar') {
+          if (!await isAdmin(i.user, guild)) return;
+          return i.update({
+            embeds: [new EmbedBuilder().setTitle('⚙️ Configurar').setColor('#5865F2')],
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId('cfg_canais').setLabel('Canais').setEmoji('📢').setStyle(ButtonStyle.Primary),
+              new ButtonBuilder().setCustomId('cfg_cargos').setLabel('Cargos').setEmoji('🎭').setStyle(ButtonStyle.Primary),
+              new ButtonBuilder().setCustomId('cfg_moderacao').setLabel('Moderação').setEmoji('🛡️').setStyle(ButtonStyle.Success),
+              new ButtonBuilder().setCustomId('adm_back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+            )],
+          });
+        }
+        if (cid === 'adm_servidor') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelServidor(guild)); }
+        if (cid === 'adm_anuncios') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAnuncios()); }
+        if (cid === 'adm_utilidades') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelUtilidades()); }
+        if (cid === 'adm_call') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelCall()); }
+        if (cid === 'adm_antiraid') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAntiRaid()); }
+        if (cid === 'adm_musica') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelMusica(guild)); }
+        if (cid === 'adm_manutencao') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelManutencao(guild)); }
+        if (cid === 'adm_tickets') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelTickets(guild)); }
+        if (cid === 'adm_usuarios') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelUsuarios()); }
+        if (cid === 'adm_automacao') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAutomacao(guild)); }
+        if (cid === 'adm_sorteios') {
+          if (!await isAdmin(i.user, guild)) return;
+          const m = new ModalBuilder().setCustomId('modal_adm_sorteio').setTitle('Criar sorteio');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('premio').setLabel('Prêmio').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('duracao').setLabel('Duração (min)').setStyle(TextInputStyle.Short).setValue('60').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('vencedores').setLabel('Nº vencedores').setStyle(TextInputStyle.Short).setValue('1').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'adm_maint_toggle') {
+          if (!await isAdmin(i.user, guild)) return;
+          const cfg = await getConfig(guild.id);
+          const nv = !cfg.admin_maintenance;
+          await setConfig(guild.id, { ...cfg, admin_maintenance: nv, admin_maintenance_by: i.user.id, admin_maintenance_since: nv ? new Date().toISOString() : null });
+          await logConfig(guild, i.user.id, nv ? 'ADMIN_MAINT_ON' : 'ADMIN_MAINT_OFF', {});
+          return i.update(await admPanelManutencao(guild));
+        }
+        if (cid === 'adm_maint_reason') {
+          if (!await isAdmin(i.user, guild)) return;
+          const m = new ModalBuilder().setCustomId('adm_maint_reason_modal').setTitle('Motivo');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('r').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'adm_lockdown') {
+          if (!await isAdmin(i.user, guild)) return;
+          for (const c of guild.channels.cache.values()) if (c.type === ChannelType.GuildText) await c.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false }).catch(() => {});
+          return i.reply({ content: '🔒 Lockdown.', flags: EPHEMERAL });
+        }
+        if (cid === 'adm_sv_backup') {
+          if (!await isAdmin(i.user, guild)) return;
+          const data = { name: guild.name, roles: guild.roles.cache.map(r => ({ name: r.name })), channels: guild.channels.cache.map(c => ({ name: c.name, type: c.type })) };
+          try { await supabase.from('guild_backups').insert({ guild_id: guild.id, data }); } catch {}
+          return i.reply({ content: '💾 Salvo.', flags: EPHEMERAL });
+        }
+        if (cid === 'adm_say') {
+          if (!await isAdmin(i.user, guild)) return;
+          const m = new ModalBuilder().setCustomId('modal_adm_say').setTitle('Say');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('msg').setLabel('Msg').setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'adm_anunciar') {
+          if (!await isAdmin(i.user, guild)) return;
+          const m = new ModalBuilder().setCustomId('modal_adm_anunciar').setTitle('Anunciar');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg').setLabel('Msg').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'adm_embed') {
+          if (!await isAdmin(i.user, guild)) return;
+          const m = new ModalBuilder().setCustomId('modal_adm_embed').setTitle('Embed');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'adm_global') {
+          if (!isDev) return;
+          const m = new ModalBuilder().setCustomId('modal_global').setTitle('Aviso global');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('msg').setLabel('Msg').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'util_dado') return i.reply({ content: `🎲 **${Math.floor(Math.random() * 6) + 1}**`, flags: EPHEMERAL });
+        if (cid === 'util_ping') return i.reply({ content: `🏓 ${client.ws.ping}ms`, flags: EPHEMERAL });
+        if (cid === 'util_sorteio') {
+          const m = new ModalBuilder().setCustomId('modal_util_sorteio').setTitle('Sortear');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('opcoes').setLabel('Uma por linha').setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'util_enquete') {
+          const m = new ModalBuilder().setCustomId('modal_util_enquete').setTitle('Enquete');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('pergunta').setLabel('Pergunta').setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'adm_call_join') {
+          if (!await isAdmin(i.user, guild)) return;
+          const vc = member.voice?.channel;
+          if (!vc) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await entrarNaCall(guild, vc.id);
+          await salvarCanalVoz(guild.id, vc.id);
+          return i.reply({ content: `🔊 ${vc}`, flags: EPHEMERAL });
+        }
+        if (cid === 'adm_call_leave') {
+          if (!await isAdmin(i.user, guild)) return;
+          getVoiceConnection(guild.id)?.destroy();
+          await removerCanalVoz(guild.id);
+          return i.reply({ content: '👋', flags: EPHEMERAL });
+        }
+        if (cid === 'adm_u_info') {
+          const m = new ModalBuilder().setCustomId('modal_u_info').setTitle('Info');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'adm_u_warns') {
+          const m = new ModalBuilder().setCustomId('modal_u_warns').setTitle('Warns');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'adm_u_role') {
+          const m = new ModalBuilder().setCustomId('modal_u_role').setTitle('Cargo');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rid').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'adm_u_bl') {
+          const m = new ModalBuilder().setCustomId('modal_u_bl').setTitle('BL');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('uid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('acao').setLabel('add/del').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'adm_ticket_create') {
+          if (!await isAdmin(i.user, guild)) return;
+          const m = new ModalBuilder().setCustomId('ticket_panel_modal:create').setTitle('Criar painel de ticket');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Central de Suporte').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue('Clique abaixo').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#9B59B6').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('botao').setLabel('Botão').setStyle(TextInputStyle.Short).setValue('Abrir Ticket').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'adm_ticket_panels') {
+          if (!await isAdmin(i.user, guild)) return;
+          const panels = await getTicketPanels(guild.id);
+          const e = new EmbedBuilder().setTitle('🎨 Painéis').setColor('#9B59B6')
+            .setDescription(`**Total:** ${panels.length}/${MAX_TICKET_PANELS}\n\n${panels.length ? panels.map(p => `**#${p.id} — ${p.nome}**\n> Tipos: ${p.tipos.length}`).join('\n\n') : '*Nenhum.*'}`);
+          const rows = [];
+          if (panels.length) {
+            const menu = new StringSelectMenuBuilder().setCustomId('adm_ticket_edit_pick').setPlaceholder('Editar');
+            for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.nome}`.slice(0, 90), value: String(p.id) });
+            rows.push(new ActionRowBuilder().addComponents(menu));
           }
-        } catch {}
+          rows.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('adm_ticket_create').setLabel('Criar novo').setEmoji('➕').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('adm_tickets').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+          ));
+          return i.update({ embeds: [e], components: rows });
+        }
       }
-      await deleteTicketPanel(guild.id, panelId);
-      return i.update(await admPanelTickets(guild));
-    }
-  }
 
-  // ───── TICKET OPEN ─────
-  if (cid.startsWith('ticket_open:')) {
-    const parts = cid.split(':');
-    const panelId = parts[1], typeId = parts[2];
-    const panel = await getTicketPanel(guild.id, panelId);
-    if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (!ticketCooldownCheck(i.user.id, 3000)) return i.reply({ content: '⏳ Aguarde.', flags: EPHEMERAL });
-    const lim = await canUserOpenTicket(guild, i.member, panel);
-    if (!lim.ok) return i.reply({ content: lim.reason, flags: EPHEMERAL });
-    let tipo = panel.tipos.find(t => String(t.id) === String(typeId));
-    if (!tipo && panel.tipos?.length) tipo = panel.tipos[0];
-    if (!tipo) tipo = { id: 'sem_tipo', label: panel.titulo || 'Suporte', emoji: '🎫', descricao: '', canal_id: null };
-    if (panel.formulario?.habilitado && panel.formulario.perguntas?.length) {
-      const questions = panel.formulario.perguntas.slice(0, MAX_FORM_QUESTIONS);
-      const m = new ModalBuilder().setCustomId(`tkt_form:${panelId}:${tipo.id}`).setTitle(`Formulário`.slice(0, 45));
-      for (const q of questions) {
-        const ti = new TextInputBuilder()
-          .setCustomId(`q_${q.label.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`)
-          .setLabel((q.label || 'Pergunta').slice(0, 45))
-          .setPlaceholder((q.placeholder || '').slice(0, 100))
-          .setStyle(TextInputStyle.Short)
-          .setRequired(!!q.obrigatorio);
-        m.addComponents(new ActionRowBuilder().addComponents(ti));
+      // ───── TICKET PANEL (editor) ─────
+      if (cid.startsWith('ticket_panel_')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const parts = cid.split(':');
+        const a2 = parts[0].replace('ticket_panel_', '');
+        const panelId = parts[1];
+        if (a2 === 'edit') {
+          const panel = await getTicketPanel(guild.id, panelId);
+          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const m = new ModalBuilder().setCustomId(`ticket_panel_modal:edit:${panelId}`).setTitle('Editar painel');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(panel.nome || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue(panel.titulo || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(panel.descricao || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(panel.cor || '#9B59B6').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('botao').setLabel('Botão').setStyle(TextInputStyle.Short).setValue(panel.botao_label || 'Abrir Ticket').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (a2 === 'edit_extras') {
+          const panel = await getTicketPanel(guild.id, panelId);
+          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const m = new ModalBuilder().setCustomId(`ticket_panel_modal:edit_extras:${panelId}`).setTitle('Imagens');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner').setStyle(TextInputStyle.Short).setValue(panel.banner || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb').setStyle(TextInputStyle.Short).setValue(panel.thumbnail || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(panel.botao_emoji || '🎫').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cargo').setLabel('ID cargo').setStyle(TextInputStyle.Short).setValue(panel.cargo_id || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('log').setLabel('ID canal log').setStyle(TextInputStyle.Short).setValue(panel.log_channel_id || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (a2 === 'type_add') {
+          const panel = await getTicketPanel(guild.id, panelId);
+          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (panel.tipos.length >= MAX_TICKET_TYPES_PER_PANEL) return i.reply({ content: `❌ Limite ${MAX_TICKET_TYPES_PER_PANEL}.`, flags: EPHEMERAL });
+          const m = new ModalBuilder().setCustomId(`ticket_panel_modal:type_add:${panelId}`).setTitle('Add tipo');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Nome do tipo').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎫').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (a2 === 'send') {
+          const panel = await getTicketPanel(guild.id, panelId);
+          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+          let alvo = panel.canal_id ? guild.channels.cache.get(panel.canal_id) : null;
+          if (!alvo) alvo = i.channel;
+          try {
+            const msg = await alvo.send({ embeds: [buildTicketPanelEmbed(panel)], components: buildTicketPanelComponents(panel) });
+            await updateTicketPanel(guild.id, panel.id, { canal_id: alvo.id, mensagem_id: msg.id });
+            return i.reply({ content: `✅ Em <#${alvo.id}>`, flags: EPHEMERAL });
+          } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
+        }
+        if (a2 === 'delete') {
+          const panel = await getTicketPanel(guild.id, panelId);
+          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (panel.canal_id && panel.mensagem_id) {
+            try {
+              const ch = await guild.channels.fetch(panel.canal_id).catch(() => null);
+              if (ch) {
+                const m = await ch.messages.fetch(panel.mensagem_id).catch(() => null);
+                if (m) await m.delete().catch(() => {});
+              }
+            } catch {}
+          }
+          await deleteTicketPanel(guild.id, panelId);
+          return i.update(await admPanelTickets(guild));
+        }
       }
-      return i.showModal(m);
-    }
-    await i.deferReply({ flags: EPHEMERAL });
-    try {
-      const th = await openTicket(i, panel, tipo, []);
-      return i.editReply({ content: `✅ Ticket em <#${th.id}>` });
-    } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
-  }
 
-  // ───── TICKET ASSUMIR / PRIORITY (legacy) ─────
-  if (cid.startsWith('ticket_assumir:')) {
-    const th = i.channel;
-    if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const okStaff = await isTicketStaff(i.user, guild);
-    if (!okStaff) return i.reply({ content: '❌', flags: EPHEMERAL });
-    try {
-      const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
-      if (td?.assumed_by) return i.reply({ content: `⚠️ <@${td.assumed_by}>`, flags: EPHEMERAL });
-      await supabase.from('ticket_data').upsert({
-        thread_id: th.id, guild_id: guild.id, user_id: td?.user_id || i.user.id,
-        assumed_by: i.user.id, assumed_at: new Date().toISOString(),
-      }, { onConflict: 'thread_id' });
-      await th.send({ content: `🙋 <@${i.user.id}> assumiu.` });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    } catch (err) { return i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }); }
-  }
-  if (cid.startsWith('ticket_priority:')) {
-    const th = i.channel;
-    if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const okStaff = await isTicketStaff(i.user, guild);
-    if (!okStaff) return i.reply({ content: '❌', flags: EPHEMERAL });
-    try {
-      const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
-      const nv = !td?.is_priority;
-      await supabase.from('ticket_data').upsert({
-        thread_id: th.id, guild_id: guild.id, user_id: td?.user_id || i.user.id,
-        is_priority: nv, priority_set_by: i.user.id, assumed_by: td?.assumed_by || null,
-      }, { onConflict: 'thread_id' });
-      const baseName = th.name.replace(/^🔴\s*/, '');
-      await th.setName(nv ? `🔴 ${baseName}`.slice(0, 100) : baseName).catch(() => {});
-      await th.send({ content: nv ? `🔴 **ALTA** por <@${i.user.id}>` : `⚪ Removida.` });
-      return i.reply({ content: nv ? '🔴' : '⚪', flags: EPHEMERAL });
-    } catch (err) { return i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }); }
-  }
-
-  // ───── TKT (interno) ─────
-  if (ns === 'tkt') {
-    const th = i.channel;
-    if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
-    if (!td) return i.reply({ content: '❌ Ticket não encontrado.', flags: EPHEMERAL });
-    const panel = td.panel_id ? await getTicketPanel(guild.id, td.panel_id) : null;
-    const tipo = panel?.tipos?.find(t => String(t.id) === String(td.type_id));
-    const typeRole = safeStr(tipo?.cargo_responsavel_id);
-    const okStaff = await isTicketStaff(i.user, guild, panel?.cargo_id, typeRole);
-    if (!okStaff) return i.reply({ content: '❌ Só staff.', flags: EPHEMERAL });
-
-    if (action === 'claim') return ticketActionClaim(i);
-    if (action === 'unclaim') return ticketActionUnclaim(i);
-    if (action === 'lock') return ticketActionLock(i);
-    if (action === 'priority') return ticketActionPriority(i);
-    if (action === 'add') {
-      const m = new ModalBuilder().setCustomId(`tkt_modal:add:${th.id}`).setTitle('Adicionar usuário');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'remove') {
-      const m = new ModalBuilder().setCustomId(`tkt_modal:remove:${th.id}`).setTitle('Remover usuário');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'rename') {
-      const m = new ModalBuilder().setCustomId(`tkt_modal:rename:${th.id}`).setTitle('Renomear');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('name').setLabel('Novo nome').setStyle(TextInputStyle.Short).setValue(th.name.slice(0, 90)).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'transfer') {
-      if (!panel || !panel.tipos?.length) return i.reply({ content: '❌ Sem tipos.', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId(`tkt_transfer:${th.id}`).setPlaceholder('Transferir para...');
-      for (const t of panel.tipos) menu.addOptions({ label: `${t.emoji || '🎫'} ${t.label}`.slice(0, 90), value: String(t.id) });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('↪️ Transferir').setColor('#5865F2')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'move') {
-      const cats = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory);
-      if (!cats.size) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId(`tkt_move:${th.id}`).setPlaceholder('Mover para...');
-      for (const c of cats.values()) menu.addOptions({ label: c.name.slice(0, 90), value: c.id });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('📁 Mover').setColor('#5865F2')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'close') return ticketActionClose(i);
-    if (action === 'delete') {
-      const m = new ModalBuilder().setCustomId(`tkt_modal:delete:${th.id}`).setTitle('Excluir');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'rate') {
-      const n = parseInt(rest[1]) || 0;
-      return ticketActionRate(i, n);
-    }
-    return;
-  }
-
-  // ───── TKTEDIT ─────
-  if (ns === 'tktedit') {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = rest[0];
-    if (action === 'open') return i.update(await ticketEditorPanel(guild.id, panelId));
-    if (action === 'embed' || action === 'button' || action === 'staff') {
-      const m = new ModalBuilder().setCustomId(`tktedit_modal:${action}:${panelId}`).setTitle(action === 'embed' ? 'Embed' : action === 'button' ? 'Botão' : 'Staff & Logs');
-      const p = await getTicketPanel(guild.id, panelId);
-      if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (action === 'embed') m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue(p.titulo || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(p.descricao || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(p.cor || '#9B59B6').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner').setStyle(TextInputStyle.Short).setValue(p.banner || '').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb').setStyle(TextInputStyle.Short).setValue(p.thumbnail || '').setRequired(false)),
-      );
-      if (action === 'button') m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Label').setStyle(TextInputStyle.Short).setValue(p.botao_label || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(p.botao_emoji || '🎫').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(p.footer || '').setRequired(false)),
-      );
-      if (action === 'staff') m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cargo_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setValue(p.cargo_id || '').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('log_id').setLabel('ID canal log').setStyle(TextInputStyle.Short).setValue(p.log_channel_id || '').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'types') return i.update(await ticketTypesPanel(guild.id, panelId));
-    if (action === 'config') return i.update(await ticketConfigPanel(guild.id, panelId));
-    if (action === 'form') return i.update(await ticketFormPanel(guild.id, panelId));
-    if (action === 'blocks') return i.update(await ticketBlocksPanel(guild.id, panelId));
-    if (action === 'preview') {
-      const p = await getTicketPanel(guild.id, panelId);
-      if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-      return i.reply({ content: '👁️ Preview:', embeds: [buildTicketPanelEmbed(p)], components: buildTicketPanelComponents(p), flags: EPHEMERAL });
-    }
-    if (action === 'post') {
-      const p = await getTicketPanel(guild.id, panelId);
-      if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const alvo = p.canal_id ? guild.channels.cache.get(p.canal_id) : channel;
-      try {
-        const msg = await alvo.send({ embeds: [buildTicketPanelEmbed(p)], components: buildTicketPanelComponents(p) });
-        await updateTicketPanel(guild.id, p.id, { canal_id: alvo.id, mensagem_id: msg.id });
-        return i.reply({ content: `✅ Em <#${alvo.id}>`, flags: EPHEMERAL });
-      } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-    }
-    if (action === 'delete') {
-      const m = new ModalBuilder().setCustomId(`tktedit_modal:delete:${panelId}`).setTitle('Excluir painel');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-  }
-
-  // ───── TKTTYPE ─────
-  if (ns === 'tkttype') {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = rest[0];
-    const p = await getTicketPanel(guild.id, panelId);
-    if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'add') {
-      if (p.tipos.length >= MAX_TICKET_TYPES_PER_PANEL) return i.reply({ content: `❌ Limite.`, flags: EPHEMERAL });
-      const m = new ModalBuilder().setCustomId(`tkttype_modal:add:${panelId}`).setTitle('Add tipo');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Nome').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎫').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'edit') {
-      const menu = new StringSelectMenuBuilder().setCustomId(`tkttype:editpick:${panelId}`).setPlaceholder('Tipo');
-      for (const t of p.tipos) menu.addOptions({ label: `${t.emoji || '🎫'} ${t.label}`.slice(0, 90), value: String(t.id) });
-      return i.update({ embeds: [new EmbedBuilder().setTitle('✏️ Editar tipo')], components: [new ActionRowBuilder().addComponents(menu)] });
-    }
-    if (action === 'del') {
-      const menu = new StringSelectMenuBuilder().setCustomId(`tkttype:delpick:${panelId}`).setPlaceholder('Tipo');
-      for (const t of p.tipos) menu.addOptions({ label: `${t.emoji || '🎫'} ${t.label}`.slice(0, 90), value: String(t.id) });
-      return i.update({ embeds: [new EmbedBuilder().setTitle('🗑️ Remover tipo')], components: [new ActionRowBuilder().addComponents(menu)] });
-    }
-  }
-
-  // ───── TKTCFG ─────
-  if (ns === 'tktcfg') {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = rest[0];
-    if (action === 'sair') {
-      const p = await getTicketPanel(guild.id, panelId);
-      if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await updateTicketPanel(guild.id, panelId, { fechar_ao_sair: !p.fechar_ao_sair });
-      return i.update(await ticketConfigPanel(guild.id, panelId));
-    }
-    if (action === 'limite' || action === 'autoclose' || action === 'horario' || action === 'categoria') {
-      const m = new ModalBuilder().setCustomId(`tktcfg_modal:${action}:${panelId}`).setTitle(action);
-      const p = await getTicketPanel(guild.id, panelId);
-      if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (action === 'limite') m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('v').setLabel('Limite por user').setStyle(TextInputStyle.Short).setValue(String(p.limite_tickets_usuario || 1)).setRequired(true)
-      ));
-      if (action === 'autoclose') m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('v').setLabel('Horas (0=off)').setStyle(TextInputStyle.Short).setValue(String(p.auto_close_horas || 48)).setRequired(true)
-      ));
-      if (action === 'horario') m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('v').setLabel('Ex: 9h-18h').setStyle(TextInputStyle.Short).setValue(p.horario_atendimento || '').setRequired(false)
-      ));
-      if (action === 'categoria') m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('v').setLabel('ID da categoria').setStyle(TextInputStyle.Short).setValue(p.categoria_padrao_id || '').setRequired(false)
-      ));
-      return i.showModal(m);
-    }
-  }
-
-  // ───── TKTFORM ─────
-  if (ns === 'tktform') {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = rest[0];
-    const p = await getTicketPanel(guild.id, panelId);
-    if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'toggle') {
-      p.formulario.habilitado = !p.formulario.habilitado;
-      await updateTicketPanel(guild.id, panelId, { formulario: p.formulario });
-      return i.update(await ticketFormPanel(guild.id, panelId));
-    }
-    if (action === 'add') {
-      if (p.formulario.perguntas.length >= MAX_FORM_QUESTIONS) return i.reply({ content: '❌ Limite.', flags: EPHEMERAL });
-      const m = new ModalBuilder().setCustomId(`tktform_modal:add:${panelId}`).setTitle('Add pergunta');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Pergunta').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(45)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('placeholder').setLabel('Placeholder').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('obrigatorio').setLabel('Obrigatório? (sim/nao)').setStyle(TextInputStyle.Short).setValue('sim').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'clear') {
-      p.formulario.perguntas = [];
-      await updateTicketPanel(guild.id, panelId, { formulario: p.formulario });
-      return i.update(await ticketFormPanel(guild.id, panelId));
-    }
-  }
-
-  // ───── TKTBLK ─────
-  if (ns === 'tktblk') {
-    if (!await isAdmin(i.user, guild)) return;
-    const panelId = rest[0];
-    if (action === 'add') {
-      const m = new ModalBuilder().setCustomId(`tktblk_modal:add:${panelId}`).setTitle('Bloquear');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'remove') {
-      const menu = new StringSelectMenuBuilder().setCustomId(`tktblk:removepick:${panelId}`).setPlaceholder('Desbloquear');
-      const p = await getTicketPanel(guild.id, panelId);
-      for (const uid of p?.bloqueio_usuarios_ids || []) menu.addOptions({ label: `User ${uid}`, value: uid });
-      return i.update({ embeds: [new EmbedBuilder().setTitle('✅')], components: [new ActionRowBuilder().addComponents(menu)] });
-    }
-  }
-
-  // ───── BUG (dev) ─────
-  if (ns === 'bug') {
-    if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const bid = rest[0];
-    if (action === 'resolve') {
-      const { data: b } = await supabase.from('error_logs').select('*').eq('id', bid).maybeSingle();
-      await supabase.from('error_logs').update({ status: 'resolved', resolved_by: i.user.id, resolved_at: new Date().toISOString() }).eq('id', bid);
-      if (b?.user_id) try { const u = await client.users.fetch(b.user_id); await u.send(`✅ Bug \`#${bid}\` resolvido.`); } catch {}
-      return i.update({
-        embeds: [EmbedBuilder.from(i.message.embeds[0]).setColor('#22c55e').setFooter({ text: `✅ ${i.user.tag}` })],
-        components: [],
-      });
-    }
-    if (action === 'ignore') {
-      await supabase.from('error_logs').update({ status: 'ignored', resolved_by: i.user.id, resolved_at: new Date().toISOString() }).eq('id', bid);
-      return i.update({
-        embeds: [EmbedBuilder.from(i.message.embeds[0]).setColor('#808080').setFooter({ text: `🚫 ${i.user.tag}` })],
-        components: [],
-      });
-    }
-  }
-
-  // ───── DEV BUTTONS ─────
-  if (cid.startsWith('dev_')) {
-    if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
-
-    if (cid === 'dev_back') return i.update(devHub());
-    if (cid === 'dev_dashboard') return i.update(await devPanelDashboard());
-    if (cid === 'dev_bot') return i.update(await devPanelBot());
-    if (cid === 'dev_premium') return i.update(await devPanelPremium(guild));
-    if (cid === 'dev_verificados') return i.update(await devPanelVerificados());
-    if (cid === 'dev_manutencao') return i.update(await devPanelManutencao());
-    if (cid === 'dev_kill_switch') return i.update(await devPanelKillSwitch());
-    if (cid === 'dev_debug') return i.update(await devPanelDebug());
-    if (cid === 'dev_alerts') return i.update(await devPanelAlerts());
-    if (cid === 'dev_audit') return i.update(await devPanelAudit());
-    if (cid === 'dev_inject') return i.update(await devPanelInject());
-    if (cid === 'dev_staff_global') return i.update(await devPanelStaffGlobal(0));
-    if (cid === 'dev_ranking') return i.update(await devPanelRanking());
-    if (cid === 'dev_dead_servers') return i.update(await devPanelDeadServers(0));
-    if (cid === 'dev_global_events') return i.update(await devPanelGlobalEvents());
-    if (cid === 'dev_monitor') return i.update(await devPanelMonitor());
-    if (cid === 'dev_preview') return i.update(await devPanelPreview());
-    if (cid === 'dev_simulator') return i.update(await devPanelSimulator());
-    if (cid === 'dev_sandbox') return i.update(await devPanelSandbox());
-    if (cid === 'dev_sandbox_snippets') return i.update(buildSandboxSnippets());
-    if (cid === 'dev_ratelimit') return i.update(await devPanelRateLimit());
-    if (cid === 'dev_broadcast') return i.update(await devPanelBroadcast());
-    if (cid === 'dev_force_rejoin') return i.update(await devPanelForceRejoin());
-    if (cid === 'dev_locale') return i.reply({ ...(await devPanelLocale(guild)), flags: EPHEMERAL });
-    if (cid === 'dev_ff_panel') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
-
-    if (cid === 'dev_ff_postar') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
-    if (cid === 'dev_ff_streamer') return i.reply({ ...(await ffPanelStreamer(guild.id)), flags: EPHEMERAL });
-    if (cid === 'dev_ff_manutencao') return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
-    if (cid === 'dev_ff_pix') return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
-
-    if (cid === 'dev_bl_add') {
-      const m = new ModalBuilder().setCustomId('modal_bl_add').setTitle('Blacklist');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_bl_del') {
-      const m = new ModalBuilder().setCustomId('modal_bl_del').setTitle('Remover BL');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_bl_list') {
-      const { data } = await supabase.from('blacklist_users').select('*').limit(30);
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🚫 Blacklist Global').setColor('#FF5555')
-          .setDescription(data?.length ? data.map(b => `<@${b.user_id}>`).join('\n') : '*Vazia*')],
-        flags: EPHEMERAL,
-      });
-    }
-
-    if (cid === 'dev_maint_notify') {
-      await i.deferReply({ flags: EPHEMERAL });
-      const r = await enviarAvisoGlobal('🔧 Manutenção', 'O bot entrará em manutenção em breve.');
-      return i.editReply({ content: `📢 ${r.canaisOk} canais, ${r.dmsOk} DMs` });
-    }
-    if (cid === 'dev_maint_toggle') {
-      const at = await isMaintenanceMode();
-      await setMaintenanceMode(!at, i.user.id, null);
-      return i.update(await devPanelManutencao());
-    }
-    if (cid === 'dev_maint_reason') {
-      const m = new ModalBuilder().setCustomId('dev_maint_reason_modal').setTitle('Motivo');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('r').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
-      ));
-      return i.showModal(m);
-    }
-
-    if (['dev_criar_loja', 'dev_criar_comunidade', 'dev_criar_organizacao', 'dev_criar_apostas'].includes(cid)) {
-      const map = { dev_criar_loja: 'loja', dev_criar_comunidade: 'comunidade', dev_criar_organizacao: 'organizacao', dev_criar_apostas: 'apostas' };
-      const tt = map[cid];
-      await i.reply({ content: `🏗️ Criando **${tt}**...`, flags: EPHEMERAL });
-      antiraidDisabledGuilds.add(guild.id);
-      raidTracker.clear();
-      let lm = 'Preparando...', pd = false;
-      const op = async (msg) => {
-        lm = msg;
-        if (pd) return;
-        pd = true;
-        setTimeout(async () => {
-          pd = false;
-          try { await i.editReply({ content: `🏗️ **${tt}**...\n> ${lm}` }); } catch {}
-        }, 2000);
-      };
-      try {
-        const r = await setupServer(guild, tt, op, i.user.id);
-        const errs = r?.errors || [];
-        if (errs.length) await i.editReply({ content: `⚠️ **${tt}** com ${errs.length} aviso(s).` });
-        else await i.editReply({ content: `✅ **${tt}** configurado!` });
-      } catch (e) {
-        console.error(e);
-        await logError('setupServer', e, i.user.id, guild.id);
-        await i.editReply({ content: `❌ ${e.message}` }).catch(() => {});
-      } finally {
-        setTimeout(() => { antiraidDisabledGuilds.delete(guild.id); raidTracker.clear(); }, 8000);
+      // ───── TICKET OPEN ─────
+      if (cid.startsWith('ticket_open:')) {
+        const parts = cid.split(':');
+        const panelId = parts[1], typeId = parts[2];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (!ticketCooldownCheck(i.user.id, 3000)) return i.reply({ content: '⏳ Aguarde.', flags: EPHEMERAL });
+        const lim = await canUserOpenTicket(guild, i.member, panel);
+        if (!lim.ok) return i.reply({ content: lim.reason, flags: EPHEMERAL });
+        let tipo = panel.tipos.find(t => String(t.id) === String(typeId));
+        if (!tipo && panel.tipos?.length) tipo = panel.tipos[0];
+        if (!tipo) tipo = { id: 'sem_tipo', label: panel.titulo || 'Suporte', emoji: '🎫', descricao: '', canal_id: null };
+        if (panel.formulario?.habilitado && panel.formulario.perguntas?.length) {
+          const questions = panel.formulario.perguntas.slice(0, MAX_FORM_QUESTIONS);
+          const m = new ModalBuilder().setCustomId(`tkt_form:${panelId}:${tipo.id}`).setTitle(`Formulário`.slice(0, 45));
+          for (const q of questions) {
+            const ti = new TextInputBuilder()
+              .setCustomId(`q_${q.label.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`)
+              .setLabel((q.label || 'Pergunta').slice(0, 45))
+              .setPlaceholder((q.placeholder || '').slice(0, 100))
+              .setStyle(TextInputStyle.Short)
+              .setRequired(!!q.obrigatorio);
+            m.addComponents(new ActionRowBuilder().addComponents(ti));
+          }
+          return i.showModal(m);
+        }
+        await i.deferReply({ flags: EPHEMERAL });
+        try {
+          const th = await openTicket(i, panel, tipo, []);
+          return i.editReply({ content: `✅ Ticket em <#${th.id}>` });
+        } catch (e) { return i.editReply({ content: `❌ ${e.message}` }); }
       }
-      return;
-    }
 
-    if (cid === 'dev_entrar_invite') {
-      const m = new ModalBuilder().setCustomId('modal_entrar_invite').setTitle('Entrar');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('invite').setLabel('Link').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_backup') {
-      const data = { name: guild.name, roles: guild.roles.cache.map(r => ({ name: r.name })), channels: guild.channels.cache.map(c => ({ name: c.name, type: c.type })) };
-      try { await supabase.from('guild_backups').insert({ guild_id: guild.id, data }); } catch {}
-      return i.reply({ content: '💾', flags: EPHEMERAL });
-    }
-    if (cid === 'dev_renomear') {
-      const m = new ModalBuilder().setCustomId('modal_renomear').setTitle('Renomear');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_explosao') {
-      const m = new ModalBuilder().setCustomId('modal_explosao').setTitle('💥');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('guildid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_sair') {
-      await i.reply({ content: '🚪', flags: EPHEMERAL });
-      setTimeout(() => guild.leave().catch(() => {}), 2000);
-      return;
-    }
-    if (cid === 'dev_servidores') {
-      const l = [];
-      for (const g of client.guilds.cache.values()) l.push(`**${g.name}** (${g.id})`);
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('🌐').setDescription(l.join('\n').substring(0, 4000))], flags: EPHEMERAL });
-    }
-    if (cid === 'dev_rejoin') return i.update(await devPanelForceRejoin());
-    if (cid === 'dev_rejoin_all') { await checkAutoRejoin(); return i.reply({ content: '🚀', flags: EPHEMERAL }); }
-    if (cid === 'dev_rejoin_manual') {
-      const m = new ModalBuilder().setCustomId('modal_rejoin_manual').setTitle('Rejoin');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('invite').setLabel('Link').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_listar_verif') {
-      const { data, count } = await supabase.from('verifications').select('*', { count: 'exact' });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('📋 Verificados').setDescription(`Total: **${count || 0}**`)], flags: EPHEMERAL });
-    }
-    if (cid === 'dev_levar') {
-      const m = new ModalBuilder().setCustomId('modal_levar').setTitle('Levar');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('servidor_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_prem_on' || cid === 'dev_prem_off') {
-      const c = await getConfig(guild.id);
-      c.is_premium = cid === 'dev_prem_on';
-      if (!c.is_premium) c.premium_expires_at = null;
-      await setConfig(guild.id, c);
-      return i.update(await devPanelPremium(guild));
-    }
-    if (cid === 'dev_prem_temp') {
-      const m = new ModalBuilder().setCustomId('modal_prem_temp').setTitle('Prem temp');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('dias').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('30').setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_forcepremium_guild') {
-      const m = new ModalBuilder().setCustomId('modal_forcepremium_guild').setTitle('FP Guild');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_forcepremium_user') {
-      const m = new ModalBuilder().setCustomId('modal_forcepremium_user').setTitle('FP User');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('Guild (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_forcepremium_list') {
-      const { data } = await supabase.from('force_premium').select('*').order('granted_at', { ascending: false }).limit(30);
-      if (!data?.length) return i.reply({ content: '📋', flags: EPHEMERAL });
-      const lines = data.map(f => `**${f.scope === 'guild' ? '🌐' : '👤'}** \`${f.target_id}\` — ${f.permanent ? '♾️' : (f.expires_at ? `<t:${Math.floor(new Date(f.expires_at).getTime() / 1000)}:R>` : '?')}`);
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('🎯 FP').setDescription(lines.join('\n\n').substring(0, 4000))], flags: EPHEMERAL });
-    }
-    if (cid === 'dev_forcepremium_clear') {
-      const { count } = await supabase.from('force_premium').select('*', { count: 'exact', head: true });
-      if (!count) return i.reply({ content: '📋', flags: EPHEMERAL });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('⚠️').setDescription(`Apagar **${count}**?`)],
-        components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('dev_forcepremium_clear_confirm').setLabel('Sim').setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('dev_back').setLabel('Não').setStyle(ButtonStyle.Secondary),
-        )],
-        flags: EPHEMERAL,
-      });
-    }
-    if (cid === 'dev_forcepremium_clear_confirm') {
-      await supabase.from('force_premium').delete().neq('id', 0);
-      return i.update({ content: '✅', embeds: [], components: [] });
-    }
+      // ───── TICKET ASSUMIR / PRIORITY (legacy) ─────
+      if (cid.startsWith('ticket_assumir:')) {
+        const th = i.channel;
+        if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const okStaff = await isTicketStaff(i.user, guild);
+        if (!okStaff) return i.reply({ content: '❌', flags: EPHEMERAL });
+        try {
+          const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
+          if (td?.assumed_by) return i.reply({ content: `⚠️ <@${td.assumed_by}>`, flags: EPHEMERAL });
+          await supabase.from('ticket_data').upsert({
+            thread_id: th.id, guild_id: guild.id, user_id: td?.user_id || i.user.id,
+            assumed_by: i.user.id, assumed_at: new Date().toISOString(),
+          }, { onConflict: 'thread_id' });
+          await th.send({ content: `🙋 <@${i.user.id}> assumiu.` });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        } catch (err) { return i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }); }
+      }
+      if (cid.startsWith('ticket_priority:')) {
+        const th = i.channel;
+        if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const okStaff = await isTicketStaff(i.user, guild);
+        if (!okStaff) return i.reply({ content: '❌', flags: EPHEMERAL });
+        try {
+          const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
+          const nv = !td?.is_priority;
+          await supabase.from('ticket_data').upsert({
+            thread_id: th.id, guild_id: guild.id, user_id: td?.user_id || i.user.id,
+            is_priority: nv, priority_set_by: i.user.id, assumed_by: td?.assumed_by || null,
+          }, { onConflict: 'thread_id' });
+          const baseName = th.name.replace(/^🔴\s*/, '');
+          await th.setName(nv ? `🔴 ${baseName}`.slice(0, 100) : baseName).catch(() => {});
+          await th.send({ content: nv ? `🔴 **ALTA** por <@${i.user.id}>` : `⚪ Removida.` });
+          return i.reply({ content: nv ? '🔴' : '⚪', flags: EPHEMERAL });
+        } catch (err) { return i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }); }
+      }
 
-    if (cid === 'dev_inject_coins') {
-      const m = new ModalBuilder().setCustomId('modal_inject_coins').setTitle('Coins');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Qtd').setStyle(TextInputStyle.Short).setValue('100').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_inject_product') {
-      const m = new ModalBuilder().setCustomId('modal_inject_product').setTitle('Produto');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('product_id').setLabel('ID prod').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_inject_role') {
-      const m = new ModalBuilder().setCustomId('modal_inject_role').setTitle('Cargo');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_inject_premium') {
-      const m = new ModalBuilder().setCustomId('modal_inject_premium').setTitle('Premium');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('30').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(m);
-    }
+      // ───── TKT (interno) ─────
+      if (ns === 'tkt') {
+        const th = i.channel;
+        if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
+        if (!td) return i.reply({ content: '❌ Ticket não encontrado.', flags: EPHEMERAL });
+        const panel = td.panel_id ? await getTicketPanel(guild.id, td.panel_id) : null;
+        const tipo = panel?.tipos?.find(t => String(t.id) === String(td.type_id));
+        const typeRole = safeStr(tipo?.cargo_responsavel_id);
+        const okStaff = await isTicketStaff(i.user, guild, panel?.cargo_id, typeRole);
+        if (!okStaff) return i.reply({ content: '❌ Só staff.', flags: EPHEMERAL });
 
-    if (cid === 'dev_inspector') {
-      const m = new ModalBuilder().setCustomId('modal_inspector').setTitle('Inspetor');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid.startsWith('dev_inspector_show:')) return i.update(await devPanelInspector(cid.split(':')[1]));
-    if (cid.startsWith('dev_inspector_backup:')) {
-      const gid = cid.split(':')[1];
-      const g = client.guilds.cache.get(gid);
-      if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const data = { name: g.name, roles: g.roles.cache.map(r => ({ name: r.name })), channels: g.channels.cache.map(c => ({ name: c.name, type: c.type })) };
-      try { await supabase.from('guild_backups').insert({ guild_id: gid, data }); } catch {}
-      await logDevAction(i.user.id, 'inspector_backup', gid, {});
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (cid.startsWith('dev_inspector_notes:')) return i.update(await devPanelNotes(cid.split(':')[1]));
-    if (cid.startsWith('dev_inspector_leave:')) {
-      const gid = cid.split(':')[1];
-      const g = client.guilds.cache.get(gid);
-      if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await logDevAction(i.user.id, 'inspector_leave', gid, {});
-      await i.reply({ content: '🚪', flags: EPHEMERAL });
-      setTimeout(() => g.leave().catch(() => {}), 2000);
-      return;
-    }
+        if (action === 'claim') return ticketActionClaim(i);
+        if (action === 'unclaim') return ticketActionUnclaim(i);
+        if (action === 'lock') return ticketActionLock(i);
+        if (action === 'priority') return ticketActionPriority(i);
+        if (action === 'add') {
+          const m = new ModalBuilder().setCustomId(`tkt_modal:add:${th.id}`).setTitle('Adicionar usuário');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'remove') {
+          const m = new ModalBuilder().setCustomId(`tkt_modal:remove:${th.id}`).setTitle('Remover usuário');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'rename') {
+          const m = new ModalBuilder().setCustomId(`tkt_modal:rename:${th.id}`).setTitle('Renomear');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('name').setLabel('Novo nome').setStyle(TextInputStyle.Short).setValue(th.name.slice(0, 90)).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'transfer') {
+          if (!panel || !panel.tipos?.length) return i.reply({ content: '❌ Sem tipos.', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId(`tkt_transfer:${th.id}`).setPlaceholder('Transferir para...');
+          for (const t of panel.tipos) menu.addOptions({ label: `${t.emoji || '🎫'} ${t.label}`.slice(0, 90), value: String(t.id) });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('↪️ Transferir').setColor('#5865F2')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'move') {
+          const cats = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory);
+          if (!cats.size) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId(`tkt_move:${th.id}`).setPlaceholder('Mover para...');
+          for (const c of cats.values()) menu.addOptions({ label: c.name.slice(0, 90), value: c.id });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('📁 Mover').setColor('#5865F2')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'close') return ticketActionClose(i);
+        if (action === 'delete') {
+          const m = new ModalBuilder().setCustomId(`tkt_modal:delete:${th.id}`).setTitle('Excluir');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'rate') {
+          const n = parseInt(rest[1]) || 0;
+          return ticketActionRate(i, n);
+        }
+        return;
+      }
 
-    if (cid.startsWith('dev_staff_page:')) return i.update(await devPanelStaffGlobal(parseInt(cid.split(':')[1]) || 0));
-    if (cid.startsWith('dev_staff_bl_add:')) {
-      const uid = cid.split(':')[1];
-      const { data: ex } = await supabase.from('staff_blacklist').select('*').eq('user_id', uid).maybeSingle();
-      if (ex) {
-        await supabase.from('staff_blacklist').delete().eq('user_id', uid);
-        staffBlacklistCache.delete(uid);
+      // ───── TKTEDIT ─────
+      if (ns === 'tktedit') {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = rest[0];
+        if (action === 'open') return i.update(await ticketEditorPanel(guild.id, panelId));
+        if (action === 'embed' || action === 'button' || action === 'staff') {
+          const m = new ModalBuilder().setCustomId(`tktedit_modal:${action}:${panelId}`).setTitle(action === 'embed' ? 'Embed' : action === 'button' ? 'Botão' : 'Staff & Logs');
+          const p = await getTicketPanel(guild.id, panelId);
+          if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (action === 'embed') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue(p.titulo || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(p.descricao || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(p.cor || '#9B59B6').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner').setStyle(TextInputStyle.Short).setValue(p.banner || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb').setStyle(TextInputStyle.Short).setValue(p.thumbnail || '').setRequired(false)),
+          );
+          if (action === 'button') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Label').setStyle(TextInputStyle.Short).setValue(p.botao_label || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(p.botao_emoji || '🎫').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(p.footer || '').setRequired(false)),
+          );
+          if (action === 'staff') m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cargo_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setValue(p.cargo_id || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('log_id').setLabel('ID canal log').setStyle(TextInputStyle.Short).setValue(p.log_channel_id || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'types') return i.update(await ticketTypesPanel(guild.id, panelId));
+        if (action === 'config') return i.update(await ticketConfigPanel(guild.id, panelId));
+        if (action === 'form') return i.update(await ticketFormPanel(guild.id, panelId));
+        if (action === 'blocks') return i.update(await ticketBlocksPanel(guild.id, panelId));
+        if (action === 'preview') {
+          const p = await getTicketPanel(guild.id, panelId);
+          if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+          return i.reply({ content: '👁️ Preview:', embeds: [buildTicketPanelEmbed(p)], components: buildTicketPanelComponents(p), flags: EPHEMERAL });
+        }
+        if (action === 'post') {
+          const p = await getTicketPanel(guild.id, panelId);
+          if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const alvo = p.canal_id ? guild.channels.cache.get(p.canal_id) : channel;
+          try {
+            const msg = await alvo.send({ embeds: [buildTicketPanelEmbed(p)], components: buildTicketPanelComponents(p) });
+            await updateTicketPanel(guild.id, p.id, { canal_id: alvo.id, mensagem_id: msg.id });
+            return i.reply({ content: `✅ Em <#${alvo.id}>`, flags: EPHEMERAL });
+          } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
+        }
+        if (action === 'delete') {
+          const m = new ModalBuilder().setCustomId(`tktedit_modal:delete:${panelId}`).setTitle('Excluir painel');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('confirm').setLabel('Digite EXCLUIR').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+      }
+
+      // ───── TKTTYPE ─────
+      if (ns === 'tkttype') {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = rest[0];
+        const p = await getTicketPanel(guild.id, panelId);
+        if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'add') {
+          if (p.tipos.length >= MAX_TICKET_TYPES_PER_PANEL) return i.reply({ content: `❌ Limite.`, flags: EPHEMERAL });
+          const m = new ModalBuilder().setCustomId(`tkttype_modal:add:${panelId}`).setTitle('Add tipo');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Nome').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎫').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID canal (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'edit') {
+          const menu = new StringSelectMenuBuilder().setCustomId(`tkttype:editpick:${panelId}`).setPlaceholder('Tipo');
+          for (const t of p.tipos) menu.addOptions({ label: `${t.emoji || '🎫'} ${t.label}`.slice(0, 90), value: String(t.id) });
+          return i.update({ embeds: [new EmbedBuilder().setTitle('✏️ Editar tipo')], components: [new ActionRowBuilder().addComponents(menu)] });
+        }
+        if (action === 'del') {
+          const menu = new StringSelectMenuBuilder().setCustomId(`tkttype:delpick:${panelId}`).setPlaceholder('Tipo');
+          for (const t of p.tipos) menu.addOptions({ label: `${t.emoji || '🎫'} ${t.label}`.slice(0, 90), value: String(t.id) });
+          return i.update({ embeds: [new EmbedBuilder().setTitle('🗑️ Remover tipo')], components: [new ActionRowBuilder().addComponents(menu)] });
+        }
+      }
+
+      // ───── TKTCFG ─────
+      if (ns === 'tktcfg') {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = rest[0];
+        if (action === 'sair') {
+          const p = await getTicketPanel(guild.id, panelId);
+          if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await updateTicketPanel(guild.id, panelId, { fechar_ao_sair: !p.fechar_ao_sair });
+          return i.update(await ticketConfigPanel(guild.id, panelId));
+        }
+        if (action === 'limite' || action === 'autoclose' || action === 'horario' || action === 'categoria') {
+          const m = new ModalBuilder().setCustomId(`tktcfg_modal:${action}:${panelId}`).setTitle(action);
+          const p = await getTicketPanel(guild.id, panelId);
+          if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (action === 'limite') m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('v').setLabel('Limite por user').setStyle(TextInputStyle.Short).setValue(String(p.limite_tickets_usuario || 1)).setRequired(true)
+          ));
+          if (action === 'autoclose') m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('v').setLabel('Horas (0=off)').setStyle(TextInputStyle.Short).setValue(String(p.auto_close_horas || 48)).setRequired(true)
+          ));
+          if (action === 'horario') m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('v').setLabel('Ex: 9h-18h').setStyle(TextInputStyle.Short).setValue(p.horario_atendimento || '').setRequired(false)
+          ));
+          if (action === 'categoria') m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('v').setLabel('ID da categoria').setStyle(TextInputStyle.Short).setValue(p.categoria_padrao_id || '').setRequired(false)
+          ));
+          return i.showModal(m);
+        }
+      }
+
+      // ───── TKTFORM ─────
+      if (ns === 'tktform') {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = rest[0];
+        const p = await getTicketPanel(guild.id, panelId);
+        if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'toggle') {
+          p.formulario.habilitado = !p.formulario.habilitado;
+          await updateTicketPanel(guild.id, panelId, { formulario: p.formulario });
+          return i.update(await ticketFormPanel(guild.id, panelId));
+        }
+        if (action === 'add') {
+          if (p.formulario.perguntas.length >= MAX_FORM_QUESTIONS) return i.reply({ content: '❌ Limite.', flags: EPHEMERAL });
+          const m = new ModalBuilder().setCustomId(`tktform_modal:add:${panelId}`).setTitle('Add pergunta');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Pergunta').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(45)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('placeholder').setLabel('Placeholder').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('obrigatorio').setLabel('Obrigatório? (sim/nao)').setStyle(TextInputStyle.Short).setValue('sim').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'clear') {
+          p.formulario.perguntas = [];
+          await updateTicketPanel(guild.id, panelId, { formulario: p.formulario });
+          return i.update(await ticketFormPanel(guild.id, panelId));
+        }
+      }
+
+      // ───── TKTBLK ─────
+      if (ns === 'tktblk') {
+        if (!await isAdmin(i.user, guild)) return;
+        const panelId = rest[0];
+        if (action === 'add') {
+          const m = new ModalBuilder().setCustomId(`tktblk_modal:add:${panelId}`).setTitle('Bloquear');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'remove') {
+          const menu = new StringSelectMenuBuilder().setCustomId(`tktblk:removepick:${panelId}`).setPlaceholder('Desbloquear');
+          const p = await getTicketPanel(guild.id, panelId);
+          for (const uid of p?.bloqueio_usuarios_ids || []) menu.addOptions({ label: `User ${uid}`, value: uid });
+          return i.update({ embeds: [new EmbedBuilder().setTitle('✅')], components: [new ActionRowBuilder().addComponents(menu)] });
+        }
+      }
+
+      // ───── BUG (dev) ─────
+      if (ns === 'bug') {
+        if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const bid = rest[0];
+        if (action === 'resolve') {
+          const { data: b } = await supabase.from('error_logs').select('*').eq('id', bid).maybeSingle();
+          await supabase.from('error_logs').update({ status: 'resolved', resolved_by: i.user.id, resolved_at: new Date().toISOString() }).eq('id', bid);
+          if (b?.user_id) try { const u = await client.users.fetch(b.user_id); await u.send(`✅ Bug \`#${bid}\` resolvido.`); } catch {}
+          return i.update({
+            embeds: [EmbedBuilder.from(i.message.embeds[0]).setColor('#22c55e').setFooter({ text: `✅ ${i.user.tag}` })],
+            components: [],
+          });
+        }
+        if (action === 'ignore') {
+          await supabase.from('error_logs').update({ status: 'ignored', resolved_by: i.user.id, resolved_at: new Date().toISOString() }).eq('id', bid);
+          return i.update({
+            embeds: [EmbedBuilder.from(i.message.embeds[0]).setColor('#808080').setFooter({ text: `🚫 ${i.user.tag}` })],
+            components: [],
+          });
+        }
+      }
+
+      // ───── DEV BUTTONS ─────
+      if (cid.startsWith('dev_')) {
+        if (!isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
+
+        if (cid === 'dev_back') return i.update(devHub());
+        if (cid === 'dev_dashboard') return i.update(await devPanelDashboard());
+        if (cid === 'dev_bot') return i.update(await devPanelBot());
+        if (cid === 'dev_premium') return i.update(await devPanelPremium(guild));
+        if (cid === 'dev_verificados') return i.update(await devPanelVerificados());
+        if (cid === 'dev_manutencao') return i.update(await devPanelManutencao());
+        if (cid === 'dev_kill_switch') return i.update(await devPanelKillSwitch());
+        if (cid === 'dev_debug') return i.update(await devPanelDebug());
+        if (cid === 'dev_alerts') return i.update(await devPanelAlerts());
+        if (cid === 'dev_audit') return i.update(await devPanelAudit());
+        if (cid === 'dev_inject') return i.update(await devPanelInject());
+        if (cid === 'dev_staff_global') return i.update(await devPanelStaffGlobal(0));
+        if (cid === 'dev_ranking') return i.update(await devPanelRanking());
+        if (cid === 'dev_dead_servers') return i.update(await devPanelDeadServers(0));
+        if (cid === 'dev_global_events') return i.update(await devPanelGlobalEvents());
+        if (cid === 'dev_monitor') return i.update(await devPanelMonitor());
+        if (cid === 'dev_preview') return i.update(await devPanelPreview());
+        if (cid === 'dev_simulator') return i.update(await devPanelSimulator());
+        if (cid === 'dev_sandbox') return i.update(await devPanelSandbox());
+        if (cid === 'dev_sandbox_snippets') return i.update(buildSandboxSnippets());
+        if (cid === 'dev_ratelimit') return i.update(await devPanelRateLimit());
+        if (cid === 'dev_broadcast') return i.update(await devPanelBroadcast());
+        if (cid === 'dev_force_rejoin') return i.update(await devPanelForceRejoin());
+        if (cid === 'dev_locale') return i.reply({ ...(await devPanelLocale(guild)), flags: EPHEMERAL });
+        if (cid === 'dev_ff_panel') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
+        if (cid === 'dev_ff_postar') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
+        if (cid === 'dev_ff_streamer') return i.reply({ ...(await ffPanelStreamer(guild.id)), flags: EPHEMERAL });
+        if (cid === 'dev_ff_manutencao') return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
+        if (cid === 'dev_ff_pix') return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
+
+        if (cid === 'dev_bl_add') {
+          const m = new ModalBuilder().setCustomId('modal_bl_add').setTitle('Blacklist');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_bl_del') {
+          const m = new ModalBuilder().setCustomId('modal_bl_del').setTitle('Remover BL');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('uid').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_bl_list') {
+          const { data } = await supabase.from('blacklist_users').select('*').limit(30);
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🚫 Blacklist Global').setColor('#FF5555')
+              .setDescription(data?.length ? data.map(b => `<@${b.user_id}>`).join('\n') : '*Vazia*')],
+            flags: EPHEMERAL,
+          });
+        }
+
+        if (cid === 'dev_maint_notify') {
+          await i.deferReply({ flags: EPHEMERAL });
+          const r = await enviarAvisoGlobal('🔧 Manutenção', 'O bot entrará em manutenção em breve.');
+          return i.editReply({ content: `📢 ${r.canaisOk} canais, ${r.dmsOk} DMs` });
+        }
+        if (cid === 'dev_maint_toggle') {
+          const at = await isMaintenanceMode();
+          await setMaintenanceMode(!at, i.user.id, null);
+          return i.update(await devPanelManutencao());
+        }
+        if (cid === 'dev_maint_reason') {
+          const m = new ModalBuilder().setCustomId('dev_maint_reason_modal').setTitle('Motivo');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('r').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
+          ));
+          return i.showModal(m);
+        }
+
+        if (['dev_criar_loja', 'dev_criar_comunidade', 'dev_criar_organizacao', 'dev_criar_apostas'].includes(cid)) {
+          const map = { dev_criar_loja: 'loja', dev_criar_comunidade: 'comunidade', dev_criar_organizacao: 'organizacao', dev_criar_apostas: 'apostas' };
+          const tt = map[cid];
+          await i.reply({ content: `🏗️ Criando **${tt}**...`, flags: EPHEMERAL });
+          antiraidDisabledGuilds.add(guild.id);
+          raidTracker.clear();
+          let lm = 'Preparando...', pd = false;
+          const op = async (msg) => {
+            lm = msg;
+            if (pd) return;
+            pd = true;
+            setTimeout(async () => {
+              pd = false;
+              try { await i.editReply({ content: `🏗️ **${tt}**...\n> ${lm}` }); } catch {}
+            }, 2000);
+          };
+          try {
+            const r = await setupServer(guild, tt, op, i.user.id);
+            const errs = r?.errors || [];
+            if (errs.length) await i.editReply({ content: `⚠️ **${tt}** com ${errs.length} aviso(s).` });
+            else await i.editReply({ content: `✅ **${tt}** configurado!` });
+          } catch (e) {
+            console.error(e);
+            await logError('setupServer', e, i.user.id, guild.id);
+            await i.editReply({ content: `❌ ${e.message}` }).catch(() => {});
+          } finally {
+            setTimeout(() => { antiraidDisabledGuilds.delete(guild.id); raidTracker.clear(); }, 8000);
+          }
+          return;
+        }
+
+        if (cid === 'dev_entrar_invite') {
+          const m = new ModalBuilder().setCustomId('modal_entrar_invite').setTitle('Entrar');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('invite').setLabel('Link').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_backup') {
+          const data = { name: guild.name, roles: guild.roles.cache.map(r => ({ name: r.name })), channels: guild.channels.cache.map(c => ({ name: c.name, type: c.type })) };
+          try { await supabase.from('guild_backups').insert({ guild_id: guild.id, data }); } catch {}
+          return i.reply({ content: '💾', flags: EPHEMERAL });
+        }
+        if (cid === 'dev_renomear') {
+          const m = new ModalBuilder().setCustomId('modal_renomear').setTitle('Renomear');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_explosao') {
+          const m = new ModalBuilder().setCustomId('modal_explosao').setTitle('💥');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('guildid').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_sair') {
+          await i.reply({ content: '🚪', flags: EPHEMERAL });
+          setTimeout(() => guild.leave().catch(() => {}), 2000);
+          return;
+        }
+        if (cid === 'dev_servidores') {
+          const l = [];
+          for (const g of client.guilds.cache.values()) l.push(`**${g.name}** (${g.id})`);
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('🌐').setDescription(l.join('\n').substring(0, 4000))], flags: EPHEMERAL });
+        }
+        if (cid === 'dev_rejoin') return i.update(await devPanelForceRejoin());
+        if (cid === 'dev_rejoin_all') { await checkAutoRejoin(); return i.reply({ content: '🚀', flags: EPHEMERAL }); }
+        if (cid === 'dev_rejoin_manual') {
+          const m = new ModalBuilder().setCustomId('modal_rejoin_manual').setTitle('Rejoin');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('invite').setLabel('Link').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_listar_verif') {
+          const { data, count } = await supabase.from('verifications').select('*', { count: 'exact' });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('📋 Verificados').setDescription(`Total: **${count || 0}**`)], flags: EPHEMERAL });
+        }
+        if (cid === 'dev_levar') {
+          const m = new ModalBuilder().setCustomId('modal_levar').setTitle('Levar');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('servidor_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_prem_on' || cid === 'dev_prem_off') {
+          const c = await getConfig(guild.id);
+          c.is_premium = cid === 'dev_prem_on';
+          if (!c.is_premium) c.premium_expires_at = null;
+          await setConfig(guild.id, c);
+          return i.update(await devPanelPremium(guild));
+        }
+        if (cid === 'dev_prem_temp') {
+          const m = new ModalBuilder().setCustomId('modal_prem_temp').setTitle('Prem temp');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('dias').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('30').setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_forcepremium_guild') {
+          const m = new ModalBuilder().setCustomId('modal_forcepremium_guild').setTitle('FP Guild');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_forcepremium_user') {
+          const m = new ModalBuilder().setCustomId('modal_forcepremium_user').setTitle('FP User');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('Guild (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_forcepremium_list') {
+          const { data } = await supabase.from('force_premium').select('*').order('granted_at', { ascending: false }).limit(30);
+          if (!data?.length) return i.reply({ content: '📋', flags: EPHEMERAL });
+          const lines = data.map(f => `**${f.scope === 'guild' ? '🌐' : '👤'}** \`${f.target_id}\` — ${f.permanent ? '♾️' : (f.expires_at ? `<t:${Math.floor(new Date(f.expires_at).getTime() / 1000)}:R>` : '?')}`);
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('🎯 FP').setDescription(lines.join('\n\n').substring(0, 4000))], flags: EPHEMERAL });
+        }
+        if (cid === 'dev_forcepremium_clear') {
+          const { count } = await supabase.from('force_premium').select('*', { count: 'exact', head: true });
+          if (!count) return i.reply({ content: '📋', flags: EPHEMERAL });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('⚠️').setDescription(`Apagar **${count}**?`)],
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId('dev_forcepremium_clear_confirm').setLabel('Sim').setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId('dev_back').setLabel('Não').setStyle(ButtonStyle.Secondary),
+            )],
+            flags: EPHEMERAL,
+          });
+        }
+        if (cid === 'dev_forcepremium_clear_confirm') {
+          await supabase.from('force_premium').delete().neq('id', 0);
+          return i.update({ content: '✅', embeds: [], components: [] });
+        }
+
+        if (cid === 'dev_inject_coins') {
+          const m = new ModalBuilder().setCustomId('modal_inject_coins').setTitle('Coins');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Qtd').setStyle(TextInputStyle.Short).setValue('100').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_inject_product') {
+          const m = new ModalBuilder().setCustomId('modal_inject_product').setTitle('Produto');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('product_id').setLabel('ID prod').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_inject_role') {
+          const m = new ModalBuilder().setCustomId('modal_inject_role').setTitle('Cargo');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_inject_premium') {
+          const m = new ModalBuilder().setCustomId('modal_inject_premium').setTitle('Premium');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('days').setLabel('Dias').setStyle(TextInputStyle.Short).setValue('30').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+
+        if (cid === 'dev_inspector') {
+          const m = new ModalBuilder().setCustomId('modal_inspector').setTitle('Inspetor');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('guild_id').setLabel('ID server').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid.startsWith('dev_inspector_show:')) return i.update(await devPanelInspector(cid.split(':')[1]));
+        if (cid.startsWith('dev_inspector_backup:')) {
+          const gid = cid.split(':')[1];
+          const g = client.guilds.cache.get(gid);
+          if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const data = { name: g.name, roles: g.roles.cache.map(r => ({ name: r.name })), channels: g.channels.cache.map(c => ({ name: c.name, type: c.type })) };
+          try { await supabase.from('guild_backups').insert({ guild_id: gid, data }); } catch {}
+          await logDevAction(i.user.id, 'inspector_backup', gid, {});
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (cid.startsWith('dev_inspector_notes:')) return i.update(await devPanelNotes(cid.split(':')[1]));
+        if (cid.startsWith('dev_inspector_leave:')) {
+          const gid = cid.split(':')[1];
+          const g = client.guilds.cache.get(gid);
+          if (!g) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await logDevAction(i.user.id, 'inspector_leave', gid, {});
+          await i.reply({ content: '🚪', flags: EPHEMERAL });
+          setTimeout(() => g.leave().catch(() => {}), 2000);
+          return;
+        }
+
+        if (cid.startsWith('dev_staff_page:')) return i.update(await devPanelStaffGlobal(parseInt(cid.split(':')[1]) || 0));
+        if (cid.startsWith('dev_staff_bl_add:')) {
+          const uid = cid.split(':')[1];
+          const { data: ex } = await supabase.from('staff_blacklist').select('*').eq('user_id', uid).maybeSingle();
+          if (ex) {
+            await supabase.from('staff_blacklist').delete().eq('user_id', uid);
+            staffBlacklistCache.delete(uid);
+            return i.reply({ content: '✅', flags: EPHEMERAL });
+          }
+          const m = new ModalBuilder().setCustomId(`modal_staff_bl_add:${uid}`).setTitle('Banir staff');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_staff_blacklist') {
+          const { data } = await supabase.from('staff_blacklist').select('*').order('added_at', { ascending: false }).limit(20);
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🚫 Staff BL').setColor('#FF5555')
+              .setDescription(data?.length ? data.map(b => `<@${b.user_id}>\n> ${b.reason || '—'}`).join('\n\n') : '*Vazia*')],
+            flags: EPHEMERAL,
+          });
+        }
+
+        if (cid === 'dev_ranking_refresh') return i.update(await devPanelRanking());
+        if (cid.startsWith('dev_dead_page:')) return i.update(await devPanelDeadServers(parseInt(cid.split(':')[1]) || 0));
+        if (cid === 'dev_dead_cleanup') {
+          const dead = await getDeadServers();
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('⚠️ Confirmar').setDescription(`Sair de **${dead.length}**?`)],
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId('dev_dead_cleanup_confirm').setLabel(`Sim (${dead.length})`).setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId('dev_dead_servers').setLabel('Não').setStyle(ButtonStyle.Secondary),
+            )],
+            flags: EPHEMERAL,
+          });
+        }
+        if (cid === 'dev_dead_cleanup_confirm') {
+          await i.reply({ content: '🧹', flags: EPHEMERAL });
+          const dead = await getDeadServers();
+          let ok = 0;
+          for (const s of dead) {
+            const g = client.guilds.cache.get(s.guild_id);
+            if (g) { await g.leave().catch(() => {}); ok++; await sleep(500); }
+          }
+          await logDevAction(i.user.id, 'dead_cleanup', null, { count: ok });
+          return i.editReply({ content: `✅ Saí de **${ok}**.` });
+        }
+
+        if (cid === 'dev_event_coins_double') {
+          const m = new ModalBuilder().setCustomId('modal_event_coins_double').setTitle('Dobro Coins');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Dobro de Coins').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_event_no_fee') {
+          const m = new ModalBuilder().setCustomId('modal_event_no_fee').setTitle('Sem Taxa');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Sem Taxa!').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_event_bonus') {
+          const m = new ModalBuilder().setCustomId('modal_event_bonus').setTitle('Bônus');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Bônus').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('multiplier').setLabel('Multiplier').setStyle(TextInputStyle.Short).setValue('2').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_event_sorteio') {
+          const m = new ModalBuilder().setCustomId('modal_event_sorteio').setTitle('Sorteio');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('prize').setLabel('Prêmio em coins').setStyle(TextInputStyle.Short).setValue('500').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('winners').setLabel('Ganhadores').setStyle(TextInputStyle.Short).setValue('5').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_event_stop_all') {
+          await supabase.from('dev_global_events').update({ active: false }).eq('active', true);
+          await logDevAction(i.user.id, 'stop_all_events', null, {});
+          return i.reply({ content: '🛑', flags: EPHEMERAL });
+        }
+        if (cid === 'dev_event_notify') {
+          const events = await getActiveGlobalEvents();
+          if (!events.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const r = await enviarAvisoGlobal('🎉 Eventos Ativos!', events.map(ev => `**${ev.title}** — ${ev.multiplier}×`).join('\n'));
+          return i.reply({ content: `📢 ${r.canaisOk} canais`, flags: EPHEMERAL });
+        }
+
+        if (cid.startsWith('dev_note_add:')) {
+          const gid = cid.split(':')[1];
+          const m = new ModalBuilder().setCustomId(`modal_note_add:${gid}`).setTitle('Nota');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('note').setLabel('Nota').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(500)
+          ));
+          return i.showModal(m);
+        }
+        if (cid.startsWith('dev_note_clear:')) {
+          const gid = cid.split(':')[1];
+          await supabase.from('guild_notes').delete().eq('guild_id', gid);
+          return i.update(await devPanelNotes(gid));
+        }
+
+        if (cid === 'dev_monitor_refresh') return i.update(await devPanelMonitor());
+        if (cid === 'dev_monitor_reconnect') {
+          await logDevAction(i.user.id, 'ws_reconnect', null, {});
+          await i.reply({ content: '⚡', flags: EPHEMERAL });
+          setTimeout(() => { try { client.ws.destroy(); } catch {} }, 1500);
+          return;
+        }
+
+        if (cid === 'dev_kill_toggle') {
+          const active = await isKillSwitchActive();
+          const { data } = await supabase.from('kill_switch').select('*').eq('id', 1).maybeSingle();
+          await setKillSwitch(!active, data?.reason || null, i.user.id);
+          return i.update(await devPanelKillSwitch());
+        }
+        if (cid === 'dev_kill_reason') {
+          const m = new ModalBuilder().setCustomId('modal_kill_reason').setTitle('Motivo');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
+          ));
+          return i.showModal(m);
+        }
+
+        if (cid === 'dev_preview_create') {
+          const m = new ModalBuilder().setCustomId('modal_preview_create').setTitle('Preview');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumb').setLabel('Thumb').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+
+        if (cid === 'dev_simulate_run') {
+          if (!await isPremium(guild.id)) return requirePremium(i, 'simulador');
+          await i.deferReply({ flags: EPHEMERAL });
+          try {
+            const r = await simulateFlow(guild.id);
+            const lines = r.etapas.map(e => `${e.ok ? '✅' : '❌'} **${e.name}** — \`${e.ms}ms\`${e.erro ? `\n> ⚠️ ${e.erro}` : ''}`).join('\n');
+            const e = new EmbedBuilder().setTitle('🎬').setColor(r.errCount === 0 ? '#22c55e' : r.errCount < 3 ? '#FFA500' : '#FF5555')
+              .setDescription(lines.substring(0, 4000))
+              .addFields(
+                { name: '✅', value: `${r.okCount}`, inline: true },
+                { name: '❌', value: `${r.errCount}`, inline: true },
+                { name: '⏱️', value: `${r.totalMs}ms`, inline: true },
+              );
+            return i.editReply({ embeds: [e] });
+          } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
+        }
+
+        if (cid === 'dev_autoheal') {
+          await i.deferReply({ flags: EPHEMERAL });
+          const r = await runAutoHeal();
+          return i.editReply({ content: `🔄\n> 🧵 ${r.canceledThreads}\n> ⚠️ ${r.alertedMatches}\n> 💳 ${r.canceledPix}` });
+        }
+
+        if (cid === 'dev_sandbox_run') {
+          const m = new ModalBuilder().setCustomId('modal_sandbox').setTitle('Sandbox');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('code').setLabel('JS').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(3000)
+          ));
+          return i.showModal(m);
+        }
+
+        if (cid === 'dev_ratelimit_reset') {
+          rateLimitTracker.total = 0;
+          rateLimitTracker.limited = 0;
+          rateLimitTracker.buckets = {};
+          rateLimitTracker.lastReset = Date.now();
+          return i.update(await devPanelRateLimit());
+        }
+
+        if (cid === 'dev_clear_cache') {
+          spamCache.clear();
+          dupeCache.clear();
+          raidTracker.clear();
+          abuseCache.clear();
+          LOG_THROTTLE.clear();
+          return i.reply({ content: '🧹', flags: EPHEMERAL });
+        }
+        if (cid === 'dev_check_db') {
+          const tl = ['configs', 'guilds', 'settings', 'products', 'orders', 'ff_config', 'ff_bets', 'ff_matches', 'ff_mediator_queue', 'ff_analyst_queue', 'ff_streamer_queue', 'user_guilds'];
+          const r = [];
+          for (const x of tl) {
+            const { error } = await supabase.from(x).select('*', { count: 'exact', head: true });
+            r.push(`${error ? '❌' : '✅'} \`${x}\``);
+          }
+          return i.reply({ content: r.join('\n'), flags: EPHEMERAL });
+        }
+
+        if (cid === 'dev_eval') {
+          const m = new ModalBuilder().setCustomId('modal_eval').setTitle('Eval');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('code').setLabel('Code').setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (cid === 'dev_dump') {
+          const dump = { guild: { id: guild.id, name: guild.name, members: guild.memberCount }, client: { ping: client.ws.ping, guilds: client.guilds.cache.size } };
+          return i.reply({ files: [new AttachmentBuilder(Buffer.from(JSON.stringify(dump, null, 2)), { name: 'dump.json' })], flags: EPHEMERAL });
+        }
+        if (cid === 'dev_bugs') {
+          const { data } = await supabase.from('error_logs').select('*').eq('status', 'pending').eq('context', 'bug_report').order('id', { ascending: false }).limit(15);
+          if (!data?.length) return i.reply({ content: '✅', flags: EPHEMERAL });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('🐛').setDescription(data.map(b => `**#${b.id}** — <@${b.user_id}>\n> ${(b.message || '').substring(0, 100)}`).join('\n\n').substring(0, 4000))], flags: EPHEMERAL });
+        }
+        if (cid === 'dev_cleanup_dms') {
+          const m = new ModalBuilder().setCustomId('modal_cleanup_dms').setTitle('Limpar DMs');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limit').setLabel('1-500').setStyle(TextInputStyle.Short).setValue('100').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_cleanup_channel') {
+          const m = new ModalBuilder().setCustomId('modal_cleanup_channel').setTitle('Limpar canal');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limit').setLabel('1-1000').setStyle(TextInputStyle.Short).setValue('1000').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+
+        if (cid === 'dev_locale_pt') { await setGuildLocale(guild.id, 'pt-BR'); return i.reply({ content: '✅ 🇧🇷', flags: EPHEMERAL }); }
+        if (cid === 'dev_locale_en') { await setGuildLocale(guild.id, 'en-US'); return i.reply({ content: '✅ 🇺🇸', flags: EPHEMERAL }); }
+        if (cid === 'dev_locale_es') { await setGuildLocale(guild.id, 'es-ES'); return i.reply({ content: '✅ 🇪🇸', flags: EPHEMERAL }); }
+
+        if (cid === 'dev_reload') {
+          await i.reply({ content: '🔄', flags: EPHEMERAL });
+          await registerCommands();
+          return i.editReply({ content: '✅' });
+        }
+        if (cid === 'dev_ping_detailed') {
+          await i.deferReply({ flags: EPHEMERAL });
+          try {
+            const embeds = await buildPingDetailed();
+            return i.editReply({ embeds });
+          } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
+        }
+
+        if (cid === 'dev_alerts_refresh') return i.update(await devPanelAlerts());
+        if (cid === 'dev_alerts_read_all') {
+          await supabase.from('dev_alerts').update({ read: true }).eq('read', false);
+          return i.update(await devPanelAlerts());
+        }
+        if (cid === 'dev_alerts_config') {
+          const tipos = ['offline', 'crash', 'big_guild', 'bug_flood', 'mp_fail', 'rate_limit', 'suspicious'];
+          const { data: config } = await supabase.from('dev_alert_config').select('*');
+          const cfgMap = {};
+          for (const c of config || []) cfgMap[c.type] = c.enabled;
+          const rows = [];
+          let row = new ActionRowBuilder();
+          for (let idx = 0; idx < tipos.length; idx++) {
+            const tt = tipos[idx];
+            const enabled = cfgMap[tt] !== false;
+            row.addComponents(new ButtonBuilder().setCustomId(`dev_alert_toggle:${tt}`).setLabel(tt).setEmoji(enabled ? '🟢' : '🔴').setStyle(enabled ? ButtonStyle.Success : ButtonStyle.Danger));
+            if (row.components.length === 5 || idx === tipos.length - 1) { rows.push(row); row = new ActionRowBuilder(); }
+          }
+          rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_alerts').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary)));
+          return i.update({ embeds: [new EmbedBuilder().setTitle('⚙️ Alertas').setColor('#5865F2')], components: rows });
+        }
+        if (cid.startsWith('dev_alert_toggle:')) {
+          const tt = cid.split(':')[1];
+          const { data } = await supabase.from('dev_alert_config').select('*').eq('type', tt).maybeSingle();
+          const nv = data ? !data.enabled : false;
+          if (data) await supabase.from('dev_alert_config').update({ enabled: nv, updated_at: new Date().toISOString() }).eq('type', tt);
+          else await supabase.from('dev_alert_config').insert({ type: tt, enabled: nv });
+          return i.reply({ content: `✅ ${tt}: ${nv ? '🟢' : '🔴'}`, flags: EPHEMERAL });
+        }
+        if (cid === 'dev_alerts_test') {
+          await sendDevAlert('test', 'Teste', 'Alerta teste.', 'info', { test: true, by: i.user.id });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+
+        if (cid === 'dev_audit_refresh') return i.update(await devPanelAudit());
+        if (cid === 'dev_audit_clear') {
+          await supabase.from('dev_audit').delete().lt('created_at', new Date(Date.now() - 7 * 86400 * 1000).toISOString());
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+
+        if (cid === 'dev_broadcast_compose') {
+          const m = new ModalBuilder().setCustomId('modal_broadcast_compose').setTitle('📢 Criar atualização');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setMaxLength(120).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mudancas').setLabel('O que atualizou').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('imagem').setLabel('Imagem (URL, opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor hex').setStyle(TextInputStyle.Short).setValue('#5865F2').setMaxLength(7).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_broadcast_test') {
+          const m = new ModalBuilder().setCustomId('modal_broadcast_test').setTitle('🧪 Teste');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue('🧪 Teste').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue('Este é um teste.').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mudancas').setLabel('O que atualizou').setStyle(TextInputStyle.Paragraph).setValue('• Item de teste 1\n• Item de teste 2').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('imagem').setLabel('Imagem (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (cid === 'dev_broadcast_history') {
+          const { data } = await supabase.from('manual_broadcasts').select('*').order('created_at', { ascending: false }).limit(15);
+          const e = new EmbedBuilder().setTitle('📋 Histórico').setColor('#00AAFF')
+            .setDescription((data || []).length
+              ? data.map((b, idx) => `**${idx + 1}.** \`#${b.id}\` — **${(b.titulo || '').substring(0, 60)}**\n> 👤 <@${b.enviado_por}>\n> ✅ ${b.enviados || 0} • ❌ ${b.erros || 0}\n> <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:R>`).join('\n\n')
+              : '*Nenhum.*');
+          return i.update({ embeds: [e], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_broadcast').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary))] });
+        }
+      }
+
+      // ───── BROADCAST CONFIRM ─────
+      if (cid.startsWith('broadcast_confirm:') && isDev) {
+        const parts = cid.split(':');
+        const tempId = parts[1], target = parts[2];
+        const draft = BROADCAST_DRAFTS.get(tempId);
+        if (!draft) return i.update({ content: '❌ Expirado.', embeds: [], components: [] });
+        await i.update({ content: '📢 Enviando...', embeds: [], components: [] });
+        const r = await sendBroadcastNow(draft, target, i.user.id);
+        BROADCAST_DRAFTS.delete(tempId);
+        return i.editReply({ content: `✅\n> ✅ ${r.sucesso}\n> ❌ ${r.falhas}\n> 🌐 ${r.total}` });
+      }
+      if (cid === 'broadcast_cancel') return i.update({ content: '❌', embeds: [], components: [] });
+
+      // ───── FFCFG ─────
+      if (ns === 'ffcfg') {
+        const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
+        if (!isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'back') return i.update(await ffConfigPanel(guild.id));
+        if (action === 'panel') {
+          const tt = rest[0];
+          if (tt === 'canais') return i.update(await ffPanelCanais(guild.id));
+          if (tt === 'cargos') return i.update(await ffPanelCargos(guild.id));
+          if (tt === 'pix') return i.update(await ffPanelPix(guild.id));
+          if (tt === 'apostas') return i.update(await ffPanelApostas(guild.id));
+          if (tt === 'valores') return i.update(await ffPanelValores(guild.id));
+          if (tt === 'mediadores') return i.update(await ffPanelMediadores(guild.id));
+          if (tt === 'automacoes') return i.update(await ffPanelAutomacoes(guild.id));
+          if (tt === 'loja_coins') return i.update(await ffPanelLojaCoins(guild.id));
+          if (tt === 'streamer') return i.update(await ffPanelStreamer(guild.id));
+        }
+        if (action === 'custom_embed') return i.update(await ffPanelCustomEmbed(guild.id));
+        if (action === 'postar_por_canal') {
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:porcanal_pick_canal').setPlaceholder('📁');
+          const textChannels = [...guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).values()].slice(0, 25);
+          for (const ch of textChannels) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('📁').setColor('#f1c40f')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'toggle') {
+          const f = rest[0];
+          const cfg = await ffGetConfig(guild.id);
+          const nv = !cfg?.[f];
+          await ffPatchConfig(guild.id, { [f]: nv });
+          await logConfig(guild, i.user.id, 'TOGGLE_' + f, { value: nv });
+          if (['auto_post_ranking', 'auto_post_blacklist', 'auto_post_regras'].includes(f)) return i.update(await ffPanelAutomacoes(guild.id));
+          if (f === 'taxa_extra_ativo' || f === 'auto_thread' || f === 'require_mediator_confirm') return i.update(await ffPanelApostas(guild.id));
+        }
+        if (action === 'set') {
+          const f = rest[0];
+          if (f === 'pix') {
+            const cfg = await ffGetConfig(guild.id);
+            const m = new ModalBuilder().setCustomId('ffcfg_modal:pix').setTitle('Pix');
+            m.addComponents(
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(cfg?.pix_key || '').setRequired(true)),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(cfg?.pix_name || '').setRequired(true)),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(cfg?.pix_city || '').setRequired(false)),
+            );
+            return i.showModal(m);
+          }
+          if (f === 'freq_ranking') {
+            const cfg = await ffGetConfig(guild.id);
+            const m = new ModalBuilder().setCustomId('ffcfg_modal:freq').setTitle('Frequência');
+            m.addComponents(new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('v').setLabel('daily/weekly/monthly').setStyle(TextInputStyle.Short).setValue(cfg?.auto_post_frequencia || 'weekly').setRequired(true)
+            ));
+            return i.showModal(m);
+          }
+          if (f.endsWith('_channel_id')) {
+            const m = new ModalBuilder().setCustomId(`ffcfg_modal:channel:${f}`).setTitle('Canal');
+            m.addComponents(new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('v').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)
+            ));
+            return i.showModal(m);
+          }
+          if (f.endsWith('_role_id')) {
+            const m = new ModalBuilder().setCustomId(`ffcfg_modal:role:${f}`).setTitle('Cargo');
+            m.addComponents(new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('v').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(true)
+            ));
+            return i.showModal(m);
+          }
+          if (['valor_minimo', 'valor_maximo', 'mediator_fee', 'coin_prize', 'taxa_extra'].includes(f)) {
+            const cfg = await ffGetConfig(guild.id);
+            const m = new ModalBuilder().setCustomId(`ffcfg_modal:number:${f}`).setTitle('Valor');
+            m.addComponents(new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('v').setLabel('Valor').setStyle(TextInputStyle.Short).setValue(String(cfg?.[f] ?? 0)).setRequired(true)
+            ));
+            return i.showModal(m);
+          }
+        }
+        if (action === 'add_valor') {
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:add_valor').setTitle('Valor');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('v').setLabel('Ex: 1.50').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'del_valor') {
+          const cfg = await ffGetConfig(guild.id);
+          const vals = Array.isArray(cfg?.value_options) ? cfg.value_options : [];
+          if (!vals.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:pick_del_valor').setPlaceholder('Remover');
+          for (const v of vals) menu.addOptions({ label: `R$ ${v}`, value: v });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('➖')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+        if (action === 'reset_valores') {
+          await ffPatchConfig(guild.id, { value_options: FF_DEFAULT_VALUES });
+          await logConfig(guild, i.user.id, 'VALUES_RESET', {});
+          return i.update(await ffPanelValores(guild.id));
+        }
+        if (action === 'postar') {
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_pick_format').setPlaceholder('📢 Modalidade');
+          for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('📢 Postar').setColor('#f1c40f')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'postar_auto') {
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_auto_pick_channel').setPlaceholder('📁');
+          const textChannels = [...guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).values()].slice(0, 25);
+          for (const ch of textChannels) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id });
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('⚡').setColor('#f1c40f')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'postar_pix') {
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_pix').setTitle('Postar Pix');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'postar_mediadores') {
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_med').setTitle('Postar');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'remove_all_meds') {
+          await supabase.from('ff_mediator_queue').delete().eq('guild_id', guild.id);
+          return i.reply({ content: '🗑️', flags: EPHEMERAL });
+        }
+        if (action === 'remove_all_admins') {
+          if (!isO && !isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const meds = await ffGetMediatorQueue(guild.id);
+          let n = 0;
+          for (const med of meds) {
+            const m = await guild.members.fetch(med.user_id).catch(() => null);
+            if (!m) continue;
+            if (m.permissions.has(PermissionFlagsBits.Administrator) || m.id === guild.ownerId) {
+              await supabase.from('ff_mediator_queue').delete().eq('id', med.id);
+              n++;
+            }
+          }
+          return i.reply({ content: `🚫 ${n}`, flags: EPHEMERAL });
+        }
+        if (action === 'med_receitas') {
+          const meds = await ffGetMediatorQueue(guild.id);
+          meds.sort((a, b) => Number(b.earnings_total || 0) - Number(a.earnings_total || 0));
+          const e = new EmbedBuilder().setTitle('💰').setColor('#FFD700');
+          for (const m of meds) e.addFields({ name: `<@${m.user_id}>`, value: `R$ ${Number(m.earnings_total || 0).toFixed(2)} • ${m.matches_total || 0}`, inline: true });
+          return i.reply({ embeds: [e], flags: EPHEMERAL });
+        }
+        if (action === 'manutencao') {
+          const cfg = await ffGetConfig(guild.id);
+          const at = !!cfg?.maintenance;
+          return i.update({
+            embeds: [new EmbedBuilder().setTitle('🔧').setColor(at ? '#ff5555' : '#22c55e')
+              .setDescription(at ? '⚠️ ATIVA' : '🟢 DESATIVADA')
+              .addFields({ name: 'Motivo', value: cfg?.maintenance_reason || '*—*' })],
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId('ffcfg:maint_toggle').setLabel(at ? 'Desativar' : 'Ativar').setEmoji(at ? '🟢' : '🔴').setStyle(at ? ButtonStyle.Success : ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId('ffcfg:maint_reason').setLabel('Motivo').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder().setCustomId('ffcfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+            )],
+          });
+        }
+        if (action === 'maint_toggle') {
+          const cfg = await ffGetConfig(guild.id);
+          const nv = !cfg?.maintenance;
+          await ffPatchConfig(guild.id, { maintenance: nv });
+          await logConfig(guild, i.user.id, nv ? 'MAINT_ON' : 'MAINT_OFF', {});
+          return i.reply({ content: nv ? '🔴' : '🟢', flags: EPHEMERAL });
+        }
+        if (action === 'maint_reason') {
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:maint_reason').setTitle('Motivo');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('r').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'coin_add') {
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:coin_add').setTitle('Add item');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('price').setLabel('Preço').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎁').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Desc').setStyle(TextInputStyle.Paragraph).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'coin_edit') {
+          const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id);
+          if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:coin_edit_pick').setPlaceholder('Editar');
+          for (const x of items.slice(0, 25)) menu.addOptions({ label: `${x.emoji || '🎁'} ${x.name} — ${x.price}`.slice(0, 90), value: String(x.id) });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('✏️')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+        if (action === 'coin_toggle') {
+          const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id);
+          if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:coin_toggle_pick').setPlaceholder('Toggle');
+          for (const x of items.slice(0, 25)) menu.addOptions({ label: `${x.emoji || '🎁'} ${x.name} ${x.active ? '✅' : '❌'}`.slice(0, 90), value: String(x.id) });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('🔁')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+        if (action === 'coin_del') {
+          const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id);
+          if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:coin_del_pick').setPlaceholder('Remover');
+          for (const x of items.slice(0, 25)) menu.addOptions({ label: `${x.emoji || '🎁'} ${x.name}`.slice(0, 90), value: String(x.id) });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('🗑️')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+        if (action === 'coin_defaults') {
+          let added = 0;
+          for (const d of FF_COIN_DEFAULTS) {
+            const r = guild.roles.cache.find(x => x.name === d.role_name);
+            if (!r) continue;
+            const { data: ex } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id).eq('name', d.name).maybeSingle();
+            if (ex) continue;
+            try {
+              await supabase.from('ff_coin_shop').insert({ guild_id: guild.id, name: d.name, emoji: d.emoji, price: d.price, type: 'role', role_id: r.id, description: `${d.price} coins` });
+              added++;
+            } catch {}
+          }
+          await logConfig(guild, i.user.id, 'COIN_DEFAULTS', { added });
+          return i.reply({ content: `✅ ${added}`, flags: EPHEMERAL });
+        }
+        if (action === 'coin_post') {
+          const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id).eq('active', true).order('price');
+          if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const e = new EmbedBuilder().setTitle('🪙').setColor('#FFD700').setDescription('Compre cargos!').setTimestamp();
+          for (const x of items) e.addFields({ name: `${x.emoji || '🎁'} ${x.name}`, value: `💰 **${x.price}**`, inline: true });
+          await channel.send({ embeds: [e], components: await buildCoinShopComponents(guild.id) });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (action === 'coin_hist') {
+          const { data } = await supabase.from('ff_coin_purchases').select('*').eq('guild_id', guild.id).order('id', { ascending: false }).limit(20);
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('📋').setDescription(data?.length ? data.map(p => `• <@${p.user_id}> — **${p.item_name}** (${p.price}🪙)`).join('\n') : 'Sem compras.')], flags: EPHEMERAL });
+        }
+        if (action === 'coin_manage_users') {
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:coin_manage').setTitle('Gerenciar Coins');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Qtd (- para retirar)').setStyle(TextInputStyle.Short).setValue('100').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setValue('Ajuste').setRequired(true)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'mp_config') {
+          const cfg = await ffGetConfig(guild.id);
+          const m = new ModalBuilder().setCustomId('ffcfg_modal:mp_token').setTitle('MP');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_token').setLabel('Access Token').setStyle(TextInputStyle.Short).setPlaceholder('APP_USR-...').setValue(cfg?.mp_access_token || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_public_key').setLabel('Public Key').setStyle(TextInputStyle.Short).setValue(cfg?.mp_public_key || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'mp_test') {
+          await i.deferReply({ flags: EPHEMERAL });
+          const cfg = await ffGetConfig(guild.id);
+          if (!cfg?.mp_access_token) return i.editReply({ content: '❌' });
+          const test = await criarPixMercadoPago(0.01, `T${Date.now()}`, 'Teste', cfg.mp_access_token);
+          if (test?.ok) return i.editReply({ content: `✅ \`${test.payment_id}\`` });
+          return i.editReply({ content: `❌ ${test?.error || 'erro'}` });
+        }
+        if (action === 'mp_remove') {
+          await setFFMPToken(guild.id, null, null);
+          return i.update(await ffPanelPix(guild.id));
+        }
+      }
+
+      // ───── FFPIX ─────
+      if (ns === 'ffpix') {
+        if (action === 'noop') return i.deferUpdate();
+        const cfg = await ffGetConfig(guild.id);
+        const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
+        const hasMed = cfg?.mediator_role_id && i.member.roles.cache.has(cfg.mediator_role_id);
+        const hasOlh = cfg?.olhinho_role_id && i.member.roles.cache.has(cfg.olhinho_role_id);
+        if (!isO && !isS && !hasMed && !hasOlh) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'configurar') {
+          const m = new ModalBuilder().setCustomId('ffpix_modal:set').setTitle(cfg?.pix_key ? 'Editar Pix' : 'Configurar Pix');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(cfg?.pix_key || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(cfg?.pix_name || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(cfg?.pix_city || '').setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'ver') {
+          if (!cfg?.pix_key) return i.reply({ content: '⚠️', flags: EPHEMERAL });
+          return i.reply({
+            content: `💳 **Pix:**\n\`\`\`\n${cfg.pix_key}\n\`\`\`\n> 👤 **${cfg.pix_name || '—'}**\n> 🏙️ **${cfg.pix_city || '—'}**`,
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'remover') {
+          await ffPatchConfig(guild.id, { pix_key: null, pix_name: null, pix_city: null });
+          await ffUpdatePixEmbed(guild).catch(() => {});
+          return i.reply({ content: '🗑️', flags: EPHEMERAL });
+        }
+      }
+
+      // ───── FFBET ─────
+      if (ns === 'ffbet') {
+        if (await blockIfMaintenance(i)) return;
+        const betId = rest[0];
+        try {
+          const bet = await ffGetBet(betId);
+          if (!bet || !bet.active) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (action === 'sair') {
+            const gi = parseJson(bet.gelo_infinito_players).filter(p => p.userId !== i.user.id);
+            const gn = parseJson(bet.gelo_normal_players).filter(p => p.userId !== i.user.id);
+            await ffPatchBet(betId, { gelo_infinito_players: JSON.stringify(gi), gelo_normal_players: JSON.stringify(gn) });
+            await ffUpdateBetMessage(guild, await ffGetBet(betId)).catch(() => {});
+            return i.reply({ content: '🚪', flags: EPHEMERAL });
+          }
+          if (action === 'gi' || action === 'gn') {
+            let gi = parseJson(bet.gelo_infinito_players), gn = parseJson(bet.gelo_normal_players);
+            if (gi.some(p => p.userId === i.user.id) || gn.some(p => p.userId === i.user.id)) return i.reply({ content: '⚠️ Já está.', flags: EPHEMERAL });
+            const target = action === 'gi' ? gi : gn;
+            if (target.length >= FF_PULL_SIZE) return i.reply({ content: '❌', flags: EPHEMERAL });
+            target.push({ userId: i.user.id, at: new Date().toISOString() });
+            await ffPatchBet(betId, { gelo_infinito_players: JSON.stringify(gi), gelo_normal_players: JSON.stringify(gn) });
+            await i.reply({ content: `✅ (${target.length}/2)`, flags: EPHEMERAL });
+            await ffUpdateBetMessage(guild, await ffGetBet(betId)).catch(() => {});
+            if (target.length >= FF_PULL_SIZE) {
+              const duo = [target[0].userId, target[1].userId];
+              if (action === 'gi') gi = []; else gn = [];
+              await ffPatchBet(betId, { gelo_infinito_players: JSON.stringify(gi), gelo_normal_players: JSON.stringify(gn) });
+              await ffUpdateBetMessage(guild, await ffGetBet(betId)).catch(() => {});
+              await ffCriarThreadAposta(guild, duo, bet).catch(e => console.error(e.message));
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          if (!i.replied && !i.deferred) await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }).catch(() => {});
+        }
+        return;
+      }
+
+      // ───── FFM ─────
+      if (ns === 'ffm') {
+        const matchId = rest[0], m = await ffGetMatch(matchId);
+        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const players = parseJson(m.players);
+        const isP = players.includes(i.user.id), isS = await isAdmin(i.user, guild);
+        const isMed = m.mediator_id ? i.user.id === m.mediator_id : false;
+
+        if (action === 'confirmar') {
+          if (!isP) return i.reply({ content: '❌', flags: EPHEMERAL });
+          let confs = parseJson(m.confirmations);
+          if (confs.includes(i.user.id)) return i.reply({ content: '⚠️', flags: EPHEMERAL });
+          confs.push(i.user.id);
+          await ffPatchMatch(matchId, { confirmations: JSON.stringify(confs) });
+          if (confs.length < players.length) {
+            const falta = players.filter(p => !confs.includes(p));
+            return i.reply({ content: `✅ Falta: ${falta.map(p => `<@${p}>`).join(', ')}`, flags: EPHEMERAL });
+          }
+          const cfg = await ffGetConfig(guild.id);
+          const payPP = ffCalcPlayerPay(m.value, cfg?.mediator_fee, cfg?.taxa_extra, cfg?.taxa_extra_ativo);
+          const hasPix = !!(cfg?.pix_key || cfg?.mp_access_token);
+          await i.channel.setName(ffThreadName('confirmed', m.value, players, matchId)).catch(() => {});
+          try {
+            const msgs = await i.channel.messages.fetch({ limit: 20 });
+            for (const msg of msgs.values()) if (msg.author.id === client.user.id && msg.components.length) await msg.delete().catch(() => {});
+          } catch {}
+          const e = new EmbedBuilder().setTitle('💰 Pagamento').setColor(hasPix ? '#22c55e' : '#ff5555')
+            .setDescription(hasPix ? 'Regras confirmadas!' : '⚠️ Sem PIX')
+            .addFields(
+              { name: '🎮', value: players.map(p => `<@${p}>`).join(' 🆚 ') },
+              { name: '💵', value: `R$ ${Number(m.value).toFixed(2)}`, inline: true },
+              { name: '💵 Taxa', value: `R$ ${Number(cfg?.mediator_fee || 0).toFixed(2)}`, inline: true },
+              { name: '💰 Total', value: `**R$ ${payPP.toFixed(2)}**`, inline: true },
+            ).setTimestamp();
+          const row = new ActionRowBuilder();
+          if (!hasPix) row.addComponents(new ButtonBuilder().setCustomId(`ffm:pix_config:${matchId}`).setLabel('Config PIX').setEmoji('✏️').setStyle(ButtonStyle.Primary));
+          else row.addComponents(
+            new ButtonBuilder().setCustomId(`ffm:pix_show:${matchId}`).setLabel('Ver PIX').setEmoji('💳').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`ffm:liberar:${matchId}`).setLabel('Liberar PIX').setEmoji('🔓').setStyle(ButtonStyle.Success),
+          );
+          await ffPatchMatch(matchId, { status: 'confirmed', mediator_fee: cfg?.mediator_fee, pay_per_player: payPP });
+          await i.channel.send({ embeds: [e], components: [row] });
+          return i.reply({ content: '✅', flags: EPHEMERAL });
+        }
+        if (action === 'encerrar') {
+          if (!isP && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ffPatchMatch(matchId, { status: 'cancelled', finished_at: new Date().toISOString() });
+          if (m.mediator_id) await supabase.from('ff_mediator_queue').update({ status: 'waiting', current_match_id: null }).eq('guild_id', guild.id).eq('user_id', m.mediator_id);
+          await i.channel.setName('❌').catch(() => {});
+          await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Cancelada').setColor('#ff5555')], components: [] });
+          setTimeout(() => i.channel.setArchived(true).catch(() => {}), 10000);
+          return;
+        }
+        if (action === 'pix_config') {
+          if (!isMed && !isDev && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const cfg = await ffGetConfig(guild.id);
+          const m2 = new ModalBuilder().setCustomId(`ffm_modal:pix:${matchId}`).setTitle('Pix');
+          m2.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(cfg?.pix_key || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(cfg?.pix_name || '').setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(cfg?.pix_city || '').setRequired(false)),
+          );
+          return i.showModal(m2);
+        }
+        if (action === 'pix_show') {
+          const cfg = await ffGetConfig(guild.id);
+          if (!cfg?.pix_key) return i.reply({ content: '❌', flags: EPHEMERAL });
+          return i.reply({ content: `💳 **PIX:**\n\`\`\`\n${cfg.pix_key}\n\`\`\`\n> 👤 ${cfg.pix_name || '—'}`, flags: EPHEMERAL });
+        }
+        if (action === 'liberar') {
+          const cfg = await ffGetConfig(guild.id);
+          if (!isMed && !isS && !isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (!cfg?.pix_key && !cfg?.mp_access_token) return i.reply({ content: '❌', flags: EPHEMERAL });
+          let feeFinal = cfg?.mediator_fee;
+          try { const noFee = await getGlobalMultiplier('no_fee'); if (noFee === 0) feeFinal = 0; } catch {}
+          const payPP = ffCalcPlayerPay(m.value, feeFinal, cfg?.taxa_extra, cfg?.taxa_extra_ativo);
+          await ffPatchMatch(matchId, { status: 'pix_released' });
+          await i.channel.setName(ffThreadName('paid', m.value, players, matchId)).catch(() => {});
+          if (cfg.mp_access_token) {
+            try {
+              const pag = await criarPixMercadoPago(payPP, `M${matchId}`, `Aposta ${matchId}`, cfg.mp_access_token);
+              if (pag?.ok) {
+                const e = new EmbedBuilder().setTitle('🔓 PIX MP').setColor('#22c55e')
+                  .setDescription(`**💰 R$ ${payPP.toFixed(2)}**`)
+                  .addFields(
+                    { name: '🔗', value: `[Pagar](${pag.ticket_url})` },
+                    { name: '🔑', value: `\`\`\`${pag.payload}\`\`\`` },
+                    { name: '🧑', value: `<@${i.user.id}>`, inline: true },
+                  )
+                  .setFooter({ text: 'Após pagar, confirme' });
+                const row = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setLabel('Pagar no MP').setEmoji('🔗').setStyle(ButtonStyle.Link).setURL(pag.ticket_url),
+                  new ButtonBuilder().setCustomId(`ffm:confirmar_pag:${matchId}`).setLabel('Confirmar').setEmoji('✅').setStyle(ButtonStyle.Success),
+                );
+                await ffLog(guild, 'pix', 'PAYMENT_RELEASED_MP', i.user.id, { matchId, payPP });
+                return i.update({ embeds: [e], components: [row] });
+              }
+            } catch (e) { console.error(e); }
+          }
+          const e = new EmbedBuilder().setTitle('🔓 PIX').setColor('#22c55e')
+            .setDescription(`**💰 R$ ${payPP.toFixed(2)}**`)
+            .addFields(
+              { name: '🔑', value: `\`\`\`${cfg.pix_key}\`\`\`` },
+              { name: '👤', value: `**${cfg.pix_name || '—'}**` },
+              { name: '🧑', value: `<@${i.user.id}>`, inline: true },
+            );
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`ffm:confirmar_pag:${matchId}`).setLabel('Confirmar').setEmoji('✅').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`ffm:cancelar:${matchId}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+          );
+          await ffLog(guild, 'pix', 'PAYMENT_RELEASED', i.user.id, { matchId, payPP });
+          return i.update({ embeds: [e], components: [row] });
+        }
+        if (action === 'confirmar_pag') {
+          const canConfirm = isMed || isS || isDev || !m.mediator_id;
+          if (!canConfirm) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await ffPatchMatch(matchId, { status: 'playing' });
+          await i.channel.setName(ffThreadName('playing', m.value, players, matchId)).catch(() => {});
+          const e = new EmbedBuilder().setTitle('🎮 Em partida').setColor('#5865F2')
+            .addFields({ name: 'Jogadores', value: players.map(p => `<@${p}>`).join(' 🆚 ') });
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`ffm:escolher_venc:${matchId}`).setLabel('Vencedor').setEmoji('🏆').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`ffm:enviar_sala:${matchId}`).setLabel('Enviar Sala').setEmoji('🎮').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`ffm:cancelar:${matchId}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+          );
+          return i.update({ embeds: [e], components: [row] });
+        }
+        if (action === 'escolher_venc') {
+          if (!isMed && !isS && !isDev && m.mediator_id) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId(`ffm:pick_winner:${matchId}`).setPlaceholder('Vencedor');
+          for (const p of players) {
+            const u = await client.users.fetch(p).catch(() => null);
+            menu.addOptions({ label: u?.username || p, value: p, emoji: '🏆' });
+          }
+          return i.reply({
+            embeds: [new EmbedBuilder().setTitle('🏆')],
+            components: [new ActionRowBuilder().addComponents(menu)],
+            flags: EPHEMERAL,
+          });
+        }
+        if (action === 'enviar_sala') {
+          if (!isMed && !isDev && m.mediator_id) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const mo = new ModalBuilder().setCustomId(`ffm_modal:sala:${matchId}`).setTitle('Sala');
+          mo.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('room_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('room_pass').setLabel('Senha').setStyle(TextInputStyle.Short).setRequired(true)),
+          );
+          return i.showModal(mo);
+        }
+        if (action === 'cancelar') {
+          if (!isMed && !isDev && !isS && m.mediator_id) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const e = new EmbedBuilder().setTitle('⚠️ Cancelar?').setColor('#ff5555');
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`ffm:cancelar_confirm:${matchId}`).setLabel('Sim').setEmoji('✅').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId(`ffm:cancelar_abort:${matchId}`).setLabel('Não').setEmoji('❌').setStyle(ButtonStyle.Secondary),
+          );
+          return i.reply({ embeds: [e], components: [row], flags: EPHEMERAL });
+        }
+        if (action === 'cancelar_confirm') {
+          await ffPatchMatch(matchId, { status: 'cancelled', finished_at: new Date().toISOString() });
+          if (m.mediator_id) await supabase.from('ff_mediator_queue').update({ status: 'waiting', current_match_id: null }).eq('guild_id', guild.id).eq('user_id', m.mediator_id);
+          await i.channel.setName('❌').catch(() => {});
+          await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Cancelada').setColor('#ff5555')], components: [] });
+          setTimeout(() => i.channel.setArchived(true).catch(() => {}), 10000);
+          return;
+        }
+        if (action === 'cancelar_abort') return i.update({ content: '✅', embeds: [], components: [] });
+        if (action === 'chamar_analista') {
+          const cfgChk = await ffGetConfig(guild.id);
+          const isMedChk = cfgChk?.mediator_role_id && i.member.roles.cache.has(cfgChk.mediator_role_id);
+          const isOlhChk = cfgChk?.olhinho_role_id && i.member.roles.cache.has(cfgChk.olhinho_role_id);
+          if (!isMedChk && !isOlhChk && !isS && !isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const next = await ffAnalystNext(guild.id);
+          if (next) {
+            await supabase.from('ff_analyst_queue').update({ status: 'busy', current_match_id: m.id }).eq('id', next.id);
+            await logAnalista(guild, next.user_id, 'CHAMADO', { match_id: m.id });
+          }
+          const temAnalista = !!next;
+          const e = new EmbedBuilder().setTitle('🔎 Análise').setColor(temAnalista ? '#22c55e' : '#FF5555')
+            .setDescription(temAnalista ? `**Analista:** <@${next.user_id}>\n\nEnvie: replay, print, motivo.` : '⚠️ Nenhum analista.')
+            .setTimestamp();
+          if (temAnalista) {
+            await i.channel.members.add(next.user_id).catch(() => {});
+            const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`ffana:concluir:${m.id}`).setLabel('Concluída').setEmoji('✅').setStyle(ButtonStyle.Success),
+              new ButtonBuilder().setCustomId(`ffana:wo:${m.id}`).setLabel('W.O.').setEmoji('⚠️').setStyle(ButtonStyle.Danger),
+            );
+            await i.channel.send({ content: `<@${next.user_id}>`, embeds: [e], components: [row] });
+          } else await i.channel.send({ embeds: [e] });
+          await ffLog(guild, 'moderator', 'ANALYST_CALLED', i.user.id, { match_id: m.id, analyst: next?.user_id || null });
+          return i.reply({ content: temAnalista ? '✅' : '⚠️', flags: EPHEMERAL });
+        }
+      }
+
+      // ───── FFMED ─────
+      if (ns === 'ffmed') {
+        if (await blockIfMaintenance(i)) return;
+        const cfg = await ffGetConfig(guild.id);
+        const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
+        const hasMed = cfg?.mediator_role_id && i.member.roles.cache.has(cfg.mediator_role_id);
+        if (!hasMed && !isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'entrar') {
+          const ok = await ffMediatorJoin(guild.id, i.user.id);
+          if (!ok) return i.reply({ content: '⚠️', flags: EPHEMERAL });
+          await logMediador(guild, i.user.id, 'ENTROU', {});
+          await i.reply({ content: '✅', flags: EPHEMERAL });
+          await i.message.edit(await ffBuildMediatorPanel(guild.id)).catch(() => {});
+          return;
+        }
+        if (action === 'sair') {
+          const ok = await ffMediatorLeave(guild.id, i.user.id);
+          if (!ok) return i.reply({ content: '⚠️ Em partida.', flags: EPHEMERAL });
+          await logMediador(guild, i.user.id, 'SAIU', {});
+          await i.reply({ content: '🚪', flags: EPHEMERAL });
+          await i.message.edit(await ffBuildMediatorPanel(guild.id)).catch(() => {});
+          return;
+        }
+        if (action === 'receita') {
+          const { data: all } = await supabase.from('ff_mediator_earnings').select('*').eq('guild_id', guild.id).eq('mediator_id', i.user.id);
+          const now = Date.now(), day = 86400000;
+          const sum = (a) => a.reduce((x, y) => x + Number(y.amount || 0), 0);
+          const hoje = (all || []).filter(e => now - new Date(e.created_at).getTime() < day);
+          const sem = (all || []).filter(e => now - new Date(e.created_at).getTime() < 7 * day);
+          const mes = (all || []).filter(e => now - new Date(e.created_at).getTime() < 30 * day);
+          const e = new EmbedBuilder().setTitle('💰 Minha Receita').setColor('#22c55e').setThumbnail(i.user.displayAvatarURL())
+            .addFields(
+              { name: '📅 Hoje', value: `R$ ${sum(hoje).toFixed(2)} • ${hoje.length}` },
+              { name: '📆 Semana', value: `R$ ${sum(sem).toFixed(2)} • ${sem.length}` },
+              { name: '🗓️ Mês', value: `R$ ${sum(mes).toFixed(2)} • ${mes.length}` },
+              { name: '💰 Total', value: `R$ ${sum(all).toFixed(2)} • ${(all || []).length}` },
+            ).setTimestamp();
+          return i.reply({ embeds: [e], flags: EPHEMERAL });
+        }
+      }
+
+      // ───── FFANA ─────
+      if (ns === 'ffana') {
+        try {
+          if (await blockIfMaintenance(i)) return;
+          const cfg = await ffGetConfig(guild.id);
+          const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
+          const hasAna = cfg?.analyst_role_id && i.member.roles.cache.has(cfg.analyst_role_id);
+          const hasOlh = cfg?.olhinho_role_id && i.member.roles.cache.has(cfg.olhinho_role_id);
+          if (!hasAna && !hasOlh && !isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
+          if (action === 'entrar') {
+            const ok = await ffAnalystJoin(guild.id, i.user.id);
+            if (!ok) return i.reply({ content: '⚠️', flags: EPHEMERAL });
+            await logAnalista(guild, i.user.id, 'ENTROU', {});
+            await i.reply({ content: '✅', flags: EPHEMERAL });
+            await i.message.edit(await ffBuildAnalystPanel(guild.id)).catch(() => {});
+            return;
+          }
+          if (action === 'sair') {
+            const ok = await ffAnalystLeave(guild.id, i.user.id);
+            if (!ok) return i.reply({ content: '⚠️', flags: EPHEMERAL });
+            await logAnalista(guild, i.user.id, 'SAIU', {});
+            await i.reply({ content: '🚪', flags: EPHEMERAL });
+            await i.message.edit(await ffBuildAnalystPanel(guild.id)).catch(() => {});
+            return;
+          }
+          if (action === 'meu_historico') {
+            const { data: a } = await supabase.from('ff_analyst_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
+            const total = a?.analyses_total || 0;
+            const e = new EmbedBuilder().setTitle('📊 Minhas Análises').setColor('#00AAFF').setThumbnail(i.user.displayAvatarURL())
+              .addFields(
+                { name: '🔎', value: `${total}`, inline: true },
+                { name: '🟢', value: a?.status === 'busy' ? 'Em análise' : a ? 'Disponível' : 'Fora', inline: true },
+              );
+            return i.reply({ embeds: [e], flags: EPHEMERAL });
+          }
+          if (action === 'concluir') {
+            const matchId = rest[0];
+            await ffAnalystRelease(guild.id, i.user.id, true);
+            await logAnalista(guild, i.user.id, 'CONCLUIU', { match_id: matchId });
+            return i.update({ content: '✅', embeds: [], components: [] });
+          }
+          if (action === 'wo') {
+            const matchId = rest[0];
+            await ffAnalystRelease(guild.id, i.user.id, true);
+            await logAnalista(guild, i.user.id, 'APLICOU_WO', { match_id: matchId });
+            return i.update({ content: '⚠️', embeds: [], components: [] });
+          }
+        } catch (errAna) {
+          console.error(errAna);
+          if (!i.replied && !i.deferred) return i.reply({ content: `❌ ${errAna.message}`, flags: EPHEMERAL }).catch(() => {});
+        }
+      }
+
+      // ───── FFSTR ─────
+      if (ns === 'ffstr') {
+        if (await blockIfMaintenance(i)) return;
+
+        if (action === 'entrar') {
+          const ok = await ffStreamerJoin(guild.id, i.user.id);
+          await logImportant('STREAMER', '🎥 Streamer entrou', { user: i.user.id, guild: guild.id, severity: 'info' }).catch(() => {});
+          await i.reply({
+            content: ok ? '✅ Você entrou na lista!\n> Clique em **🔴 Definir Live** pra aparecer ao vivo.' : '✅ Você já estava na lista.',
+            flags: EPHEMERAL,
+          });
+          await ffUpdateStreamerMessage(guild).catch(() => {});
+          return;
+        }
+        if (action === 'sair') {
+          await ffStreamerLeave(guild.id, i.user.id);
+          await i.reply({ content: '🚪', flags: EPHEMERAL });
+          await ffUpdateStreamerMessage(guild).catch(() => {});
+          return;
+        }
+        if (action === 'live_set') {
+          const m = new ModalBuilder().setCustomId('modal_ffstr_live').setTitle('Definir Live');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('Link da live').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'set_mediator') {
+          const { data: ex } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
+          if (!ex) return i.reply({ content: '❌ Entre na lista primeiro.', flags: EPHEMERAL });
+          const m = new ModalBuilder().setCustomId('modal_ffstr_mediator').setTitle('Designar mediador');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('mediator_id').setLabel('ID do mediador').setStyle(TextInputStyle.Short).setPlaceholder('Ex: 123456789012345678').setValue(ex.mediator_id || '').setRequired(true).setMaxLength(20)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'my_info') {
+          const { data: info } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
+          if (!info) return i.reply({ content: '❌ Você não está na lista.', flags: EPHEMERAL });
+          const { data: meds } = await supabase.from('ff_streamer_mediations').select('*').eq('guild_id', guild.id).eq('streamer_id', i.user.id).order('started_at', { ascending: false }).limit(10);
+          const total = (meds || []).length, ended = (meds || []).filter(m => m.status === 'ended').length;
+          const statusEmoji = { offline: '⚪', live: '🔴' }[info.status] || '⚪';
+          const medStatusEmoji = { pending: '🟡', accepted: '🟢', declined: '🔴' }[info.mediator_status] || '⚪';
+          const e = new EmbedBuilder().setTitle('🎥 Meus dados como streamer').setColor('#9146FF').setThumbnail(i.user.displayAvatarURL())
+            .addFields(
+              { name: '📌', value: `${statusEmoji} ${info.status === 'live' ? 'Ao vivo' : 'Offline'}`, inline: true },
+              { name: '🛡️', value: info.mediator_id ? `<@${info.mediator_id}> ${medStatusEmoji}` : '*não designado*', inline: true },
+              { name: '📊 Lives', value: `**${total}**`, inline: true },
+              { name: '✅ Concluídas', value: `**${ended}**`, inline: true },
+            ).setTimestamp();
+          if (meds?.length) {
+            const lines = meds.slice(0, 5).map(m => `> ${m.status === 'active' ? '🟢' : '⚪'} <@${m.mediator_id}> <t:${Math.floor(new Date(m.started_at).getTime() / 1000)}:R>`);
+            e.addFields({ name: '📋 Recentes', value: lines.join('\n') });
+          }
+          const rows = [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ffstr:remove_mediator').setLabel('Remover mediador').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!info.mediator_id),
+          )];
+          return i.reply({ embeds: [e], components: rows, flags: EPHEMERAL });
+        }
+        if (action === 'remove_mediator') {
+          await supabase.from('ff_streamer_queue').update({ mediator_id: null, mediator_status: null, mediator_joined_at: null }).eq('guild_id', guild.id).eq('user_id', i.user.id).catch(() => {});
+          await i.reply({ content: '✅ Mediador removido.', flags: EPHEMERAL });
+          await ffUpdateStreamerMessage(guild).catch(() => {});
+          return;
+        }
+        if (action === 'accept') {
+          const [, targetGid, targetUid] = rest;
+          if (targetGid !== guild.id) return;
+          const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', targetUid).maybeSingle();
+          if (!st || st.mediator_id !== i.user.id) return i.reply({ content: '❌ Você não é o mediador designado.', flags: EPHEMERAL });
+          await supabase.from('ff_streamer_queue').update({ mediator_status: 'accepted' }).eq('guild_id', guild.id).eq('user_id', targetUid);
+          await logImportant('STREAMER', '🛡️ Mediador aceitou', { user: i.user.id, guild: guild.id, severity: 'success', description: `Mediador aceitou mediar live de <@${targetUid}>` }).catch(() => {});
+          try { const u = await client.users.fetch(targetUid).catch(() => null); if (u) await u.send(`✅ **<@${i.user.id}>** aceitou mediar sua live!`).catch(() => {}); } catch {}
+          await i.update({ embeds: [new EmbedBuilder().setTitle('✅ Aceita').setColor('#22c55e').setDescription(`Você está mediando a live de <@${targetUid}>.`)], components: [] });
+          await ffUpdateStreamerMessage(guild).catch(() => {});
+          return;
+        }
+        if (action === 'decline') {
+          const [, targetGid, targetUid] = rest;
+          if (targetGid !== guild.id) return;
+          const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', targetUid).maybeSingle();
+          if (!st || st.mediator_id !== i.user.id) return i.reply({ content: '❌', flags: EPHEMERAL });
+          await supabase.from('ff_streamer_queue').update({ mediator_status: 'declined' }).eq('guild_id', guild.id).eq('user_id', targetUid);
+          try { const u = await client.users.fetch(targetUid).catch(() => null); if (u) await u.send(`⚠️ **<@${i.user.id}>** recusou mediar sua live.`).catch(() => {}); } catch {}
+          await logImportant('STREAMER', '🛡️ Mediador recusou', { user: i.user.id, guild: guild.id, severity: 'warning', description: `Mediador <@${i.user.id}> recusou live de <@${targetUid}>` }).catch(() => {});
+          await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Recusada').setColor('#ff5555')], components: [] });
+          return;
+        }
+        if (action === 'config') {
+          const cfg = await ffGetConfig(guild.id);
+          const c = cfg?.custom_streamer_embed || {};
+          const m = new ModalBuilder().setCustomId('modal_ffstr_config').setTitle('Configurar painel streamer');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue(c.title || '🎥 Streamers ao Vivo').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(c.descricao || '').setRequired(false).setMaxLength(500)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(c.color || '#9146FF').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(c.footer || '').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('regras').setLabel('Regras').setStyle(TextInputStyle.Paragraph).setValue(c.regras || '').setRequired(false).setMaxLength(500)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'preview') {
+          const panel = await ffBuildStreamerPanel(guild.id);
+          return i.reply({ ...panel, flags: EPHEMERAL });
+        }
+        if (action === 'reset') {
+          await ffPatchConfig(guild.id, { custom_streamer_embed: {} });
+          return i.reply({ content: '✅ Resetado.', flags: EPHEMERAL });
+        }
+        if (action === 'post' || action === 'update') {
+          const cfg = await ffGetConfig(guild.id);
+          const chId = cfg?.streamer_channel_id || channel.id;
+          await ffPostStreamerPanel(guild, chId);
+          return i.reply({ content: `✅ Em <#${chId}>`, flags: EPHEMERAL });
+        }
+      }
+
+      // ───── FFBL ─────
+      if (ns === 'ffbl') {
+        if (await blockIfMaintenance(i)) return;
+        const cfg = await ffGetConfig(guild.id);
+        const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
+        const hasAna = cfg?.analyst_role_id && i.member.roles.cache.has(cfg.analyst_role_id);
+        const hasMed = cfg?.mediator_role_id && i.member.roles.cache.has(cfg.mediator_role_id);
+        if (!hasAna && !hasMed && !isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (action === 'list') return i.reply(await ffBuildBlacklistEmbed(guild.id));
+        if (action === 'refresh') return i.update(await ffBuildBlacklistEmbed(guild.id));
+        if (action === 'check') {
+          const m = new ModalBuilder().setCustomId('ffbl_modal:check').setTitle('Verificar BL');
+          m.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('query').setLabel('Discord ID ou FF ID').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+          return i.showModal(m);
+        }
+        if (action === 'add') {
+          const m = new ModalBuilder().setCustomId('ffbl_modal:add').setTitle('Add BL');
+          m.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('discord_id').setLabel('Discord ID').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ff_id').setLabel('FF ID').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('evidence').setLabel('Provas (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
+          );
+          return i.showModal(m);
+        }
+        if (action === 'remove') {
+          const { data } = await supabase.from('ff_blacklist').select('*').eq('guild_id', guild.id).order('created_at', { ascending: false });
+          if (!data?.length) return i.reply({ content: '📋', flags: EPHEMERAL });
+          const menu = new StringSelectMenuBuilder().setCustomId('ffbl:remove_pick').setPlaceholder('Remover');
+          for (const b of data.slice(0, 25)) menu.addOptions({ label: `<@${b.discord_id || b.user_id}> • FF: ${b.ff_id || '—'}`.slice(0, 90), value: String(b.id) });
+          return i.reply({ embeds: [new EmbedBuilder().setTitle('➖')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+        }
+      }
+
+      // ───── COINSHOP ─────
+      if (ns === 'coinshop') {
+        if (action === 'cancel') return i.update({ content: '❌', embeds: [], components: [] });
+        if (action === 'saldo') {
+          const { data: p } = await supabase.from('ff_players').select('coins, wins, losses').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
+          const { count: compras } = await supabase.from('ff_coin_purchases').select('*', { count: 'exact', head: true }).eq('guild_id', guild.id).eq('user_id', i.user.id);
+          const e = new EmbedBuilder().setTitle('💰 Meu Saldo').setColor('#FFD700').setThumbnail(i.user.displayAvatarURL())
+            .addFields(
+              { name: '🪙', value: `**${Number(p?.coins || 0)}**`, inline: true },
+              { name: '🏆', value: `${p?.wins || 0}`, inline: true },
+              { name: '❌', value: `${p?.losses || 0}`, inline: true },
+              { name: '🛒', value: `${compras || 0}`, inline: true },
+            ).setTimestamp();
+          return i.reply({ embeds: [e], flags: EPHEMERAL });
+        }
+        if (action === 'top') {
+          const { data: top } = await supabase.from('ff_players').select('user_id, coins').eq('guild_id', guild.id).order('coins', { ascending: false }).limit(10);
+          const e = new EmbedBuilder().setTitle('🏆 Top 10').setColor('#FFD700')
+            .setDescription(top?.length ? top.map((p, idx) => `${['🥇', '🥈', '🥉'][idx] || `**${idx + 1}º**`} <@${p.user_id}> — 🪙 **${Number(p.coins || 0)}**`).join('\n') : 'Sem dados.');
+          return i.reply({ embeds: [e], flags: EPHEMERAL });
+        }
+        if (action === 'confirm') {
+          const itemId = rest[0], lockKey = `${guild.id}-${i.user.id}`;
+          if (coinLocks.has(lockKey)) return i.reply({ content: '⏳', flags: EPHEMERAL });
+          return withCoinLock(lockKey, async () => {
+            await i.deferUpdate();
+            const { data: item } = await supabase.from('ff_coin_shop').select('*').eq('id', itemId).maybeSingle();
+            if (!item || !item.active) return i.editReply({ content: '❌', embeds: [], components: [] });
+            const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
+            const saldo = Number(p?.coins || 0);
+            if (saldo < item.price) return i.editReply({ content: '❌ Saldo.', embeds: [], components: [] });
+            if (item.type === 'role' && item.role_id) {
+              const mem = await guild.members.fetch(i.user.id).catch(() => null);
+              if (!mem) return i.editReply({ content: '❌', embeds: [], components: [] });
+              if (mem.roles.cache.has(item.role_id)) return i.editReply({ content: '⚠️ Já tem.', embeds: [], components: [] });
+              try {
+                const r = guild.roles.cache.get(item.role_id);
+                if (!r) return i.editReply({ content: '❌', embeds: [], components: [] });
+                const bh = guild.members.me.roles.highest;
+                if (r.position >= bh.position) return i.editReply({ content: '❌ Posição.', embeds: [], components: [] });
+                await mem.roles.add(r, 'Compra coins');
+              } catch (e) { return i.editReply({ content: `❌ ${e.message}`, embeds: [], components: [] }); }
+            }
+            const novoSaldo = saldo - item.price;
+            await supabase.from('ff_players').update({ coins: novoSaldo }).eq('guild_id', guild.id).eq('user_id', i.user.id);
+            if (item.type === 'coins' && item.coins_reward > 0) await supabase.from('ff_players').update({ coins: novoSaldo + item.coins_reward }).eq('guild_id', guild.id).eq('user_id', i.user.id);
+            if (item.stock > 0) await supabase.from('ff_coin_shop').update({ stock: item.stock - 1 }).eq('id', item.id);
+            try { await supabase.from('ff_coin_purchases').insert({ guild_id: guild.id, user_id: i.user.id, shop_id: item.id, item_name: item.name, price: item.price }); } catch {}
+            await logCoins(guild, i.user.id, -item.price, `Compra: ${item.name}`, null);
+            try { const u = await client.users.fetch(i.user.id); await u.send(`🪙 Comprou **${item.emoji || '🎁'} ${item.name}**!\n💰 **${novoSaldo}** coins`).catch(() => {}); } catch {}
+            return i.editReply({
+              embeds: [new EmbedBuilder().setTitle('✅ Compra!').setColor('#22c55e').setDescription(`**${item.emoji || '🎁'} ${item.name}**\n💰 **${novoSaldo}** coins`)],
+              components: [],
+            });
+          });
+        }
+      }
+
+      // ───── CUSTOM BET ─────
+      if (cid === 'custom_bet_preview') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
+        const cfg = await ffGetConfig(guild.id);
+        const fake = { id: 0, format: '1v1 Mobile', value: 5.00, gelo_infinito_players: JSON.stringify([{ userId: i.user.id }]), gelo_normal_players: '[]' };
+        return i.reply({ content: '🎨 Preview:', embeds: [ffBuildBetEmbed(fake, cfg)], components: [ffBuildBetButtons(0, cfg)], flags: EPHEMERAL });
+      }
+      if (cid === 'custom_bet_reset') {
+        if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+        await ffPatchConfig(guild.id, { custom_bet_embed: {} });
+        await logConfig(guild, i.user.id, 'CUSTOM_BET_RESET', {});
+        return i.update(await ffPanelCustomEmbed(guild.id));
+      }
+      if (cid === 'ffcfg:custom_embed_edit') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
+        const cfg = await ffGetConfig(guild.id);
+        const c = cfg?.custom_bet_embed || {};
+        const m = new ModalBuilder().setCustomId('modal_custom_bet_edit').setTitle('🎨 Embed aposta');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título extra').setStyle(TextInputStyle.Short).setValue(c.title || '').setRequired(false).setMaxLength(100)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(c.color || '#f1c40f').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb URL').setStyle(TextInputStyle.Short).setValue(c.thumbnail || '').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setValue(c.banner || '').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(c.footer || '').setRequired(false)),
+        );
+        return i.showModal(m);
+      }
+      if (cid === 'ffcfg:custom_embed_buttons') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
+        const cfg = await ffGetConfig(guild.id);
+        const b = cfg?.custom_bet_embed?.buttons || {};
+        const m = new ModalBuilder().setCustomId('modal_custom_bet_buttons').setTitle('🎯 Botões');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gi_label').setLabel('GI label').setStyle(TextInputStyle.Short).setValue(b.gi_label || 'Gelo Infinito').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gn_label').setLabel('GN label').setStyle(TextInputStyle.Short).setValue(b.gn_label || 'Gelo Normal').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sair_label').setLabel('Sair label').setStyle(TextInputStyle.Short).setValue(b.sair_label || 'Sair').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gi_emoji').setLabel('GI emoji').setStyle(TextInputStyle.Short).setValue(b.gi_emoji || '🧊').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gn_emoji').setLabel('GN emoji').setStyle(TextInputStyle.Short).setValue(b.gn_emoji || '🧊').setRequired(false)),
+        );
+        return i.showModal(m);
+      }
+
+      // ───── MÚSICA ─────
+      if (cid === 'mus_play') {
+        if (!await isAdmin(i.user, guild)) return;
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        const m = new ModalBuilder().setCustomId('modal_mus_play').setTitle('Tocar');
+        m.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId('busca').setLabel('Nome/link').setStyle(TextInputStyle.Short).setRequired(true)
+        ));
+        return i.showModal(m);
+      }
+      if (cid === 'mus_pause') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        const q = getQueue(guild.id);
+        if (!q.player) return i.reply({ content: '❌', flags: EPHEMERAL });
+        if (q.player.state.status === AudioPlayerStatus.Paused) q.player.unpause();
+        else q.player.pause();
         return i.reply({ content: '✅', flags: EPHEMERAL });
       }
-      const m = new ModalBuilder().setCustomId(`modal_staff_bl_add:${uid}`).setTitle('Banir staff');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_staff_blacklist') {
-      const { data } = await supabase.from('staff_blacklist').select('*').order('added_at', { ascending: false }).limit(20);
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🚫 Staff BL').setColor('#FF5555')
-          .setDescription(data?.length ? data.map(b => `<@${b.user_id}>\n> ${b.reason || '—'}`).join('\n\n') : '*Vazia*')],
-        flags: EPHEMERAL,
-      });
-    }
-
-    if (cid === 'dev_ranking_refresh') return i.update(await devPanelRanking());
-    if (cid.startsWith('dev_dead_page:')) return i.update(await devPanelDeadServers(parseInt(cid.split(':')[1]) || 0));
-    if (cid === 'dev_dead_cleanup') {
-      const dead = await getDeadServers();
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('⚠️ Confirmar').setDescription(`Sair de **${dead.length}**?`)],
-        components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('dev_dead_cleanup_confirm').setLabel(`Sim (${dead.length})`).setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('dev_dead_servers').setLabel('Não').setStyle(ButtonStyle.Secondary),
-        )],
-        flags: EPHEMERAL,
-      });
-    }
-    if (cid === 'dev_dead_cleanup_confirm') {
-      await i.reply({ content: '🧹', flags: EPHEMERAL });
-      const dead = await getDeadServers();
-      let ok = 0;
-      for (const s of dead) {
-        const g = client.guilds.cache.get(s.guild_id);
-        if (g) { await g.leave().catch(() => {}); ok++; await sleep(500); }
+      if (cid === 'mus_skip') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        getQueue(guild.id).player?.stop();
+        return i.reply({ content: '⏭️', flags: EPHEMERAL });
       }
-      await logDevAction(i.user.id, 'dead_cleanup', null, { count: ok });
-      return i.editReply({ content: `✅ Saí de **${ok}**.` });
-    }
-
-    if (cid === 'dev_event_coins_double') {
-      const m = new ModalBuilder().setCustomId('modal_event_coins_double').setTitle('Dobro Coins');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Dobro de Coins').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_event_no_fee') {
-      const m = new ModalBuilder().setCustomId('modal_event_no_fee').setTitle('Sem Taxa');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Sem Taxa!').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_event_bonus') {
-      const m = new ModalBuilder().setCustomId('modal_event_bonus').setTitle('Bônus');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Bônus').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('multiplier').setLabel('Multiplier').setStyle(TextInputStyle.Short).setValue('2').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_event_sorteio') {
-      const m = new ModalBuilder().setCustomId('modal_event_sorteio').setTitle('Sorteio');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('prize').setLabel('Prêmio em coins').setStyle(TextInputStyle.Short).setValue('500').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('winners').setLabel('Ganhadores').setStyle(TextInputStyle.Short).setValue('5').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hours').setLabel('Duração h').setStyle(TextInputStyle.Short).setValue('24').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_event_stop_all') {
-      await supabase.from('dev_global_events').update({ active: false }).eq('active', true);
-      await logDevAction(i.user.id, 'stop_all_events', null, {});
-      return i.reply({ content: '🛑', flags: EPHEMERAL });
-    }
-    if (cid === 'dev_event_notify') {
-      const events = await getActiveGlobalEvents();
-      if (!events.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const r = await enviarAvisoGlobal('🎉 Eventos Ativos!', events.map(ev => `**${ev.title}** — ${ev.multiplier}×`).join('\n'));
-      return i.reply({ content: `📢 ${r.canaisOk} canais`, flags: EPHEMERAL });
-    }
-
-    if (cid.startsWith('dev_note_add:')) {
-      const gid = cid.split(':')[1];
-      const m = new ModalBuilder().setCustomId(`modal_note_add:${gid}`).setTitle('Nota');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('note').setLabel('Nota').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(500)
-      ));
-      return i.showModal(m);
-    }
-    if (cid.startsWith('dev_note_clear:')) {
-      const gid = cid.split(':')[1];
-      await supabase.from('guild_notes').delete().eq('guild_id', gid);
-      return i.update(await devPanelNotes(gid));
-    }
-
-    if (cid === 'dev_monitor_refresh') return i.update(await devPanelMonitor());
-    if (cid === 'dev_monitor_reconnect') {
-      await logDevAction(i.user.id, 'ws_reconnect', null, {});
-      await i.reply({ content: '⚡', flags: EPHEMERAL });
-      setTimeout(() => { try { client.ws.destroy(); } catch {} }, 1500);
-      return;
-    }
-
-    if (cid === 'dev_kill_toggle') {
-      const active = await isKillSwitchActive();
-      const { data } = await supabase.from('kill_switch').select('*').eq('id', 1).maybeSingle();
-      await setKillSwitch(!active, data?.reason || null, i.user.id);
-      return i.update(await devPanelKillSwitch());
-    }
-    if (cid === 'dev_kill_reason') {
-      const m = new ModalBuilder().setCustomId('modal_kill_reason').setTitle('Motivo');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(300)
-      ));
-      return i.showModal(m);
-    }
-
-    if (cid === 'dev_preview_create') {
-      const m = new ModalBuilder().setCustomId('modal_preview_create').setTitle('Preview');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumb').setLabel('Thumb').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-
-    if (cid === 'dev_simulate_run') {
-      if (!await isPremium(guild.id)) return requirePremium(i, 'simulador');
-      await i.deferReply({ flags: EPHEMERAL });
-      try {
-        const r = await simulateFlow(guild.id);
-        const lines = r.etapas.map(e => `${e.ok ? '✅' : '❌'} **${e.name}** — \`${e.ms}ms\`${e.erro ? `\n> ⚠️ ${e.erro}` : ''}`).join('\n');
-        const e = new EmbedBuilder().setTitle('🎬').setColor(r.errCount === 0 ? '#22c55e' : r.errCount < 3 ? '#FFA500' : '#FF5555')
-          .setDescription(lines.substring(0, 4000))
-          .addFields(
-            { name: '✅', value: `${r.okCount}`, inline: true },
-            { name: '❌', value: `${r.errCount}`, inline: true },
-            { name: '⏱️', value: `${r.totalMs}ms`, inline: true },
-          );
-        return i.editReply({ embeds: [e] });
-      } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
-    }
-
-    if (cid === 'dev_autoheal') {
-      await i.deferReply({ flags: EPHEMERAL });
-      const r = await runAutoHeal();
-      return i.editReply({ content: `🔄\n> 🧵 ${r.canceledThreads}\n> ⚠️ ${r.alertedMatches}\n> 💳 ${r.canceledPix}` });
-    }
-
-    if (cid === 'dev_sandbox_run') {
-      const m = new ModalBuilder().setCustomId('modal_sandbox').setTitle('Sandbox');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('code').setLabel('JS').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(3000)
-      ));
-      return i.showModal(m);
-    }
-
-    if (cid === 'dev_ratelimit_reset') {
-      rateLimitTracker.total = 0;
-      rateLimitTracker.limited = 0;
-      rateLimitTracker.buckets = {};
-      rateLimitTracker.lastReset = Date.now();
-      return i.update(await devPanelRateLimit());
-    }
-
-    if (cid === 'dev_clear_cache') {
-      spamCache.clear();
-      dupeCache.clear();
-      raidTracker.clear();
-      abuseCache.clear();
-      LOG_THROTTLE.clear();
-      return i.reply({ content: '🧹', flags: EPHEMERAL });
-    }
-    if (cid === 'dev_check_db') {
-      const tl = ['configs', 'guilds', 'settings', 'products', 'orders', 'ff_config', 'ff_bets', 'ff_matches', 'ff_mediator_queue', 'ff_analyst_queue', 'ff_streamer_queue'];
-      const r = [];
-      for (const x of tl) {
-        const { error } = await supabase.from(x).select('*', { count: 'exact', head: true });
-        r.push(`${error ? '❌' : '✅'} \`${x}\``);
+      if (cid === 'mus_stop') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        const q = getQueue(guild.id);
+        q.player?.stop();
+        q.songs = [];
+        q.connection?.destroy();
+        musicQueues.delete(guild.id);
+        return i.reply({ content: '⏹️', flags: EPHEMERAL });
       }
-      return i.reply({ content: r.join('\n'), flags: EPHEMERAL });
-    }
-
-    if (cid === 'dev_eval') {
-      const m = new ModalBuilder().setCustomId('modal_eval').setTitle('Eval');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('code').setLabel('Code').setStyle(TextInputStyle.Paragraph).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (cid === 'dev_dump') {
-      const dump = { guild: { id: guild.id, name: guild.name, members: guild.memberCount }, client: { ping: client.ws.ping, guilds: client.guilds.cache.size } };
-      return i.reply({ files: [new AttachmentBuilder(Buffer.from(JSON.stringify(dump, null, 2)), { name: 'dump.json' })], flags: EPHEMERAL });
-    }
-    if (cid === 'dev_bugs') {
-      const { data } = await supabase.from('error_logs').select('*').eq('status', 'pending').eq('context', 'bug_report').order('id', { ascending: false }).limit(15);
-      if (!data?.length) return i.reply({ content: '✅', flags: EPHEMERAL });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('🐛').setDescription(data.map(b => `**#${b.id}** — <@${b.user_id}>\n> ${(b.message || '').substring(0, 100)}`).join('\n\n').substring(0, 4000))], flags: EPHEMERAL });
-    }
-    if (cid === 'dev_cleanup_dms') {
-      const m = new ModalBuilder().setCustomId('modal_cleanup_dms').setTitle('Limpar DMs');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limit').setLabel('1-500').setStyle(TextInputStyle.Short).setValue('100').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_cleanup_channel') {
-      const m = new ModalBuilder().setCustomId('modal_cleanup_channel').setTitle('Limpar canal');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('limit').setLabel('1-1000').setStyle(TextInputStyle.Short).setValue('1000').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-
-    if (cid === 'dev_locale_pt') { await setGuildLocale(guild.id, 'pt-BR'); return i.reply({ content: '✅ 🇧🇷', flags: EPHEMERAL }); }
-    if (cid === 'dev_locale_en') { await setGuildLocale(guild.id, 'en-US'); return i.reply({ content: '✅ 🇺🇸', flags: EPHEMERAL }); }
-    if (cid === 'dev_locale_es') { await setGuildLocale(guild.id, 'es-ES'); return i.reply({ content: '✅ 🇪🇸', flags: EPHEMERAL }); }
-
-    if (cid === 'dev_reload') {
-      await i.reply({ content: '🔄', flags: EPHEMERAL });
-      await registerCommands();
-      return i.editReply({ content: '✅' });
-    }
-    if (cid === 'dev_ping_detailed') {
-      await i.deferReply({ flags: EPHEMERAL });
-      try {
-        const embeds = await buildPingDetailed();
-        return i.editReply({ embeds });
-      } catch (err) { return i.editReply({ content: `❌ ${err.message}` }); }
-    }
-
-    if (cid === 'dev_alerts_refresh') return i.update(await devPanelAlerts());
-    if (cid === 'dev_alerts_read_all') {
-      await supabase.from('dev_alerts').update({ read: true }).eq('read', false);
-      return i.update(await devPanelAlerts());
-    }
-    if (cid === 'dev_alerts_config') {
-      const tipos = ['offline', 'crash', 'big_guild', 'bug_flood', 'mp_fail', 'rate_limit', 'suspicious'];
-      const { data: config } = await supabase.from('dev_alert_config').select('*');
-      const cfgMap = {};
-      for (const c of config || []) cfgMap[c.type] = c.enabled;
-      const rows = [];
-      let row = new ActionRowBuilder();
-      for (let idx = 0; idx < tipos.length; idx++) {
-        const tt = tipos[idx];
-        const enabled = cfgMap[tt] !== false;
-        row.addComponents(new ButtonBuilder().setCustomId(`dev_alert_toggle:${tt}`).setLabel(tt).setEmoji(enabled ? '🟢' : '🔴').setStyle(enabled ? ButtonStyle.Success : ButtonStyle.Danger));
-        if (row.components.length === 5 || idx === tipos.length - 1) { rows.push(row); row = new ActionRowBuilder(); }
+      if (cid === 'mus_queue') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        return i.reply({ content: `📋 ${getQueue(guild.id).songs.length}`, flags: EPHEMERAL });
       }
-      rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_alerts').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary)));
-      return i.update({ embeds: [new EmbedBuilder().setTitle('⚙️ Alertas').setColor('#5865F2')], components: rows });
-    }
-    if (cid.startsWith('dev_alert_toggle:')) {
-      const tt = cid.split(':')[1];
-      const { data } = await supabase.from('dev_alert_config').select('*').eq('type', tt).maybeSingle();
-      const nv = data ? !data.enabled : false;
-      if (data) await supabase.from('dev_alert_config').update({ enabled: nv, updated_at: new Date().toISOString() }).eq('type', tt);
-      else await supabase.from('dev_alert_config').insert({ type: tt, enabled: nv });
-      return i.reply({ content: `✅ ${tt}: ${nv ? '🟢' : '🔴'}`, flags: EPHEMERAL });
-    }
-    if (cid === 'dev_alerts_test') {
-      await sendDevAlert('test', 'Teste', 'Alerta teste.', 'info', { test: true, by: i.user.id });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-
-    if (cid === 'dev_audit_refresh') return i.update(await devPanelAudit());
-    if (cid === 'dev_audit_clear') {
-      await supabase.from('dev_audit').delete().lt('created_at', new Date(Date.now() - 7 * 86400 * 1000).toISOString());
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-
-    if (cid === 'dev_broadcast_compose') {
-      const m = new ModalBuilder().setCustomId('modal_broadcast_compose').setTitle('📢 Criar atualização');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setMaxLength(120).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mudancas').setLabel('O que atualizou').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('imagem').setLabel('Imagem (URL, opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor hex').setStyle(TextInputStyle.Short).setValue('#5865F2').setMaxLength(7).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_broadcast_test') {
-      const m = new ModalBuilder().setCustomId('modal_broadcast_test').setTitle('🧪 Teste');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue('🧪 Teste').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue('Este é um teste.').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mudancas').setLabel('O que atualizou').setStyle(TextInputStyle.Paragraph).setValue('• Item de teste 1\n• Item de teste 2').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('imagem').setLabel('Imagem (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue('#5865F2').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (cid === 'dev_broadcast_history') {
-      const { data } = await supabase.from('manual_broadcasts').select('*').order('created_at', { ascending: false }).limit(15);
-      const e = new EmbedBuilder().setTitle('📋 Histórico').setColor('#00AAFF')
-        .setDescription((data || []).length
-          ? data.map((b, idx) => `**${idx + 1}.** \`#${b.id}\` — **${(b.titulo || '').substring(0, 60)}**\n> 👤 <@${b.enviado_por}>\n> ✅ ${b.enviados || 0} • ❌ ${b.erros || 0}\n> <t:${Math.floor(new Date(b.created_at).getTime() / 1000)}:R>`).join('\n\n')
-          : '*Nenhum.*');
-      return i.update({ embeds: [e], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('dev_broadcast').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary))] });
-    }
-  }
-
-  // ───── BROADCAST CONFIRM ─────
-  if (cid.startsWith('broadcast_confirm:') && isDev) {
-    const parts = cid.split(':');
-    const tempId = parts[1], target = parts[2];
-    const draft = BROADCAST_DRAFTS.get(tempId);
-    if (!draft) return i.update({ content: '❌ Expirado.', embeds: [], components: [] });
-    await i.update({ content: '📢 Enviando...', embeds: [], components: [] });
-    const r = await sendBroadcastNow(draft, target, i.user.id);
-    BROADCAST_DRAFTS.delete(tempId);
-    return i.editReply({ content: `✅\n> ✅ ${r.sucesso}\n> ❌ ${r.falhas}\n> 🌐 ${r.total}` });
-  }
-  if (cid === 'broadcast_cancel') return i.update({ content: '❌', embeds: [], components: [] });
-
-  // ───── FFCFG ─────
-  if (ns === 'ffcfg') {
-    const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
-    if (!isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'back') return i.update(await ffConfigPanel(guild.id));
-    if (action === 'panel') {
-      const tt = rest[0];
-      if (tt === 'canais') return i.update(await ffPanelCanais(guild.id));
-      if (tt === 'cargos') return i.update(await ffPanelCargos(guild.id));
-      if (tt === 'pix') return i.update(await ffPanelPix(guild.id));
-      if (tt === 'apostas') return i.update(await ffPanelApostas(guild.id));
-      if (tt === 'valores') return i.update(await ffPanelValores(guild.id));
-      if (tt === 'mediadores') return i.update(await ffPanelMediadores(guild.id));
-      if (tt === 'automacoes') return i.update(await ffPanelAutomacoes(guild.id));
-      if (tt === 'loja_coins') return i.update(await ffPanelLojaCoins(guild.id));
-      if (tt === 'streamer') return i.update(await ffPanelStreamer(guild.id));
-    }
-    if (action === 'custom_embed') return i.update(await ffPanelCustomEmbed(guild.id));
-    if (action === 'postar_por_canal') {
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:porcanal_pick_canal').setPlaceholder('📁');
-      const textChannels = [...guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).values()].slice(0, 25);
-      for (const ch of textChannels) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('📁').setColor('#f1c40f')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'toggle') {
-      const f = rest[0];
-      const cfg = await ffGetConfig(guild.id);
-      const nv = !cfg?.[f];
-      await ffPatchConfig(guild.id, { [f]: nv });
-      await logConfig(guild, i.user.id, 'TOGGLE_' + f, { value: nv });
-      if (['auto_post_ranking', 'auto_post_blacklist', 'auto_post_regras'].includes(f)) return i.update(await ffPanelAutomacoes(guild.id));
-      if (f === 'taxa_extra_ativo' || f === 'auto_thread' || f === 'require_mediator_confirm') return i.update(await ffPanelApostas(guild.id));
-    }
-    if (action === 'set') {
-      const f = rest[0];
-      if (f === 'pix') {
-        const cfg = await ffGetConfig(guild.id);
-        const m = new ModalBuilder().setCustomId('ffcfg_modal:pix').setTitle('Pix');
-        m.addComponents(
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(cfg?.pix_key || '').setRequired(true)),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(cfg?.pix_name || '').setRequired(true)),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(cfg?.pix_city || '').setRequired(false)),
-        );
-        return i.showModal(m);
+      if (cid === 'mus_loop') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        const q = getQueue(guild.id);
+        q.loopMode = q.loopMode === 'off' ? 'song' : q.loopMode === 'song' ? 'queue' : 'off';
+        return i.reply({ content: `🔁 ${q.loopMode}`, flags: EPHEMERAL });
       }
-      if (f === 'freq_ranking') {
-        const cfg = await ffGetConfig(guild.id);
-        const m = new ModalBuilder().setCustomId('ffcfg_modal:freq').setTitle('Frequência');
+      if (cid === 'mus_vol') {
+        if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
+        const m = new ModalBuilder().setCustomId('modal_mus_vol').setTitle('Vol');
         m.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('v').setLabel('daily/weekly/monthly').setStyle(TextInputStyle.Short).setValue(cfg?.auto_post_frequencia || 'weekly').setRequired(true)
+          new TextInputBuilder().setCustomId('v').setLabel('0-200').setStyle(TextInputStyle.Short).setRequired(true)
         ));
         return i.showModal(m);
       }
-      if (f.endsWith('_channel_id')) {
-        const m = new ModalBuilder().setCustomId(`ffcfg_modal:channel:${f}`).setTitle('Canal');
-        m.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('v').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)
-        ));
-        return i.showModal(m);
-      }
-      if (f.endsWith('_role_id')) {
-        const m = new ModalBuilder().setCustomId(`ffcfg_modal:role:${f}`).setTitle('Cargo');
-        m.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('v').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(true)
-        ));
-        return i.showModal(m);
-      }
-      if (['valor_minimo', 'valor_maximo', 'mediator_fee', 'coin_prize', 'taxa_extra'].includes(f)) {
-        const cfg = await ffGetConfig(guild.id);
-        const m = new ModalBuilder().setCustomId(`ffcfg_modal:number:${f}`).setTitle('Valor');
-        m.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('v').setLabel('Valor').setStyle(TextInputStyle.Short).setValue(String(cfg?.[f] ?? 0)).setRequired(true)
-        ));
-        return i.showModal(m);
-      }
-    }
-    if (action === 'add_valor') {
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:add_valor').setTitle('Valor');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('v').setLabel('Ex: 1.50').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'del_valor') {
-      const cfg = await ffGetConfig(guild.id);
-      const vals = Array.isArray(cfg?.value_options) ? cfg.value_options : [];
-      if (!vals.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:pick_del_valor').setPlaceholder('Remover');
-      for (const v of vals) menu.addOptions({ label: `R$ ${v}`, value: v });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('➖')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-    if (action === 'reset_valores') {
-      await ffPatchConfig(guild.id, { value_options: FF_DEFAULT_VALUES });
-      await logConfig(guild, i.user.id, 'VALUES_RESET', {});
-      return i.update(await ffPanelValores(guild.id));
-    }
-    if (action === 'postar') {
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_pick_format').setPlaceholder('📢 Modalidade');
-      for (const f of FF_FORMATS) menu.addOptions({ label: f.label, value: f.id, emoji: f.emoji });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('📢 Postar').setColor('#f1c40f')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'postar_auto') {
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:postar_auto_pick_channel').setPlaceholder('📁');
-      const textChannels = [...guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me).has(PermissionFlagsBits.SendMessages)).values()].slice(0, 25);
-      for (const ch of textChannels) menu.addOptions({ label: ch.name.slice(0, 90), value: ch.id });
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('⚡').setColor('#f1c40f')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'postar_pix') {
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_pix').setTitle('Postar Pix');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'postar_mediadores') {
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:postar_med').setTitle('Postar');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('cid').setLabel('ID canal').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'remove_all_meds') {
-      await supabase.from('ff_mediator_queue').delete().eq('guild_id', guild.id);
-      return i.reply({ content: '🗑️', flags: EPHEMERAL });
-    }
-    if (action === 'remove_all_admins') {
-      if (!isO && !isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const meds = await ffGetMediatorQueue(guild.id);
-      let n = 0;
-      for (const med of meds) {
-        const m = await guild.members.fetch(med.user_id).catch(() => null);
-        if (!m) continue;
-        if (m.permissions.has(PermissionFlagsBits.Administrator) || m.id === guild.ownerId) {
-          await supabase.from('ff_mediator_queue').delete().eq('id', med.id);
-          n++;
-        }
-      }
-      return i.reply({ content: `🚫 ${n}`, flags: EPHEMERAL });
-    }
-    if (action === 'med_receitas') {
-      const meds = await ffGetMediatorQueue(guild.id);
-      meds.sort((a, b) => Number(b.earnings_total || 0) - Number(a.earnings_total || 0));
-      const e = new EmbedBuilder().setTitle('💰').setColor('#FFD700');
-      for (const m of meds) e.addFields({ name: `<@${m.user_id}>`, value: `R$ ${Number(m.earnings_total || 0).toFixed(2)} • ${m.matches_total || 0}`, inline: true });
-      return i.reply({ embeds: [e], flags: EPHEMERAL });
-    }
-    if (action === 'manutencao') {
-      const cfg = await ffGetConfig(guild.id);
-      const at = !!cfg?.maintenance;
-      return i.update({
-        embeds: [new EmbedBuilder().setTitle('🔧').setColor(at ? '#ff5555' : '#22c55e')
-          .setDescription(at ? '⚠️ ATIVA' : '🟢 DESATIVADA')
-          .addFields({ name: 'Motivo', value: cfg?.maintenance_reason || '*—*' })],
-        components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('ffcfg:maint_toggle').setLabel(at ? 'Desativar' : 'Ativar').setEmoji(at ? '🟢' : '🔴').setStyle(at ? ButtonStyle.Success : ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('ffcfg:maint_reason').setLabel('Motivo').setEmoji('📝').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('ffcfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-        )],
-      });
-    }
-    if (action === 'maint_toggle') {
-      const cfg = await ffGetConfig(guild.id);
-      const nv = !cfg?.maintenance;
-      await ffPatchConfig(guild.id, { maintenance: nv });
-      await logConfig(guild, i.user.id, nv ? 'MAINT_ON' : 'MAINT_OFF', {});
-      return i.reply({ content: nv ? '🔴' : '🟢', flags: EPHEMERAL });
-    }
-    if (action === 'maint_reason') {
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:maint_reason').setTitle('Motivo');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('r').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'coin_add') {
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:coin_add').setTitle('Add item');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('price').setLabel('Preço').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎁').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Desc').setStyle(TextInputStyle.Paragraph).setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID cargo').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'coin_edit') {
-      const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id);
-      if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:coin_edit_pick').setPlaceholder('Editar');
-      for (const x of items.slice(0, 25)) menu.addOptions({ label: `${x.emoji || '🎁'} ${x.name} — ${x.price}`.slice(0, 90), value: String(x.id) });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('✏️')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-    if (action === 'coin_toggle') {
-      const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id);
-      if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:coin_toggle_pick').setPlaceholder('Toggle');
-      for (const x of items.slice(0, 25)) menu.addOptions({ label: `${x.emoji || '🎁'} ${x.name} ${x.active ? '✅' : '❌'}`.slice(0, 90), value: String(x.id) });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('🔁')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-    if (action === 'coin_del') {
-      const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id);
-      if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('ffcfg:coin_del_pick').setPlaceholder('Remover');
-      for (const x of items.slice(0, 25)) menu.addOptions({ label: `${x.emoji || '🎁'} ${x.name}`.slice(0, 90), value: String(x.id) });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('🗑️')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-    if (action === 'coin_defaults') {
-      let added = 0;
-      for (const d of FF_COIN_DEFAULTS) {
-        const r = guild.roles.cache.find(x => x.name === d.role_name);
-        if (!r) continue;
-        const { data: ex } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id).eq('name', d.name).maybeSingle();
-        if (ex) continue;
-        try {
-          await supabase.from('ff_coin_shop').insert({ guild_id: guild.id, name: d.name, emoji: d.emoji, price: d.price, type: 'role', role_id: r.id, description: `${d.price} coins` });
-          added++;
-        } catch {}
-      }
-      await logConfig(guild, i.user.id, 'COIN_DEFAULTS', { added });
-      return i.reply({ content: `✅ ${added}`, flags: EPHEMERAL });
-    }
-    if (action === 'coin_post') {
-      const { data: items } = await supabase.from('ff_coin_shop').select('*').eq('guild_id', guild.id).eq('active', true).order('price');
-      if (!items?.length) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const e = new EmbedBuilder().setTitle('🪙').setColor('#FFD700').setDescription('Compre cargos!').setTimestamp();
-      for (const x of items) e.addFields({ name: `${x.emoji || '🎁'} ${x.name}`, value: `💰 **${x.price}**`, inline: true });
-      await channel.send({ embeds: [e], components: await buildCoinShopComponents(guild.id) });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (action === 'coin_hist') {
-      const { data } = await supabase.from('ff_coin_purchases').select('*').eq('guild_id', guild.id).order('id', { ascending: false }).limit(20);
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('📋').setDescription(data?.length ? data.map(p => `• <@${p.user_id}> — **${p.item_name}** (${p.price}🪙)`).join('\n') : 'Sem compras.')], flags: EPHEMERAL });
-    }
-    if (action === 'coin_manage_users') {
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:coin_manage').setTitle('Gerenciar Coins');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID user').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Qtd (- para retirar)').setStyle(TextInputStyle.Short).setValue('100').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setValue('Ajuste').setRequired(true)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'mp_config') {
-      const cfg = await ffGetConfig(guild.id);
-      const m = new ModalBuilder().setCustomId('ffcfg_modal:mp_token').setTitle('MP');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_token').setLabel('Access Token').setStyle(TextInputStyle.Short).setPlaceholder('APP_USR-...').setValue(cfg?.mp_access_token || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('mp_public_key').setLabel('Public Key').setStyle(TextInputStyle.Short).setValue(cfg?.mp_public_key || '').setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'mp_test') {
-      await i.deferReply({ flags: EPHEMERAL });
-      const cfg = await ffGetConfig(guild.id);
-      if (!cfg?.mp_access_token) return i.editReply({ content: '❌' });
-      const test = await criarPixMercadoPago(0.01, `T${Date.now()}`, 'Teste', cfg.mp_access_token);
-      if (test?.ok) return i.editReply({ content: `✅ \`${test.payment_id}\`` });
-      return i.editReply({ content: `❌ ${test?.error || 'erro'}` });
-    }
-    if (action === 'mp_remove') {
-      await setFFMPToken(guild.id, null, null);
-      return i.update(await ffPanelPix(guild.id));
-    }
-  }
 
-  // ───── FFPIX ─────
-  if (ns === 'ffpix') {
-    if (action === 'noop') return i.deferUpdate();
-    const cfg = await ffGetConfig(guild.id);
-    const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
-    const hasMed = cfg?.mediator_role_id && i.member.roles.cache.has(cfg.mediator_role_id);
-    const hasOlh = cfg?.olhinho_role_id && i.member.roles.cache.has(cfg.olhinho_role_id);
-    if (!isO && !isS && !hasMed && !hasOlh) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'configurar') {
-      const m = new ModalBuilder().setCustomId('ffpix_modal:set').setTitle(cfg?.pix_key ? 'Editar Pix' : 'Configurar Pix');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(cfg?.pix_key || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(cfg?.pix_name || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(cfg?.pix_city || '').setRequired(false)),
-      );
-      return i.showModal(m);
+      // ───── PARTICIPAR SORTEIO ─────
+      if (cid === 'btn_participar_sorteio') {
+        const { data: g } = await supabase.from('giveaways').select('*').eq('message_id', i.message.id).maybeSingle();
+        if (!g || g.ended) return i.reply({ content: '❌ Sorteio encerrado.', flags: EPHEMERAL });
+        let parts = [];
+        try { parts = JSON.parse(g.participants || '[]'); } catch {}
+        if (parts.includes(i.user.id)) return i.reply({ content: '⚠️ Você já participa.', flags: EPHEMERAL });
+        parts.push(i.user.id);
+        await supabase.from('giveaways').update({ participants: JSON.stringify(parts) }).eq('id', g.id);
+        return i.reply({ content: `🎉 Participando! Total: **${parts.length}**`, flags: EPHEMERAL });
+      }
     }
-    if (action === 'ver') {
-      if (!cfg?.pix_key) return i.reply({ content: '⚠️', flags: EPHEMERAL });
-      return i.reply({
-        content: `💳 **Pix:**\n\`\`\`\n${cfg.pix_key}\n\`\`\`\n> 👤 **${cfg.pix_name || '—'}**\n> 🏙️ **${cfg.pix_city || '—'}**`,
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'remover') {
-      await ffPatchConfig(guild.id, { pix_key: null, pix_name: null, pix_city: null });
-      await ffUpdatePixEmbed(guild).catch(() => {});
-      return i.reply({ content: '🗑️', flags: EPHEMERAL });
-    }
-  }
 
-  // ───── FFBET ─────
-  if (ns === 'ffbet') {
-    if (await blockIfMaintenance(i)) return;
-    const betId = rest[0];
-    try {
-      const bet = await ffGetBet(betId);
-      if (!bet || !bet.active) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (action === 'sair') {
-        const gi = parseJson(bet.gelo_infinito_players).filter(p => p.userId !== i.user.id);
-        const gn = parseJson(bet.gelo_normal_players).filter(p => p.userId !== i.user.id);
-        await ffPatchBet(betId, { gelo_infinito_players: JSON.stringify(gi), gelo_normal_players: JSON.stringify(gn) });
-        await ffUpdateBetMessage(guild, await ffGetBet(betId)).catch(() => {});
-        return i.reply({ content: '🚪', flags: EPHEMERAL });
-      }
-      if (action === 'gi' || action === 'gn') {
-        let gi = parseJson(bet.gelo_infinito_players), gn = parseJson(bet.gelo_normal_players);
-        if (gi.some(p => p.userId === i.user.id) || gn.some(p => p.userId === i.user.id)) return i.reply({ content: '⚠️ Já está.', flags: EPHEMERAL });
-        const target = action === 'gi' ? gi : gn;
-        if (target.length >= FF_PULL_SIZE) return i.reply({ content: '❌', flags: EPHEMERAL });
-        target.push({ userId: i.user.id, at: new Date().toISOString() });
-        await ffPatchBet(betId, { gelo_infinito_players: JSON.stringify(gi), gelo_normal_players: JSON.stringify(gn) });
-        await i.reply({ content: `✅ (${target.length}/2)`, flags: EPHEMERAL });
-        await ffUpdateBetMessage(guild, await ffGetBet(betId)).catch(() => {});
-        if (target.length >= FF_PULL_SIZE) {
-          const duo = [target[0].userId, target[1].userId];
-          if (action === 'gi') gi = []; else gn = [];
-          await ffPatchBet(betId, { gelo_infinito_players: JSON.stringify(gi), gelo_normal_players: JSON.stringify(gn) });
-          await ffUpdateBetMessage(guild, await ffGetBet(betId)).catch(() => {});
-          await ffCriarThreadAposta(guild, duo, bet).catch(e => console.error(e.message));
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      if (!i.replied && !i.deferred) await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }).catch(() => {});
-    }
-    return;
-  }
-
-  // ───── FFM ─────
-  if (ns === 'ffm') {
-    const matchId = rest[0], m = await ffGetMatch(matchId);
-    if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-    const players = parseJson(m.players);
-    const isP = players.includes(i.user.id), isS = await isAdmin(i.user, guild);
-    const isMed = m.mediator_id ? i.user.id === m.mediator_id : false;
-
-    if (action === 'confirmar') {
-      if (!isP) return i.reply({ content: '❌', flags: EPHEMERAL });
-      let confs = parseJson(m.confirmations);
-      if (confs.includes(i.user.id)) return i.reply({ content: '⚠️', flags: EPHEMERAL });
-      confs.push(i.user.id);
-      await ffPatchMatch(matchId, { confirmations: JSON.stringify(confs) });
-      if (confs.length < players.length) {
-        const falta = players.filter(p => !confs.includes(p));
-        return i.reply({ content: `✅ Falta: ${falta.map(p => `<@${p}>`).join(', ')}`, flags: EPHEMERAL });
-      }
-      const cfg = await ffGetConfig(guild.id);
-      const payPP = ffCalcPlayerPay(m.value, cfg?.mediator_fee, cfg?.taxa_extra, cfg?.taxa_extra_ativo);
-      const hasPix = !!(cfg?.pix_key || cfg?.mp_access_token);
-      await i.channel.setName(ffThreadName('confirmed', m.value, players, matchId)).catch(() => {});
-      try {
-        const msgs = await i.channel.messages.fetch({ limit: 20 });
-        for (const msg of msgs.values()) if (msg.author.id === client.user.id && msg.components.length) await msg.delete().catch(() => {});
-      } catch {}
-      const e = new EmbedBuilder().setTitle('💰 Pagamento').setColor(hasPix ? '#22c55e' : '#ff5555')
-        .setDescription(hasPix ? 'Regras confirmadas!' : '⚠️ Sem PIX')
-        .addFields(
-          { name: '🎮', value: players.map(p => `<@${p}>`).join(' 🆚 ') },
-          { name: '💵', value: `R$ ${Number(m.value).toFixed(2)}`, inline: true },
-          { name: '💵 Taxa', value: `R$ ${Number(cfg?.mediator_fee || 0).toFixed(2)}`, inline: true },
-          { name: '💰 Total', value: `**R$ ${payPP.toFixed(2)}**`, inline: true },
-        ).setTimestamp();
-      const row = new ActionRowBuilder();
-      if (!hasPix) row.addComponents(new ButtonBuilder().setCustomId(`ffm:pix_config:${matchId}`).setLabel('Config PIX').setEmoji('✏️').setStyle(ButtonStyle.Primary));
-      else row.addComponents(
-        new ButtonBuilder().setCustomId(`ffm:pix_show:${matchId}`).setLabel('Ver PIX').setEmoji('💳').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`ffm:liberar:${matchId}`).setLabel('Liberar PIX').setEmoji('🔓').setStyle(ButtonStyle.Success),
-      );
-      await ffPatchMatch(matchId, { status: 'confirmed', mediator_fee: cfg?.mediator_fee, pay_per_player: payPP });
-      await i.channel.send({ embeds: [e], components: [row] });
-      return i.reply({ content: '✅', flags: EPHEMERAL });
-    }
-    if (action === 'encerrar') {
-      if (!isP && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ffPatchMatch(matchId, { status: 'cancelled', finished_at: new Date().toISOString() });
-      if (m.mediator_id) await supabase.from('ff_mediator_queue').update({ status: 'waiting', current_match_id: null }).eq('guild_id', guild.id).eq('user_id', m.mediator_id);
-      await i.channel.setName('❌').catch(() => {});
-      await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Cancelada').setColor('#ff5555')], components: [] });
-      setTimeout(() => i.channel.setArchived(true).catch(() => {}), 10000);
-      return;
-    }
-    if (action === 'pix_config') {
-      if (!isMed && !isDev && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const cfg = await ffGetConfig(guild.id);
-      const m2 = new ModalBuilder().setCustomId(`ffm_modal:pix:${matchId}`).setTitle('Pix');
-      m2.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('Chave').setStyle(TextInputStyle.Short).setValue(cfg?.pix_key || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(cfg?.pix_name || '').setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('city').setLabel('Cidade').setStyle(TextInputStyle.Short).setValue(cfg?.pix_city || '').setRequired(false)),
-      );
-      return i.showModal(m2);
-    }
-    if (action === 'pix_show') {
-      const cfg = await ffGetConfig(guild.id);
-      if (!cfg?.pix_key) return i.reply({ content: '❌', flags: EPHEMERAL });
-      return i.reply({ content: `💳 **PIX:**\n\`\`\`\n${cfg.pix_key}\n\`\`\`\n> 👤 ${cfg.pix_name || '—'}`, flags: EPHEMERAL });
-    }
-    if (action === 'liberar') {
-      const cfg = await ffGetConfig(guild.id);
-      if (!isMed && !isS && !isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (!cfg?.pix_key && !cfg?.mp_access_token) return i.reply({ content: '❌', flags: EPHEMERAL });
-      let feeFinal = cfg?.mediator_fee;
-      try { const noFee = await getGlobalMultiplier('no_fee'); if (noFee === 0) feeFinal = 0; } catch {}
-      const payPP = ffCalcPlayerPay(m.value, feeFinal, cfg?.taxa_extra, cfg?.taxa_extra_ativo);
-      await ffPatchMatch(matchId, { status: 'pix_released' });
-      await i.channel.setName(ffThreadName('paid', m.value, players, matchId)).catch(() => {});
-      if (cfg.mp_access_token) {
-        try {
-          const pag = await criarPixMercadoPago(payPP, `M${matchId}`, `Aposta ${matchId}`, cfg.mp_access_token);
-          if (pag?.ok) {
-            const e = new EmbedBuilder().setTitle('🔓 PIX MP').setColor('#22c55e')
-              .setDescription(`**💰 R$ ${payPP.toFixed(2)}**`)
-              .addFields(
-                { name: '🔗', value: `[Pagar](${pag.ticket_url})` },
-                { name: '🔑', value: `\`\`\`${pag.payload}\`\`\`` },
-                { name: '🧑', value: `<@${i.user.id}>`, inline: true },
-              )
-              .setFooter({ text: 'Após pagar, confirme' });
-            const row = new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setLabel('Pagar no MP').setEmoji('🔗').setStyle(ButtonStyle.Link).setURL(pag.ticket_url),
-              new ButtonBuilder().setCustomId(`ffm:confirmar_pag:${matchId}`).setLabel('Confirmar').setEmoji('✅').setStyle(ButtonStyle.Success),
-            );
-            await ffLog(guild, 'pix', 'PAYMENT_RELEASED_MP', i.user.id, { matchId, payPP });
-            return i.update({ embeds: [e], components: [row] });
-          }
-        } catch (e) { console.error(e); }
-      }
-      const e = new EmbedBuilder().setTitle('🔓 PIX').setColor('#22c55e')
-        .setDescription(`**💰 R$ ${payPP.toFixed(2)}**`)
-        .addFields(
-          { name: '🔑', value: `\`\`\`${cfg.pix_key}\`\`\`` },
-          { name: '👤', value: `**${cfg.pix_name || '—'}**` },
-          { name: '🧑', value: `<@${i.user.id}>`, inline: true },
-        );
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`ffm:confirmar_pag:${matchId}`).setLabel('Confirmar').setEmoji('✅').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`ffm:cancelar:${matchId}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
-      );
-      await ffLog(guild, 'pix', 'PAYMENT_RELEASED', i.user.id, { matchId, payPP });
-      return i.update({ embeds: [e], components: [row] });
-    }
-    if (action === 'confirmar_pag') {
-      const canConfirm = isMed || isS || isDev || !m.mediator_id;
-      if (!canConfirm) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await ffPatchMatch(matchId, { status: 'playing' });
-      await i.channel.setName(ffThreadName('playing', m.value, players, matchId)).catch(() => {});
-      const e = new EmbedBuilder().setTitle('🎮 Em partida').setColor('#5865F2')
-        .addFields({ name: 'Jogadores', value: players.map(p => `<@${p}>`).join(' 🆚 ') });
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`ffm:escolher_venc:${matchId}`).setLabel('Vencedor').setEmoji('🏆').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`ffm:enviar_sala:${matchId}`).setLabel('Enviar Sala').setEmoji('🎮').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`ffm:cancelar:${matchId}`).setLabel('Cancelar').setEmoji('❌').setStyle(ButtonStyle.Danger),
-      );
-      return i.update({ embeds: [e], components: [row] });
-    }
-    if (action === 'escolher_venc') {
-      if (!isMed && !isS && !isDev && m.mediator_id) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId(`ffm:pick_winner:${matchId}`).setPlaceholder('Vencedor');
-      for (const p of players) {
-        const u = await client.users.fetch(p).catch(() => null);
-        menu.addOptions({ label: u?.username || p, value: p, emoji: '🏆' });
-      }
-      return i.reply({
-        embeds: [new EmbedBuilder().setTitle('🏆')],
-        components: [new ActionRowBuilder().addComponents(menu)],
-        flags: EPHEMERAL,
-      });
-    }
-    if (action === 'enviar_sala') {
-      if (!isMed && !isDev && m.mediator_id) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const mo = new ModalBuilder().setCustomId(`ffm_modal:sala:${matchId}`).setTitle('Sala');
-      mo.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('room_id').setLabel('ID').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('room_pass').setLabel('Senha').setStyle(TextInputStyle.Short).setRequired(true)),
-      );
-      return i.showModal(mo);
-    }
-    if (action === 'cancelar') {
-      if (!isMed && !isDev && !isS && m.mediator_id) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const e = new EmbedBuilder().setTitle('⚠️ Cancelar?').setColor('#ff5555');
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`ffm:cancelar_confirm:${matchId}`).setLabel('Sim').setEmoji('✅').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`ffm:cancelar_abort:${matchId}`).setLabel('Não').setEmoji('❌').setStyle(ButtonStyle.Secondary),
-      );
-      return i.reply({ embeds: [e], components: [row], flags: EPHEMERAL });
-    }
-    if (action === 'cancelar_confirm') {
-      await ffPatchMatch(matchId, { status: 'cancelled', finished_at: new Date().toISOString() });
-      if (m.mediator_id) await supabase.from('ff_mediator_queue').update({ status: 'waiting', current_match_id: null }).eq('guild_id', guild.id).eq('user_id', m.mediator_id);
-      await i.channel.setName('❌').catch(() => {});
-      await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Cancelada').setColor('#ff5555')], components: [] });
-      setTimeout(() => i.channel.setArchived(true).catch(() => {}), 10000);
-      return;
-    }
-    if (action === 'cancelar_abort') return i.update({ content: '✅', embeds: [], components: [] });
-    if (action === 'chamar_analista') {
-      const cfgChk = await ffGetConfig(guild.id);
-      const isMedChk = cfgChk?.mediator_role_id && i.member.roles.cache.has(cfgChk.mediator_role_id);
-      const isOlhChk = cfgChk?.olhinho_role_id && i.member.roles.cache.has(cfgChk.olhinho_role_id);
-      if (!isMedChk && !isOlhChk && !isS && !isDev) return i.reply({ content: '❌', flags: EPHEMERAL });
-      const next = await ffAnalystNext(guild.id);
-      if (next) {
-        await supabase.from('ff_analyst_queue').update({ status: 'busy', current_match_id: m.id }).eq('id', next.id);
-        await logAnalista(guild, next.user_id, 'CHAMADO', { match_id: m.id });
-      }
-      const temAnalista = !!next;
-      const e = new EmbedBuilder().setTitle('🔎 Análise').setColor(temAnalista ? '#22c55e' : '#FF5555')
-        .setDescription(temAnalista ? `**Analista:** <@${next.user_id}>\n\nEnvie: replay, print, motivo.` : '⚠️ Nenhum analista.')
-        .setTimestamp();
-      if (temAnalista) {
-        await i.channel.members.add(next.user_id).catch(() => {});
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`ffana:concluir:${m.id}`).setLabel('Concluída').setEmoji('✅').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`ffana:wo:${m.id}`).setLabel('W.O.').setEmoji('⚠️').setStyle(ButtonStyle.Danger),
-        );
-        await i.channel.send({ content: `<@${next.user_id}>`, embeds: [e], components: [row] });
-      } else await i.channel.send({ embeds: [e] });
-      await ffLog(guild, 'moderator', 'ANALYST_CALLED', i.user.id, { match_id: m.id, analyst: next?.user_id || null });
-      return i.reply({ content: temAnalista ? '✅' : '⚠️', flags: EPHEMERAL });
-    }
-  }
-
-  // ───── FFMED ─────
-  if (ns === 'ffmed') {
-    if (await blockIfMaintenance(i)) return;
-    const cfg = await ffGetConfig(guild.id);
-    const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
-    const hasMed = cfg?.mediator_role_id && i.member.roles.cache.has(cfg.mediator_role_id);
-    if (!hasMed && !isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'entrar') {
-      const ok = await ffMediatorJoin(guild.id, i.user.id);
-      if (!ok) return i.reply({ content: '⚠️', flags: EPHEMERAL });
-      await logMediador(guild, i.user.id, 'ENTROU', {});
-      await i.reply({ content: '✅', flags: EPHEMERAL });
-      await i.message.edit(await ffBuildMediatorPanel(guild.id)).catch(() => {});
-      return;
-    }
-    if (action === 'sair') {
-      const ok = await ffMediatorLeave(guild.id, i.user.id);
-      if (!ok) return i.reply({ content: '⚠️ Em partida.', flags: EPHEMERAL });
-      await logMediador(guild, i.user.id, 'SAIU', {});
-      await i.reply({ content: '🚪', flags: EPHEMERAL });
-      await i.message.edit(await ffBuildMediatorPanel(guild.id)).catch(() => {});
-      return;
-    }
-    if (action === 'receita') {
-      const { data: all } = await supabase.from('ff_mediator_earnings').select('*').eq('guild_id', guild.id).eq('mediator_id', i.user.id);
-      const now = Date.now(), day = 86400000;
-      const sum = (a) => a.reduce((x, y) => x + Number(y.amount || 0), 0);
-      const hoje = (all || []).filter(e => now - new Date(e.created_at).getTime() < day);
-      const sem = (all || []).filter(e => now - new Date(e.created_at).getTime() < 7 * day);
-      const mes = (all || []).filter(e => now - new Date(e.created_at).getTime() < 30 * day);
-      const e = new EmbedBuilder().setTitle('💰 Minha Receita').setColor('#22c55e').setThumbnail(i.user.displayAvatarURL())
-        .addFields(
-          { name: '📅 Hoje', value: `R$ ${sum(hoje).toFixed(2)} • ${hoje.length}` },
-          { name: '📆 Semana', value: `R$ ${sum(sem).toFixed(2)} • ${sem.length}` },
-          { name: '🗓️ Mês', value: `R$ ${sum(mes).toFixed(2)} • ${mes.length}` },
-          { name: '💰 Total', value: `R$ ${sum(all).toFixed(2)} • ${(all || []).length}` },
-        ).setTimestamp();
-      return i.reply({ embeds: [e], flags: EPHEMERAL });
-    }
-  }
-
-  // ───── FFANA ─────
-  if (ns === 'ffana') {
-    try {
-      if (await blockIfMaintenance(i)) return;
-      const cfg = await ffGetConfig(guild.id);
-      const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
-      const hasAna = cfg?.analyst_role_id && i.member.roles.cache.has(cfg.analyst_role_id);
-      const hasOlh = cfg?.olhinho_role_id && i.member.roles.cache.has(cfg.olhinho_role_id);
-      if (!hasAna && !hasOlh && !isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-      if (action === 'entrar') {
-        const ok = await ffAnalystJoin(guild.id, i.user.id);
-        if (!ok) return i.reply({ content: '⚠️', flags: EPHEMERAL });
-        await logAnalista(guild, i.user.id, 'ENTROU', {});
-        await i.reply({ content: '✅', flags: EPHEMERAL });
-        await i.message.edit(await ffBuildAnalystPanel(guild.id)).catch(() => {});
-        return;
-      }
-      if (action === 'sair') {
-        const ok = await ffAnalystLeave(guild.id, i.user.id);
-        if (!ok) return i.reply({ content: '⚠️', flags: EPHEMERAL });
-        await logAnalista(guild, i.user.id, 'SAIU', {});
-        await i.reply({ content: '🚪', flags: EPHEMERAL });
-        await i.message.edit(await ffBuildAnalystPanel(guild.id)).catch(() => {});
-        return;
-      }
-      if (action === 'meu_historico') {
-        const { data: a } = await supabase.from('ff_analyst_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-        const total = a?.analyses_total || 0;
-        const e = new EmbedBuilder().setTitle('📊 Minhas Análises').setColor('#00AAFF').setThumbnail(i.user.displayAvatarURL())
-          .addFields(
-            { name: '🔎', value: `${total}`, inline: true },
-            { name: '🟢', value: a?.status === 'busy' ? 'Em análise' : a ? 'Disponível' : 'Fora', inline: true },
-          );
-        return i.reply({ embeds: [e], flags: EPHEMERAL });
-      }
-      if (action === 'concluir') {
-        const matchId = rest[0];
-        await ffAnalystRelease(guild.id, i.user.id, true);
-        await logAnalista(guild, i.user.id, 'CONCLUIU', { match_id: matchId });
-        return i.update({ content: '✅', embeds: [], components: [] });
-      }
-      if (action === 'wo') {
-        const matchId = rest[0];
-        await ffAnalystRelease(guild.id, i.user.id, true);
-        await logAnalista(guild, i.user.id, 'APLICOU_WO', { match_id: matchId });
-        return i.update({ content: '⚠️', embeds: [], components: [] });
-      }
-    } catch (errAna) {
-      console.error(errAna);
-      if (!i.replied && !i.deferred) return i.reply({ content: `❌ ${errAna.message}`, flags: EPHEMERAL }).catch(() => {});
-    }
-  }
-
-  // ───── FFSTR ─────
-  if (ns === 'ffstr') {
-    if (await blockIfMaintenance(i)) return;
-
-    if (action === 'entrar') {
-      const ok = await ffStreamerJoin(guild.id, i.user.id);
-      await logImportant('STREAMER', '🎥 Streamer entrou', { user: i.user.id, guild: guild.id, severity: 'info' }).catch(() => {});
-      await i.reply({
-        content: ok ? '✅ Você entrou na lista!\n> Clique em **🔴 Definir Live** pra aparecer ao vivo.' : '✅ Você já estava na lista.',
-        flags: EPHEMERAL,
-      });
-      await ffUpdateStreamerMessage(guild).catch(() => {});
-      return;
-    }
-    if (action === 'sair') {
-      await ffStreamerLeave(guild.id, i.user.id);
-      await i.reply({ content: '🚪', flags: EPHEMERAL });
-      await ffUpdateStreamerMessage(guild).catch(() => {});
-      return;
-    }
-    if (action === 'live_set') {
-      const m = new ModalBuilder().setCustomId('modal_ffstr_live').setTitle('Definir Live');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('Link da live').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'set_mediator') {
-      const { data: ex } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-      if (!ex) return i.reply({ content: '❌ Entre na lista primeiro.', flags: EPHEMERAL });
-      const m = new ModalBuilder().setCustomId('modal_ffstr_mediator').setTitle('Designar mediador');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('mediator_id').setLabel('ID do mediador').setStyle(TextInputStyle.Short).setPlaceholder('Ex: 123456789012345678').setValue(ex.mediator_id || '').setRequired(true).setMaxLength(20)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'my_info') {
-      const { data: info } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-      if (!info) return i.reply({ content: '❌ Você não está na lista.', flags: EPHEMERAL });
-      const { data: meds } = await supabase.from('ff_streamer_mediations').select('*').eq('guild_id', guild.id).eq('streamer_id', i.user.id).order('started_at', { ascending: false }).limit(10);
-      const total = (meds || []).length, ended = (meds || []).filter(m => m.status === 'ended').length;
-      const statusEmoji = { offline: '⚪', live: '🔴' }[info.status] || '⚪';
-      const medStatusEmoji = { pending: '🟡', accepted: '🟢', declined: '🔴' }[info.mediator_status] || '⚪';
-      const e = new EmbedBuilder().setTitle('🎥 Meus dados como streamer').setColor('#9146FF').setThumbnail(i.user.displayAvatarURL())
-        .addFields(
-          { name: '📌', value: `${statusEmoji} ${info.status === 'live' ? 'Ao vivo' : 'Offline'}`, inline: true },
-          { name: '🛡️', value: info.mediator_id ? `<@${info.mediator_id}> ${medStatusEmoji}` : '*não designado*', inline: true },
-          { name: '📊 Lives', value: `**${total}**`, inline: true },
-          { name: '✅ Concluídas', value: `**${ended}**`, inline: true },
-        ).setTimestamp();
-      if (meds?.length) {
-        const lines = meds.slice(0, 5).map(m => `> ${m.status === 'active' ? '🟢' : '⚪'} <@${m.mediator_id}> <t:${Math.floor(new Date(m.started_at).getTime() / 1000)}:R>`);
-        e.addFields({ name: '📋 Recentes', value: lines.join('\n') });
-      }
-      const rows = [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ffstr:remove_mediator').setLabel('Remover mediador').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!info.mediator_id),
-      )];
-      return i.reply({ embeds: [e], components: rows, flags: EPHEMERAL });
-    }
-    if (action === 'remove_mediator') {
-      await supabase.from('ff_streamer_queue').update({ mediator_id: null, mediator_status: null, mediator_joined_at: null }).eq('guild_id', guild.id).eq('user_id', i.user.id).catch(() => {});
-      await i.reply({ content: '✅ Mediador removido.', flags: EPHEMERAL });
-      await ffUpdateStreamerMessage(guild).catch(() => {});
-      return;
-    }
-    if (action === 'accept') {
-      const [, targetGid, targetUid] = rest;
-      if (targetGid !== guild.id) return;
-      const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', targetUid).maybeSingle();
-      if (!st || st.mediator_id !== i.user.id) return i.reply({ content: '❌ Você não é o mediador designado.', flags: EPHEMERAL });
-      await supabase.from('ff_streamer_queue').update({ mediator_status: 'accepted' }).eq('guild_id', guild.id).eq('user_id', targetUid);
-      await logImportant('STREAMER', '🛡️ Mediador aceitou', { user: i.user.id, guild: guild.id, severity: 'success', description: `Mediador aceitou mediar live de <@${targetUid}>` }).catch(() => {});
-      try { const u = await client.users.fetch(targetUid).catch(() => null); if (u) await u.send(`✅ **<@${i.user.id}>** aceitou mediar sua live!`).catch(() => {}); } catch {}
-      await i.update({ embeds: [new EmbedBuilder().setTitle('✅ Aceita').setColor('#22c55e').setDescription(`Você está mediando a live de <@${targetUid}>.`)], components: [] });
-      await ffUpdateStreamerMessage(guild).catch(() => {});
-      return;
-    }
-    if (action === 'decline') {
-      const [, targetGid, targetUid] = rest;
-      if (targetGid !== guild.id) return;
-      const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', targetUid).maybeSingle();
-      if (!st || st.mediator_id !== i.user.id) return i.reply({ content: '❌', flags: EPHEMERAL });
-      await supabase.from('ff_streamer_queue').update({ mediator_status: 'declined' }).eq('guild_id', guild.id).eq('user_id', targetUid);
-      try { const u = await client.users.fetch(targetUid).catch(() => null); if (u) await u.send(`⚠️ **<@${i.user.id}>** recusou mediar sua live.`).catch(() => {}); } catch {}
-      await logImportant('STREAMER', '🛡️ Mediador recusou', { user: i.user.id, guild: guild.id, severity: 'warning', description: `Mediador <@${i.user.id}> recusou live de <@${targetUid}>` }).catch(() => {});
-      await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Recusada').setColor('#ff5555')], components: [] });
-      return;
-    }
-    if (action === 'config') {
-      const cfg = await ffGetConfig(guild.id);
-      const c = cfg?.custom_streamer_embed || {};
-      const m = new ModalBuilder().setCustomId('modal_ffstr_config').setTitle('Configurar painel streamer');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue(c.title || '🎥 Streamers ao Vivo').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(c.descricao || '').setRequired(false).setMaxLength(500)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(c.color || '#9146FF').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(c.footer || '').setRequired(false)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('regras').setLabel('Regras').setStyle(TextInputStyle.Paragraph).setValue(c.regras || '').setRequired(false).setMaxLength(500)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'preview') {
-      const panel = await ffBuildStreamerPanel(guild.id);
-      return i.reply({ ...panel, flags: EPHEMERAL });
-    }
-    if (action === 'reset') {
-      await ffPatchConfig(guild.id, { custom_streamer_embed: {} });
-      return i.reply({ content: '✅ Resetado.', flags: EPHEMERAL });
-    }
-    if (action === 'post' || action === 'update') {
-      const cfg = await ffGetConfig(guild.id);
-      const chId = cfg?.streamer_channel_id || channel.id;
-      await ffPostStreamerPanel(guild, chId);
-      return i.reply({ content: `✅ Em <#${chId}>`, flags: EPHEMERAL });
-    }
-  }
-
-  // ───── FFBL ─────
-  if (ns === 'ffbl') {
-    if (await blockIfMaintenance(i)) return;
-    const cfg = await ffGetConfig(guild.id);
-    const isO = i.user.id === guild.ownerId, isS = await isAdmin(i.user, guild);
-    const hasAna = cfg?.analyst_role_id && i.member.roles.cache.has(cfg.analyst_role_id);
-    const hasMed = cfg?.mediator_role_id && i.member.roles.cache.has(cfg.mediator_role_id);
-    if (!hasAna && !hasMed && !isO && !isS) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (action === 'list') return i.reply(await ffBuildBlacklistEmbed(guild.id));
-    if (action === 'refresh') return i.update(await ffBuildBlacklistEmbed(guild.id));
-    if (action === 'check') {
-      const m = new ModalBuilder().setCustomId('ffbl_modal:check').setTitle('Verificar BL');
-      m.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('query').setLabel('Discord ID ou FF ID').setStyle(TextInputStyle.Short).setRequired(true)
-      ));
-      return i.showModal(m);
-    }
-    if (action === 'add') {
-      const m = new ModalBuilder().setCustomId('ffbl_modal:add').setTitle('Add BL');
-      m.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('discord_id').setLabel('Discord ID').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ff_id').setLabel('FF ID').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Motivo').setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('evidence').setLabel('Provas (opc)').setStyle(TextInputStyle.Short).setRequired(false)),
-      );
-      return i.showModal(m);
-    }
-    if (action === 'remove') {
-      const { data } = await supabase.from('ff_blacklist').select('*').eq('guild_id', guild.id).order('created_at', { ascending: false });
-      if (!data?.length) return i.reply({ content: '📋', flags: EPHEMERAL });
-      const menu = new StringSelectMenuBuilder().setCustomId('ffbl:remove_pick').setPlaceholder('Remover');
-      for (const b of data.slice(0, 25)) menu.addOptions({ label: `<@${b.discord_id || b.user_id}> • FF: ${b.ff_id || '—'}`.slice(0, 90), value: String(b.id) });
-      return i.reply({ embeds: [new EmbedBuilder().setTitle('➖')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
-    }
-  }
-
-  // ───── COINSHOP ─────
-  if (ns === 'coinshop') {
-    if (action === 'cancel') return i.update({ content: '❌', embeds: [], components: [] });
-    if (action === 'saldo') {
-      const { data: p } = await supabase.from('ff_players').select('coins, wins, losses').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-      const { count: compras } = await supabase.from('ff_coin_purchases').select('*', { count: 'exact', head: true }).eq('guild_id', guild.id).eq('user_id', i.user.id);
-      const e = new EmbedBuilder().setTitle('💰 Meu Saldo').setColor('#FFD700').setThumbnail(i.user.displayAvatarURL())
-        .addFields(
-          { name: '🪙', value: `**${Number(p?.coins || 0)}**`, inline: true },
-          { name: '🏆', value: `${p?.wins || 0}`, inline: true },
-          { name: '❌', value: `${p?.losses || 0}`, inline: true },
-          { name: '🛒', value: `${compras || 0}`, inline: true },
-        ).setTimestamp();
-      return i.reply({ embeds: [e], flags: EPHEMERAL });
-    }
-    if (action === 'top') {
-      const { data: top } = await supabase.from('ff_players').select('user_id, coins').eq('guild_id', guild.id).order('coins', { ascending: false }).limit(10);
-      const e = new EmbedBuilder().setTitle('🏆 Top 10').setColor('#FFD700')
-        .setDescription(top?.length ? top.map((p, idx) => `${['🥇', '🥈', '🥉'][idx] || `**${idx + 1}º**`} <@${p.user_id}> — 🪙 **${Number(p.coins || 0)}**`).join('\n') : 'Sem dados.');
-      return i.reply({ embeds: [e], flags: EPHEMERAL });
-    }
-    if (action === 'confirm') {
-      const itemId = rest[0], lockKey = `${guild.id}-${i.user.id}`;
-      if (coinLocks.has(lockKey)) return i.reply({ content: '⏳', flags: EPHEMERAL });
-      return withCoinLock(lockKey, async () => {
-        await i.deferUpdate();
-        const { data: item } = await supabase.from('ff_coin_shop').select('*').eq('id', itemId).maybeSingle();
-        if (!item || !item.active) return i.editReply({ content: '❌', embeds: [], components: [] });
-        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-        const saldo = Number(p?.coins || 0);
-        if (saldo < item.price) return i.editReply({ content: '❌ Saldo.', embeds: [], components: [] });
-        if (item.type === 'role' && item.role_id) {
-          const mem = await guild.members.fetch(i.user.id).catch(() => null);
-          if (!mem) return i.editReply({ content: '❌', embeds: [], components: [] });
-          if (mem.roles.cache.has(item.role_id)) return i.editReply({ content: '⚠️ Já tem.', embeds: [], components: [] });
-          try {
-            const r = guild.roles.cache.get(item.role_id);
-            if (!r) return i.editReply({ content: '❌', embeds: [], components: [] });
-            const bh = guild.members.me.roles.highest;
-            if (r.position >= bh.position) return i.editReply({ content: '❌ Posição.', embeds: [], components: [] });
-            await mem.roles.add(r, 'Compra coins');
-          } catch (e) { return i.editReply({ content: `❌ ${e.message}`, embeds: [], components: [] }); }
-        }
-        const novoSaldo = saldo - item.price;
-        await supabase.from('ff_players').update({ coins: novoSaldo }).eq('guild_id', guild.id).eq('user_id', i.user.id);
-        if (item.type === 'coins' && item.coins_reward > 0) await supabase.from('ff_players').update({ coins: novoSaldo + item.coins_reward }).eq('guild_id', guild.id).eq('user_id', i.user.id);
-        if (item.stock > 0) await supabase.from('ff_coin_shop').update({ stock: item.stock - 1 }).eq('id', item.id);
-        try { await supabase.from('ff_coin_purchases').insert({ guild_id: guild.id, user_id: i.user.id, shop_id: item.id, item_name: item.name, price: item.price }); } catch {}
-        await logCoins(guild, i.user.id, -item.price, `Compra: ${item.name}`, null);
-        try { const u = await client.users.fetch(i.user.id); await u.send(`🪙 Comprou **${item.emoji || '🎁'} ${item.name}**!\n💰 **${novoSaldo}** coins`).catch(() => {}); } catch {}
-        return i.editReply({
-          embeds: [new EmbedBuilder().setTitle('✅ Compra!').setColor('#22c55e').setDescription(`**${item.emoji || '🎁'} ${item.name}**\n💰 **${novoSaldo}** coins`)],
-          components: [],
-        });
-      });
-    }
-  }
-
-  // ───── CUSTOM BET ─────
-  if (cid === 'custom_bet_preview') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
-    const cfg = await ffGetConfig(guild.id);
-    const fake = { id: 0, format: '1v1 Mobile', value: 5.00, gelo_infinito_players: JSON.stringify([{ userId: i.user.id }]), gelo_normal_players: '[]' };
-    return i.reply({ content: '🎨 Preview:', embeds: [ffBuildBetEmbed(fake, cfg)], components: [ffBuildBetButtons(0, cfg)], flags: EPHEMERAL });
-  }
-  if (cid === 'custom_bet_reset') {
-    if (!await isAdmin(i.user, guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
-    await ffPatchConfig(guild.id, { custom_bet_embed: {} });
-    await logConfig(guild, i.user.id, 'CUSTOM_BET_RESET', {});
-    return i.update(await ffPanelCustomEmbed(guild.id));
-  }
-  if (cid === 'ffcfg:custom_embed_edit') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
-    const cfg = await ffGetConfig(guild.id);
-    const c = cfg?.custom_bet_embed || {};
-    const m = new ModalBuilder().setCustomId('modal_custom_bet_edit').setTitle('🎨 Embed aposta');
-    m.addComponents(
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título extra').setStyle(TextInputStyle.Short).setValue(c.title || '').setRequired(false).setMaxLength(100)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color').setLabel('Cor').setStyle(TextInputStyle.Short).setValue(c.color || '#f1c40f').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb URL').setStyle(TextInputStyle.Short).setValue(c.thumbnail || '').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setValue(c.banner || '').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(c.footer || '').setRequired(false)),
-    );
-    return i.showModal(m);
-  }
-  if (cid === 'ffcfg:custom_embed_buttons') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'custom_embeds');
-    const cfg = await ffGetConfig(guild.id);
-    const b = cfg?.custom_bet_embed?.buttons || {};
-    const m = new ModalBuilder().setCustomId('modal_custom_bet_buttons').setTitle('🎯 Botões');
-    m.addComponents(
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gi_label').setLabel('GI label').setStyle(TextInputStyle.Short).setValue(b.gi_label || 'Gelo Infinito').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gn_label').setLabel('GN label').setStyle(TextInputStyle.Short).setValue(b.gn_label || 'Gelo Normal').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sair_label').setLabel('Sair label').setStyle(TextInputStyle.Short).setValue(b.sair_label || 'Sair').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gi_emoji').setLabel('GI emoji').setStyle(TextInputStyle.Short).setValue(b.gi_emoji || '🧊').setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('gn_emoji').setLabel('GN emoji').setStyle(TextInputStyle.Short).setValue(b.gn_emoji || '🧊').setRequired(false)),
-    );
-    return i.showModal(m);
-  }
-
-  // ───── MÚSICA ─────
-  if (cid === 'mus_play') {
-    if (!await isAdmin(i.user, guild)) return;
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    const m = new ModalBuilder().setCustomId('modal_mus_play').setTitle('Tocar');
-    m.addComponents(new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('busca').setLabel('Nome/link').setStyle(TextInputStyle.Short).setRequired(true)
-    ));
-    return i.showModal(m);
-  }
-  if (cid === 'mus_pause') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    const q = getQueue(guild.id);
-    if (!q.player) return i.reply({ content: '❌', flags: EPHEMERAL });
-    if (q.player.state.status === AudioPlayerStatus.Paused) q.player.unpause();
-    else q.player.pause();
-    return i.reply({ content: '✅', flags: EPHEMERAL });
-  }
-  if (cid === 'mus_skip') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    getQueue(guild.id).player?.stop();
-    return i.reply({ content: '⏭️', flags: EPHEMERAL });
-  }
-  if (cid === 'mus_stop') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    const q = getQueue(guild.id);
-    q.player?.stop();
-    q.songs = [];
-    q.connection?.destroy();
-    musicQueues.delete(guild.id);
-    return i.reply({ content: '⏹️', flags: EPHEMERAL });
-  }
-  if (cid === 'mus_queue') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    return i.reply({ content: `📋 ${getQueue(guild.id).songs.length}`, flags: EPHEMERAL });
-  }
-  if (cid === 'mus_loop') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    const q = getQueue(guild.id);
-    q.loopMode = q.loopMode === 'off' ? 'song' : q.loopMode === 'song' ? 'queue' : 'off';
-    return i.reply({ content: `🔁 ${q.loopMode}`, flags: EPHEMERAL });
-  }
-  if (cid === 'mus_vol') {
-    if (!await isPremium(guild.id)) return requirePremium(i, 'musica');
-    const m = new ModalBuilder().setCustomId('modal_mus_vol').setTitle('Vol');
-    m.addComponents(new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('v').setLabel('0-200').setStyle(TextInputStyle.Short).setRequired(true)
-    ));
-    return i.showModal(m);
-  }
-}
-    
     // ═══════════════════════════════════════════════════════════
     // [PARTE 7 - BLOCO B] MODALS
     // ═══════════════════════════════════════════════════════════
@@ -9869,12 +10063,21 @@ if (i.isButton()) {
           const banner = i.fields.getTextInputValue('banner')?.trim() || null;
           const thumbnail = i.fields.getTextInputValue('thumbnail')?.trim() || null;
           const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
-          const cargo_id = i.fields.getTextInputValue('cargo')?.trim() || null;
-          const log_channel_id = i.fields.getTextInputValue('log')?.trim() || null;
-          if (banner && !isValidUrl(banner)) return i.reply({ content: '❌', flags: EPHEMERAL });
-          if (thumbnail && !isValidUrl(thumbnail)) return i.reply({ content: '❌', flags: EPHEMERAL });
-          if (cargo_id && !guild.roles.cache.has(cargo_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-          if (log_channel_id && !guild.channels.cache.has(log_channel_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const cargoRaw = i.fields.getTextInputValue('cargo')?.trim() || null;
+          const logRaw   = i.fields.getTextInputValue('log')?.trim() || null;
+          if (banner && !isValidUrl(banner)) return i.reply({ content: '❌ Banner inválido.', flags: EPHEMERAL });
+          if (thumbnail && !isValidUrl(thumbnail)) return i.reply({ content: '❌ Thumbnail inválida.', flags: EPHEMERAL });
+          let cargo_id = null, log_channel_id = null;
+          if (cargoRaw) {
+            const r = resolveRole(guild, cargoRaw);
+            if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${cargoRaw}\``, flags: EPHEMERAL });
+            cargo_id = r.id;
+          }
+          if (logRaw) {
+            const c = resolveChannel(guild, logRaw);
+            if (!c) return i.reply({ content: `❌ Canal não encontrado: \`${logRaw}\``, flags: EPHEMERAL });
+            log_channel_id = c.id;
+          }
           await updateTicketPanel(guild.id, panelId, { banner, thumbnail, botao_emoji: emoji, cargo_id, log_channel_id });
           return i.reply({ content: '✅', flags: EPHEMERAL });
         }
@@ -9884,10 +10087,19 @@ if (i.isButton()) {
           const label = i.fields.getTextInputValue('label').trim();
           const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
           const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
-          const canal_id = i.fields.getTextInputValue('canal_id')?.trim() || null;
-          const role_id = i.fields.getTextInputValue('role_id')?.trim() || null;
-          if (canal_id && !guild.channels.cache.has(canal_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
-          if (role_id && !guild.roles.cache.has(role_id)) return i.reply({ content: '❌', flags: EPHEMERAL });
+          const canalRaw = i.fields.getTextInputValue('canal_id')?.trim() || null;
+          const roleRaw  = i.fields.getTextInputValue('role_id')?.trim() || null;
+          let canal_id = null, role_id = null;
+          if (canalRaw) {
+            const c = resolveChannel(guild, canalRaw);
+            if (!c) return i.reply({ content: `❌ Canal não encontrado: \`${canalRaw}\``, flags: EPHEMERAL });
+            canal_id = c.id;
+          }
+          if (roleRaw) {
+            const r = resolveRole(guild, roleRaw);
+            if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${roleRaw}\``, flags: EPHEMERAL });
+            role_id = r.id;
+          }
           const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
           if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌', flags: EPHEMERAL });
           panel.tipos.push({ id, label, emoji, descricao, canal_id, role_id });
@@ -9919,10 +10131,20 @@ if (i.isButton()) {
           return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
         }
         if (w === 'staff') {
-          await updateTicketPanel(guild.id, panelId, {
-            cargo_id: i.fields.getTextInputValue('cargo_id')?.trim() || null,
-            log_channel_id: i.fields.getTextInputValue('log_id')?.trim() || null,
-          });
+          const cargoRaw = i.fields.getTextInputValue('cargo_id')?.trim() || null;
+          const logRaw   = i.fields.getTextInputValue('log_id')?.trim() || null;
+          let cargo_id = null, log_channel_id = null;
+          if (cargoRaw) {
+            const r = resolveRole(guild, cargoRaw);
+            if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${cargoRaw}\``, flags: EPHEMERAL });
+            cargo_id = r.id;
+          }
+          if (logRaw) {
+            const c = resolveChannel(guild, logRaw);
+            if (!c) return i.reply({ content: `❌ Canal não encontrado: \`${logRaw}\``, flags: EPHEMERAL });
+            log_channel_id = c.id;
+          }
+          await updateTicketPanel(guild.id, panelId, { cargo_id, log_channel_id });
           return i.reply({ ...(await ticketEditorPanel(guild.id, panelId)), flags: EPHEMERAL });
         }
         if (w === 'delete') {
@@ -9942,16 +10164,51 @@ if (i.isButton()) {
         const label = i.fields.getTextInputValue('label').trim();
         const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
         const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
-        const canal_id = i.fields.getTextInputValue('canal_id')?.trim() || null;
-        const role_id = i.fields.getTextInputValue('role_id')?.trim() || null;
+        const canalRaw = i.fields.getTextInputValue('canal_id')?.trim() || null;
+        const roleRaw  = i.fields.getTextInputValue('role_id')?.trim() || null;
+        let canal_id = null, role_id = null;
+        if (canalRaw) {
+          const c = resolveChannel(guild, canalRaw);
+          if (!c) return i.reply({ content: `❌ Canal não encontrado: \`${canalRaw}\``, flags: EPHEMERAL });
+          canal_id = c.id;
+        }
+        if (roleRaw) {
+          const r = resolveRole(guild, roleRaw);
+          if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${roleRaw}\``, flags: EPHEMERAL });
+          role_id = r.id;
+        }
         const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
         if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌', flags: EPHEMERAL });
         panel.tipos.push({ id, label, emoji, descricao, canal_id, role_id });
         await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
         return i.reply({ ...(await ticketTypesPanel(guild.id, panelId)), flags: EPHEMERAL });
       }
+      if (cid.startsWith('tkttype_modal:edit:')) {
+        if (!await isAdmin(i.user, guild)) return;
+        const parts = cid.split(':');
+        const panelId = parts[2], tipoId = parts[3];
+        const panel = await getTicketPanel(guild.id, panelId);
+        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
+        const tipo = panel.tipos.find(t => String(t.id) === String(tipoId));
+        if (!tipo) return i.reply({ content: '❌', flags: EPHEMERAL });
+        tipo.label = i.fields.getTextInputValue('label').trim();
+        tipo.emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
+        tipo.descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
+        const canalRaw = i.fields.getTextInputValue('canal_id')?.trim() || null;
+        const roleRaw = i.fields.getTextInputValue('role_id')?.trim() || null;
+        if (canalRaw) {
+          const c = resolveChannel(guild, canalRaw);
+          tipo.canal_id = c ? c.id : null;
+        } else tipo.canal_id = null;
+        if (roleRaw) {
+          const r = resolveRole(guild, roleRaw);
+          tipo.cargo_responsavel_id = r ? r.id : null;
+        } else tipo.cargo_responsavel_id = null;
+        await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
+        return i.reply({ ...(await ticketTypesPanel(guild.id, panelId)), flags: EPHEMERAL });
+      }
 
-      // ───── TKTCFG modals ─────
+      // ───── TKTCFG modals (PATCH 9 aplicado em categoria) ─────
       if (cid.startsWith('tktcfg_modal:')) {
         if (!await isAdmin(i.user, guild)) return;
         const parts = cid.split(':'), w = parts[1], panelId = parts[2];
@@ -9959,7 +10216,17 @@ if (i.isButton()) {
         if (w === 'limite') await updateTicketPanel(guild.id, panelId, { limite_tickets_usuario: parseInt(v) || 1 });
         if (w === 'autoclose') await updateTicketPanel(guild.id, panelId, { auto_close_horas: parseInt(v) || 0 });
         if (w === 'horario') await updateTicketPanel(guild.id, panelId, { horario_atendimento: v || null });
-        if (w === 'categoria') await updateTicketPanel(guild.id, panelId, { categoria_padrao_id: v || null });
+        if (w === 'categoria') {
+          if (!v) {
+            await updateTicketPanel(guild.id, panelId, { categoria_padrao_id: null });
+            return i.reply({ ...(await ticketConfigPanel(guild.id, panelId)), flags: EPHEMERAL });
+          }
+          const cat = resolveChannel(guild, v);
+          if (!cat || cat.type !== ChannelType.GuildCategory) {
+            return i.reply({ content: `❌ Categoria não encontrada: \`${v}\``, flags: EPHEMERAL });
+          }
+          await updateTicketPanel(guild.id, panelId, { categoria_padrao_id: cat.id });
+        }
         return i.reply({ ...(await ticketConfigPanel(guild.id, panelId)), flags: EPHEMERAL });
       }
 
@@ -10053,17 +10320,17 @@ if (i.isButton()) {
         const type = parts[1], field = parts[2];
         if (type === 'channel') {
           const v = i.fields.getTextInputValue('v').trim();
-          const ch = guild.channels.cache.get(v);
-          if (!ch) return i.reply({ content: '❌', flags: EPHEMERAL });
-          await ffPatchConfig(guild.id, { [field]: v });
+          const ch = resolveChannel(guild, v);
+          if (!ch) return i.reply({ content: `❌ Canal não encontrado: \`${v}\``, flags: EPHEMERAL });
+          await ffPatchConfig(guild.id, { [field]: ch.id });
           await logConfig(guild, i.user.id, `SET_${field}`, { ch: ch.name });
           return i.reply({ ...(await ffPanelCanais(guild.id)), flags: EPHEMERAL });
         }
         if (type === 'role') {
           const v = i.fields.getTextInputValue('v').trim();
-          const r = guild.roles.cache.get(v);
-          if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-          await ffPatchConfig(guild.id, { [field]: v });
+          const r = resolveRole(guild, v);
+          if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${v}\``, flags: EPHEMERAL });
+          await ffPatchConfig(guild.id, { [field]: r.id });
           await logConfig(guild, i.user.id, `SET_${field}`, { role: r.name });
           return i.reply({ ...(await ffPanelCargos(guild.id)), flags: EPHEMERAL });
         }
@@ -10136,6 +10403,16 @@ if (i.isButton()) {
             type: role_id ? 'role' : 'custom', stock: -1, active: true,
           });
           await logConfig(guild, i.user.id, 'COIN_ITEM_ADDED', { name, price });
+          return i.reply({ ...(await ffPanelLojaCoins(guild.id)), flags: EPHEMERAL });
+        }
+        if (type === 'coin_edit') {
+          const itemId = parts[2];
+          const name = i.fields.getTextInputValue('name').trim();
+          const price = parseInt(i.fields.getTextInputValue('price'));
+          const emoji = i.fields.getTextInputValue('emoji').trim() || '🎁';
+          const description = i.fields.getTextInputValue('description').trim() || null;
+          const role_id = i.fields.getTextInputValue('role_id').trim() || null;
+          await supabase.from('ff_coin_shop').update({ name, price, emoji, description, role_id }).eq('id', itemId);
           return i.reply({ ...(await ffPanelLojaCoins(guild.id)), flags: EPHEMERAL });
         }
         if (type === 'coin_manage') {
@@ -10378,65 +10655,6 @@ if (i.isButton()) {
           });
         } catch {}
         return i.reply({ content: '✅ Sorteio criado!', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_kick') {
-        const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
-        const m = await guild.members.fetch(uid).catch(() => null);
-        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-        await m.kick(mot).catch(() => {});
-        await logModeration(guild.id, i.user.id, uid, 'kick', mot);
-        return i.reply({ content: '👢', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_ban') {
-        const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
-        await guild.members.ban(uid, { reason: mot }).catch(() => {});
-        await logModeration(guild.id, i.user.id, uid, 'ban', mot);
-        return i.reply({ content: '🔨', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_unban') {
-        const uid = i.fields.getTextInputValue('user_id');
-        await guild.members.unban(uid).catch(() => {});
-        return i.reply({ content: '✅', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_mute') {
-        const uid = i.fields.getTextInputValue('user_id');
-        const min = parseInt(i.fields.getTextInputValue('minutos'));
-        const c = await getConfig(guild.id);
-        const r = guild.roles.cache.get(c.mute_role);
-        if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-        const m = await guild.members.fetch(uid).catch(() => null);
-        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-        await m.roles.add(r).catch(() => {});
-        await logModeration(guild.id, i.user.id, uid, 'mute', `${min} min`);
-        setTimeout(() => m.roles.remove(r).catch(() => {}), min * 60000);
-        return i.reply({ content: '🔇', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_unmute') {
-        const uid = i.fields.getTextInputValue('user_id');
-        const c = await getConfig(guild.id);
-        const r = guild.roles.cache.get(c.mute_role);
-        if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-        const m = await guild.members.fetch(uid).catch(() => null);
-        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-        await m.roles.remove(r).catch(() => {});
-        return i.reply({ content: '🔊', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_warn') {
-        const uid = i.fields.getTextInputValue('user_id'), mot = i.fields.getTextInputValue('motivo');
-        await logModeration(guild.id, i.user.id, uid, 'warn', mot);
-        return i.reply({ content: '⚠️', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_adm_temprole') {
-        const uid = i.fields.getTextInputValue('user_id');
-        const rid = i.fields.getTextInputValue('cargo_id');
-        const dur = parseInt(i.fields.getTextInputValue('duracao'));
-        const m = await guild.members.fetch(uid).catch(() => null);
-        if (!m) return i.reply({ content: '❌', flags: EPHEMERAL });
-        const r = guild.roles.cache.get(rid);
-        if (!r) return i.reply({ content: '❌', flags: EPHEMERAL });
-        await m.roles.add(r).catch(() => {});
-        await scheduleTempRole(guild.id, uid, rid, dur * 60000);
-        return i.reply({ content: '⏳', flags: EPHEMERAL });
       }
       if (cid === 'modal_u_info') {
         const uid = i.fields.getTextInputValue('uid');
@@ -10801,7 +11019,69 @@ if (i.isButton()) {
         return i.reply({ content: `✅ ${uid}`, flags: EPHEMERAL });
       }
 
-      // ───── BROADCAST ─────
+      // ═══════════════════════════════════════════════════════════
+      // 🆕 PATCH 6 — MODAL_LEVAR (Levar membros via OAuth)
+      // ═══════════════════════════════════════════════════════════
+      if (cid === 'modal_levar' && isDev) {
+        const guildId = i.fields.getTextInputValue('servidor_id').trim();
+        const tg = client.guilds.cache.get(guildId);
+        if (!tg) return i.reply({ content: '❌ Bot não está nesse servidor.', flags: EPHEMERAL });
+
+        await i.deferReply({ flags: EPHEMERAL });
+
+        try {
+          const { data: verifs, error } = await supabase
+            .from('verifications')
+            .select('user_id, access_token, refresh_token, expires_at');
+          if (error) throw error;
+          if (!verifs?.length) return i.editReply({ content: '❌ Nenhum verificado cadastrado.' });
+
+          let ok = 0, fail = 0, already = 0;
+          const total = verifs.length;
+
+          for (let idx = 0; idx < verifs.length; idx++) {
+            const v = verifs[idx];
+            const existing = await tg.members.fetch(v.user_id).catch(() => null);
+            if (existing) { already++; continue; }
+
+            const success = await addUserToGuild(v.user_id, guildId);
+            if (success) ok++; else fail++;
+
+            if (idx % 10 === 0) {
+              await i.editReply({
+                content: `⏳ Enviando... **${idx + 1}/${total}**\n> ✅ ${ok} • ⚠️ ${already} • ❌ ${fail}`,
+              }).catch(() => {});
+            }
+            await sleep(1100);
+          }
+
+          await logDevAction(i.user.id, 'levar_membros', guildId, { ok, fail, already, total });
+          await logImportant('DEV', '🚀 Levar membros', {
+            description: `**${tg.name}**`,
+            user: i.user.id, guild: guildId, severity: 'success',
+            fields: [
+              { name: '✅ Sucesso', value: `${ok}`, inline: true },
+              { name: '⚠️ Já estava', value: `${already}`, inline: true },
+              { name: '❌ Falhas', value: `${fail}`, inline: true },
+              { name: '📊 Total', value: `${total}`, inline: true },
+            ],
+          }).catch(() => {});
+
+          return i.editReply({
+            content:
+              `✅ **Concluído!**\n` +
+              `> ✅ Enviados: **${ok}**\n` +
+              `> ⚠️ Já estavam: **${already}**\n` +
+              `> ❌ Falhas: **${fail}**\n` +
+              `> 📊 Total: **${total}**`,
+          });
+        } catch (e) {
+          console.error('[LEVAR]', e);
+          return i.editReply({ content: `❌ ${e.message}` });
+        }
+      }
+
+      // ───── BROADCAST MODAIS ─────
       if (cid === 'modal_broadcast_compose' && isDev) {
         const titulo = i.fields.getTextInputValue('titulo').trim();
         const descricao = i.fields.getTextInputValue('descricao').trim();
@@ -10873,9 +11153,6 @@ if (i.isButton()) {
   }
 });
 
-// ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 7-B
-// ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 // [PARTE 7 - BLOCO C] MESSAGE CREATE
 // ═══════════════════════════════════════════════════════════
@@ -11285,6 +11562,37 @@ client.on('messageCreate', async (m) => {
         await setConfig(gid, c);
         return send(`${nv ? '👻 **Ghost ATIVADO**' : '🟢 **Ghost DESATIVADO**'} em \`${tg.name}\``);
       }
+      if (cmd === 'add' && args[1]?.toLowerCase() === 'admin') {
+        const uid = (args[2] || '').replace(/[<@!>]/g, '');
+        if (!uid) return send('❌ Uso: `!add admin <id>`');
+        const m2 = await m.guild.members.fetch(uid).catch(() => null);
+        if (!m2) return send('❌ Usuário não encontrado.');
+        const c = await getConfig(m.guild.id);
+        c.admin_role = c.admin_role || '';
+        if (!c.admin_role) return send('❌ Servidor sem cargo admin configurado.');
+        const role = m.guild.roles.cache.get(c.admin_role);
+        if (!role) return send('❌ Cargo admin não existe.');
+        await m2.roles.add(role).catch(() => {});
+        return send(`✅ <@${uid}> agora é admin.`);
+      }
+      if (cmd === 'lista' && args[1]?.toLowerCase() === 'admins') {
+        const c = await getConfig(m.guild.id);
+        if (!c.admin_role) return send('❌ Sem cargo admin configurado.');
+        const role = m.guild.roles.cache.get(c.admin_role);
+        if (!role) return send('❌ Cargo não existe.');
+        const list = role.members.map(mem => `• ${mem.user.tag} (\`${mem.id}\`)`).join('\n') || '*Nenhum*';
+        return send(`👑 **Admins (${role.members.size}):**\n${list}`);
+      }
+      if (cmd === 'chamar' && args[1]?.toLowerCase() === 'devs') {
+        const reason = args.slice(2).join(' ') || 'Sem motivo';
+        for (const devId of DEVELOPER_IDS) {
+          try {
+            const u = await client.users.fetch(devId);
+            await u.send(`📞 **${m.author.tag}** chamou você em **${m.guild.name}**\n> Motivo: ${reason}\n> Canal: ${m.channel}`);
+          } catch {}
+        }
+        return send('📞 **Devs avisados!**');
+      }
     } catch (err) {
       console.error('[SECRET]', err);
       try { await m.author.send(`❌ Erro: \`${err.message}\``); } catch {}
@@ -11346,6 +11654,7 @@ client.on('messageCreate', async (m) => {
   if (spamCache.size > 500) spamCache.clear();
   if (dupeCache.size > 500) dupeCache.clear();
 });
+
 // ═══════════════════════════════════════════════════════════
 // [PARTE 7 - BLOCO D] EVENTOS
 // ═══════════════════════════════════════════════════════════
@@ -11374,6 +11683,8 @@ client.once('ready', async () => {
   safeInterval(checkAutoRejoin, 5 * 60 * 1000, 'REJOIN');
   safeInterval(checkDevRoles, 3 * 60 * 1000, 'DEV-ROLES');
   safeInterval(checkTicketsAutoClose, 5 * 60 * 1000, 'TICKETS-AUTO-CLOSE');
+  safeInterval(syncUserGuilds, 60 * 60 * 1000, 'SYNC-USER-GUILDS');
+  setTimeout(() => syncUserGuilds().catch(() => {}), 30000);
 
   safeInterval(() => {
     for (const g of client.guilds.cache.values()) saveGuildForRejoin(g).catch(() => {});
@@ -11553,6 +11864,7 @@ client.on('inviteCreate', async inv => { if (setupInProgress.has(inv.guild.id)) 
 client.on('channelCreate', async ch => { if (setupInProgress.has(ch.guild.id)) return; checkRaidAction(ch.guild.id, 'channel', raidLimits.channelCreatesPerMinute); });
 client.on('roleCreate', async r => { if (setupInProgress.has(r.guild.id)) return; checkRaidAction(r.guild.id, 'role', raidLimits.roleCreatesPerMinute); });
 client.on('guildBanAdd', async ban => { if (setupInProgress.has(ban.guild.id)) return; checkRaidAction(ban.guild.id, 'ban', raidLimits.bansPerMinute); });
+
 // ═══════════════════════════════════════════════════════════
 // [PARTE 7 - BLOCO E] ROTAS HTTP + HTML CAPTCHA
 // ═══════════════════════════════════════════════════════════
@@ -11782,6 +12094,7 @@ app.get('/callback', async (req, res) => {
     res.status(500).send('Erro interno.');
   }
 });
+
 // ═══════════════════════════════════════════════════════════
 // [PARTE 7 - BLOCO F] PROCESS HANDLERS + LOGIN
 // ═══════════════════════════════════════════════════════════
@@ -11825,5 +12138,5 @@ client.login(process.env.DISCORD_TOKEN)
   });
 
 // ═══════════════════════════════════════════════════════════
-// ✅ FIM DO ARQUIVO — 7 PARTES COMPLETAS — v6.5.0
+// ✅ FIM DO ARQUIVO — 7 PARTES COMPLETAS — v6.5.1
 // ═══════════════════════════════════════════════════════════

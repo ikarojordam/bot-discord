@@ -5,23 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=6">
+<link rel="stylesheet" href="/assets/style.css?v=7">
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════
-     LOGIN
-     ═══════════════════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="view-login" class="auth-page active">
-  <div class="aurora">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <div class="orb orb-4"></div>
-  </div>
-
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
   <div class="auth-shell">
-    <!-- Marca (esquerda) -->
     <div class="auth-brand">
       <div class="brand-badge"><span class="dot"></span>FRIO BOT · v4</div>
       <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
@@ -33,57 +24,31 @@
         <div class="brand-feature"><div class="ico">🚨</div>Kill switch + manutenção global</div>
       </div>
     </div>
-
-    <!-- Form (direita) -->
     <div class="auth-form-side">
       <div class="auth-card">
         <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
         <h1>Bem-vindo de volta</h1>
         <p class="sub">Entre com sua conta pra continuar</p>
-
         <form id="loginForm">
-          <div class="field">
-            <label>E-mail</label>
-            <div class="input-wrap">
-              <span class="ico">📧</span>
-              <input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com">
-            </div>
-          </div>
-          <div class="field">
-            <label>Senha</label>
-            <div class="input-wrap">
-              <span class="ico">🔒</span>
-              <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
-              <button type="button" class="toggle-eye" onclick="togglePass('loginPassword', this)">👁️</button>
-            </div>
-          </div>
+          <div class="field"><label>E-mail</label><div class="input-wrap"><span class="ico">📧</span><input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com"></div></div>
+          <div class="field"><label>Senha</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('loginPassword', this)">👁️</button></div></div>
           <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
         </form>
-
         <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
         <div class="divider">ou</div>
         <div class="register-block">
           <p>Primeira vez aqui?</p>
           <button id="btnShowRegister" class="btn btn-secondary btn-block">Criar conta</button>
         </div>
-
         <div id="loginMsg" class="msg"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     REGISTER
-     ═══════════════════════════════════════════════════════ -->
+<!-- REGISTER -->
 <div id="view-register" class="auth-page">
-  <div class="aurora">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <div class="orb orb-4"></div>
-  </div>
-
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
   <div class="auth-shell">
     <div class="auth-brand">
       <div class="brand-badge"><span class="dot"></span>NOVA CONTA</div>
@@ -91,47 +56,18 @@
       <div class="brand-title">Crie sua conta<br>em 30 segundos.</div>
       <div class="brand-sub">Após o cadastro, um DEV irá aprovar seu acesso e definir seu papel no painel.</div>
     </div>
-
     <div class="auth-form-side">
       <div class="auth-card">
         <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
         <h1>Criar conta</h1>
         <p class="sub">Aguardará aprovação do DEV</p>
-
         <form id="registerForm">
-          <div class="field">
-            <label>E-mail</label>
-            <div class="input-wrap">
-              <span class="ico">📧</span>
-              <input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com">
-            </div>
-          </div>
-          <div class="field">
-            <label>Discord ID (opcional)</label>
-            <div class="input-wrap">
-              <span class="ico">🎮</span>
-              <input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off">
-            </div>
-          </div>
-          <div class="field">
-            <label>Senha (mín. 8 caracteres)</label>
-            <div class="input-wrap">
-              <span class="ico">🔒</span>
-              <input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-              <button type="button" class="toggle-eye" onclick="togglePass('regPassword', this)">👁️</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>Confirmar senha</label>
-            <div class="input-wrap">
-              <span class="ico">🔒</span>
-              <input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-              <button type="button" class="toggle-eye" onclick="togglePass('regConfirm', this)">👁️</button>
-            </div>
-          </div>
+          <div class="field"><label>E-mail</label><div class="input-wrap"><span class="ico">📧</span><input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com"></div></div>
+          <div class="field"><label>Discord ID (opcional)</label><div class="input-wrap"><span class="ico">🎮</span><input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off"></div></div>
+          <div class="field"><label>Senha (mín. 8 caracteres)</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('regPassword', this)">👁️</button></div></div>
+          <div class="field"><label>Confirmar senha</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('regConfirm', this)">👁️</button></div></div>
           <button type="submit" class="btn btn-block">Criar conta</button>
         </form>
-
         <div class="links"><a href="#" id="linkBackLogin">← Voltar pro login</a></div>
         <div id="registerMsg" class="msg"></div>
       </div>
@@ -139,60 +75,33 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     RESET
-     ═══════════════════════════════════════════════════════ -->
+<!-- RESET -->
 <div id="view-reset" class="auth-page">
-  <div class="aurora">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <div class="orb orb-4"></div>
-  </div>
-
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
   <div class="auth-shell">
     <div class="auth-brand">
       <div class="brand-badge"><span class="dot"></span>SEGURANÇA</div>
       <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
       <div class="brand-title">Defina uma<br>nova senha.</div>
-      <div class="brand-sub">Sua nova senha precisa ter no mínimo 8 caracteres. Você será redirecionado pro login depois.</div>
+      <div class="brand-sub">Sua nova senha precisa ter no mínimo 8 caracteres.</div>
     </div>
-
     <div class="auth-form-side">
       <div class="auth-card">
         <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
         <h1>Nova senha</h1>
         <p class="sub">Escolha uma senha forte</p>
-
         <form id="resetForm">
-          <div class="field">
-            <label>Nova senha</label>
-            <div class="input-wrap">
-              <span class="ico">🔒</span>
-              <input type="password" id="resetPassword" required minlength="8" placeholder="••••••••">
-              <button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>Confirmar</label>
-            <div class="input-wrap">
-              <span class="ico">🔒</span>
-              <input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••">
-              <button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button>
-            </div>
-          </div>
+          <div class="field"><label>Nova senha</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="resetPassword" required minlength="8" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button></div></div>
+          <div class="field"><label>Confirmar</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button></div></div>
           <button type="submit" class="btn btn-block">Salvar nova senha</button>
         </form>
-
         <div id="resetMsg" class="msg"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     APP
-     ═══════════════════════════════════════════════════════ -->
+<!-- APP -->
 <div id="view-app" class="app-layout">
   <header class="app-header">
     <button class="hamburger" id="btnHamburger">☰</button>
@@ -204,6 +113,7 @@
         <span class="dot"></span>
         <span class="email" id="userEmail">—</span>
         <span class="badge" id="userRole">—</span>
+        <span class="badge" id="userPlan">—</span>
       </div>
       <button id="btnLogout" class="btn btn-ghost">Sair</button>
     </div>
@@ -239,7 +149,7 @@
       <div class="grid-3" id="dashStats"></div>
       <div class="card">
         <h3>Bem-vindo(a)</h3>
-        <p class="hint">Papel: <span class="badge" id="dashRole">—</span></p>
+        <p class="hint">Papel: <span class="badge" id="dashRole">—</span> · Plano: <span class="badge" id="dashPlan">—</span></p>
       </div>
     </section>
 
@@ -250,18 +160,14 @@
         <h3>➕ Gerar novas keys</h3>
         <form id="genForm">
           <div class="grid-2">
-            <div class="field"><label>Tier</label>
-              <div class="input-wrap"><select id="genTier">
-                <option value="basic">🥉 Basic</option><option value="premium" selected>🥈 Premium</option>
-                <option value="ultra">🥇 Ultra</option><option value="unlimited">💎 Unlimited</option>
-              </select></div>
-            </div>
-            <div class="field"><label>Duração</label>
-              <div class="input-wrap"><select id="genDuracao">
-                <option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option>
-                <option value="90">90 dias</option><option value="180">180 dias</option><option value="365">1 ano</option><option value="0">♾️ Permanente</option>
-              </select></div>
-            </div>
+            <div class="field"><label>Tier</label><div class="input-wrap"><select id="genTier">
+              <option value="basic">🥉 Basic</option><option value="premium" selected>🥈 Premium</option>
+              <option value="ultra">🥇 Ultra</option><option value="unlimited">💎 Unlimited</option>
+            </select></div></div>
+            <div class="field"><label>Duração</label><div class="input-wrap"><select id="genDuracao">
+              <option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option>
+              <option value="90">90 dias</option><option value="180">180 dias</option><option value="365">1 ano</option><option value="0">♾️ Permanente</option>
+            </select></div></div>
             <div class="field"><label>Qtd (1-50)</label><div class="input-wrap"><input type="number" id="genQtd" value="1" min="1" max="50"></div></div>
             <div class="field"><label>Máx usos</label><div class="input-wrap"><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div></div>
             <div class="field"><label>Validade (dias)</label><div class="input-wrap"><input type="number" id="genValidade" value="0" min="0"></div></div>
@@ -271,7 +177,7 @@
           <div id="genResult" class="result-box"></div>
         </form>
       </div>
-      <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys</h3>
+      <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys <button id="btnEnviarKey" class="btn btn-sm btn-success" style="margin-left:auto">📤 Enviar key</button></h3>
       <div class="filters">
         <select id="filterStatus"><option value="">Todas</option><option value="active">Ativas</option><option value="used">Esgotadas</option></select>
         <select id="filterTier"><option value="">Tiers</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
@@ -366,6 +272,10 @@
           <option value="dev">DEV</option><option value="admin">ADMIN</option>
           <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
         </select>
+        <select id="userFilterPlan"><option value="">Planos</option>
+          <option value="none">Sem plano</option><option value="basic">Basic</option>
+          <option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option>
+        </select>
         <select id="userFilterAtivo"><option value="">Status</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
         <button id="btnRefreshUsers" class="btn btn-secondary btn-sm">🔄</button>
       </div>
@@ -436,7 +346,13 @@
           <option value="admin">ADMIN</option><option value="dev">DEV</option>
         </select></div></div>
       </div>
-      <div class="field" id="fieldPassword"><label>Senha (vazio = gerada)</label><div class="input-wrap"><input type="text" id="modalUserPassword"></div></div>
+      <div class="grid-2">
+        <div class="field"><label>Plano</label><div class="input-wrap"><select id="modalUserPlan">
+          <option value="basic" selected>Basic</option><option value="premium">Premium</option>
+          <option value="ultra">Ultra</option><option value="unlimited">Unlimited</option><option value="none">Nenhum</option>
+        </select></div></div>
+        <div class="field" id="fieldPassword"><label>Senha (vazio = gerada)</label><div class="input-wrap"><input type="text" id="modalUserPassword"></div></div>
+      </div>
       <div class="field"><label>Servidores (IDs, vírgula)</label><div class="input-wrap"><input type="text" id="modalUserGuilds"></div></div>
       <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="modalUserNotes"></textarea></div></div>
       <div class="modal-actions">
@@ -456,10 +372,16 @@
     <p class="sub" id="approveEmail">—</p>
     <form id="approveForm">
       <input type="hidden" id="approveUserId">
-      <div class="field"><label>Role *</label><div class="input-wrap"><select id="approveRole">
-        <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
-        <option value="admin">ADMIN</option>
-      </select></div></div>
+      <div class="grid-2">
+        <div class="field"><label>Role *</label><div class="input-wrap"><select id="approveRole">
+          <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
+          <option value="admin">ADMIN</option>
+        </select></div></div>
+        <div class="field"><label>Plano *</label><div class="input-wrap"><select id="approvePlan">
+          <option value="basic" selected>Basic</option><option value="premium">Premium</option>
+          <option value="ultra">Ultra</option><option value="unlimited">Unlimited</option><option value="none">Nenhum</option>
+        </select></div></div>
+      </div>
       <div class="field"><label>Servidores (IDs)</label><div class="input-wrap"><input type="text" id="approveGuilds"></div></div>
       <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="approveNotes"></textarea></div></div>
       <div class="modal-actions">
@@ -471,14 +393,48 @@
   </div>
 </div>
 
+<!-- MODAL: Enviar Key -->
+<div id="modalSendKey" class="modal">
+  <div class="modal-content" style="max-width:520px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalSendKey')">✕</button>
+    <h2>📤 Enviar key pra cliente</h2>
+    <p class="sub">A key será marcada como enviada e o cliente receberá uma notificação.</p>
+    <div class="field"><label>Key</label><div class="input-wrap"><select id="sendKeyId"></select></div></div>
+    <div class="field"><label>Cliente</label><div class="input-wrap"><select id="sendKeyUser"></select></div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modalSendKey')">Cancelar</button>
+      <button type="button" class="btn btn-success" id="btnConfirmSendKey">📤 Enviar</button>
+    </div>
+    <div id="sendKeyMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- MODAL: Enviar Notificação -->
+<div id="modalSendNotif" class="modal">
+  <div class="modal-content" style="max-width:520px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalSendNotif')">✕</button>
+    <h2>🔔 Enviar notificação</h2>
+    <p class="sub" id="sendNotifTarget">—</p>
+    <input type="hidden" id="sendNotifUserId">
+    <div class="field"><label>Tipo</label><div class="input-wrap"><select id="sendNotifType">
+      <option value="system">📢 Sistema</option>
+      <option value="alert">⚠️ Alerta</option>
+      <option value="key_received">🔑 Key</option>
+    </select></div></div>
+    <div class="field"><label>Título *</label><div class="input-wrap"><input type="text" id="sendNotifTitle" placeholder="Ex: Sua key chegou!" maxlength="120"></div></div>
+    <div class="field"><label>Conteúdo *</label><div class="input-wrap"><textarea id="sendNotifContent" placeholder="Mensagem..." maxlength="500"></textarea></div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modalSendNotif')">Cancelar</button>
+      <button type="button" class="btn" id="btnConfirmSendNotif">🔔 Enviar</button>
+    </div>
+    <div id="sendNotifMsg" class="msg"></div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
-<!-- ═══════════════════════════════════════════════════════
-     SCRIPTS
-     ═══════════════════════════════════════════════════════ -->
 <script>
-// Toggle mostrar/ocultar senha
 function togglePass(id, btn) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -487,6 +443,6 @@ function togglePass(id, btn) {
   btn.textContent = isPass ? '🙈' : '👁️';
 }
 </script>
-<script src="/assets/app.js?v=6"></script>
+<script src="/assets/app.js?v=7"></script>
 </body>
 </html>

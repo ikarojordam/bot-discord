@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v3.2
+// 🔑 FRIO PANEL — Backend v3.3
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 const express = require('express');
@@ -24,6 +24,7 @@ const supaAdmin  = createClient(SUPABASE_URL, SUPABASE_SERVICE, { auth: { persis
 
 const ROLES = ['dev', 'admin', 'funcionario', 'cliente'];
 const PLANS = ['none', 'basic', 'premium', 'ultra', 'unlimited'];
+const TIERS = ['basic', 'premium', 'ultra', 'unlimited'];
 
 function genPassword(len = 12) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#';
@@ -34,8 +35,13 @@ function baseUrl() {
   return process.env.PANEL_URL
     || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : 'http://localhost:10000');
 }
+function genKeyCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const seg = (n) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `FRIO-${seg(4)}-${seg(4)}-${seg(4)}`;
+}
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false, lastModified: false,
@@ -46,7 +52,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// ═══ AUTH MIDDLEWARE ═══
+// ═══ AUTH ═══
 async function requireAuth(req, res, next) {
   try {
     let token = null;
@@ -62,7 +68,7 @@ async function requireAuth(req, res, next) {
     if (error || !user) return res.status(401).json({ error: 'Sessão inválida', hint: 'token_invalido' });
 
     const { data: admin } = await supaAdmin.from('panel_admins').select('*').eq('user_id', user.id).maybeSingle();
-    if (!admin) return res.status(403).json({ error: 'Sem acesso ao painel', hint: 'sem_registro' });
+    if (!admin) return res.status(403).json({ error: 'Sem acesso', hint: 'sem_registro' });
     if (!admin.ativo) {
       if (admin.role === 'pending') return res.status(403).json({ error: 'Aguarde aprovação', code: 'PENDING' });
       return res.status(403).json({ error: 'Conta desativada' });
@@ -72,18 +78,12 @@ async function requireAuth(req, res, next) {
     req.admin = admin;
     req.role = admin.role;
     next();
-  } catch (e) {
-    console.error('[AUTH]', e.message);
-    res.status(500).json({ error: 'Erro interno' });
-  }
+  } catch (e) { console.error('[AUTH]', e.message); res.status(500).json({ error: 'Erro interno' }); }
 }
-
 function requireRole(...allowed) {
   return (req, res, next) => {
     requireAuth(req, res, () => {
-      if (!allowed.includes(req.admin.role)) {
-        return res.status(403).json({ error: `Permissão negada. Requer: ${allowed.join('/')}` });
-      }
+      if (!allowed.includes(req.admin.role)) return res.status(403).json({ error: `Permissão negada. Requer: ${allowed.join('/')}` });
       next();
     });
   };
@@ -107,10 +107,10 @@ async function notify(userId, type, title, content, metadata = null) {
 }
 function ownsGuild(req, guildId) {
   if (['dev', 'admin'].includes(req.admin.role)) return true;
-  return (req.admin.assigned_guilds || []).includes(guildId);
+  return false; // cliente/funcionario: checado via user_guilds
 }
 
-// ═══ PUBLIC CONFIG ═══
+// ═══ PUBLIC ═══
 app.get('/api/public-config', (req, res) => res.json({ supabase_url: SUPABASE_URL, supabase_anon: SUPABASE_ANON }));
 
 // ═══ AUTH ═══
@@ -122,10 +122,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (error) {
       const msg = String(error.message || '').toLowerCase();
       if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
-        return res.status(403).json({
-          error: 'Você precisa confirmar seu email antes de logar. Verifique sua caixa de entrada.',
-          code: 'EMAIL_NOT_CONFIRMED',
-        });
+        return res.status(403).json({ error: 'Você precisa confirmar seu email antes de logar.', code: 'EMAIL_NOT_CONFIRMED' });
       }
       return res.status(401).json({ error: 'E-mail ou senha inválidos' });
     }
@@ -178,103 +175,51 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
-// ═══ REGISTER — EXIGE CONFIRMAÇÃO DE EMAIL ═══
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, discord_id } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'E-mail e senha obrigatórios' });
     if (password.length < 8) return res.status(400).json({ error: 'Senha deve ter 8+ caracteres' });
 
-    const { data: existing } = await supaAdmin
-      .from('panel_admins')
-      .select('user_id, ativo, role')
-      .eq('email', email)
-      .maybeSingle();
-
+    const { data: existing } = await supaAdmin.from('panel_admins').select('user_id, ativo').eq('email', email).maybeSingle();
     if (existing) {
       if (existing.ativo) return res.status(400).json({ error: 'E-mail já cadastrado' });
-      return res.status(400).json({
-        error: 'Já existe um cadastro com este e-mail. Verifique sua caixa de entrada ou aguarde aprovação.',
-        code: 'PENDING_EXISTS',
-      });
+      return res.status(400).json({ error: 'Já existe um cadastro com este e-mail.', code: 'PENDING_EXISTS' });
     }
 
     const url = baseUrl();
-
-    // signUp dispara o email de confirmação automaticamente
     const { data: signupData, error: signupErr } = await supaPublic.auth.signUp({
-      email,
-      password,
+      email, password,
       options: {
         emailRedirectTo: `${url}/confirm.html`,
         data: { discord_id: discord_id ? cleanId(discord_id) : null },
       },
     });
-
-    if (signupErr) {
-      console.error('[REGISTER-SIGNUP]', signupErr.message);
-      return res.status(400).json({ error: signupErr.message });
-    }
+    if (signupErr) return res.status(400).json({ error: signupErr.message });
     if (!signupData?.user) return res.status(500).json({ error: 'Falha ao criar conta' });
 
     const { error: dbErr } = await supaAdmin.from('panel_admins').insert({
-      user_id: signupData.user.id,
-      email,
-      nome: email.split('@')[0],
-      role: 'pending',
-      plan: 'basic',
-      ativo: false,
-      is_owner: false,
+      user_id: signupData.user.id, email, nome: email.split('@')[0],
+      role: 'pending', plan: 'basic', ativo: false, is_owner: false,
       discord_id: discord_id ? cleanId(discord_id) : null,
     });
+    if (dbErr) { await supaAdmin.auth.admin.deleteUser(signupData.user.id).catch(() => {}); return res.status(500).json({ error: dbErr.message }); }
 
-    if (dbErr) {
-      await supaAdmin.auth.admin.deleteUser(signupData.user.id).catch(() => {});
-      return res.status(500).json({ error: dbErr.message });
-    }
-
-    await supaAdmin.from('site_audit_log').insert({
-      actor_id: signupData.user.id,
-      actor_email: email,
-      action: 'register_pending',
-      target_role: 'pending',
-      ip: req.ip,
-    });
-
+    await supaAdmin.from('site_audit_log').insert({ actor_id: signupData.user.id, actor_email: email, action: 'register_pending', target_role: 'pending', ip: req.ip });
     const { data: devs } = await supaAdmin.from('panel_admins').select('user_id').eq('role', 'dev').eq('ativo', true);
-    for (const d of devs || []) {
-      await notify(
-        d.user_id, 'system', '🆕 Novo cadastro pendente',
-        `${email} solicitou acesso. Aguardando confirmação de email + aprovação.`,
-        { user_id: signupData.user.id }
-      );
-    }
+    for (const d of devs || []) await notify(d.user_id, 'system', '🆕 Novo cadastro pendente', `${email} solicitou acesso.`, { user_id: signupData.user.id });
 
-    return res.json({
-      ok: true,
-      message: 'Cadastro criado! Verifique seu email pra confirmar a conta. Depois aguarde aprovação do DEV.',
-    });
-  } catch (e) {
-    console.error('[REGISTER]', e);
-    res.status(500).json({ error: e.message });
-  }
+    return res.json({ ok: true, message: 'Cadastro criado! Verifique seu email pra confirmar a conta. Depois aguarde aprovação do DEV.' });
+  } catch (e) { console.error('[REGISTER]', e); res.status(500).json({ error: e.message }); }
 });
 
-// Reenviar email de confirmação
 app.post('/api/auth/resend-confirmation', async (req, res) => {
   try {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: 'E-mail obrigatório' });
     const url = baseUrl();
-    const { error } = await supaPublic.auth.resend({
-      type: 'signup',
-      email,
-      options: { emailRedirectTo: `${url}/confirm.html` },
-    });
-    if (error) {
-      console.error('[RESEND]', error.message);
-      return res.status(400).json({ error: error.message });
-    }
+    const { error } = await supaPublic.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${url}/confirm.html` } });
+    if (error) return res.status(400).json({ error: error.message });
     return res.json({ ok: true, message: 'Email reenviado!' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -303,6 +248,139 @@ app.post('/api/auth/update-password', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ═══ SERVIDORES — cliente/funcionario veem só os seus ═══
+app.get('/api/me/servers', requireAuth, async (req, res) => {
+  try {
+    if (['dev', 'admin'].includes(req.admin.role)) {
+      // DEV/ADMIN veem TODOS os servidores do bot
+      const { data } = await supaAdmin.from('bot_guilds').select('*').eq('in_guild', true).order('member_count', { ascending: false }).limit(500);
+      return res.json({ ok: true, servers: data || [] });
+    }
+
+    // Cliente/funcionario: pega user_guilds
+    const { data: ug } = await supaAdmin.from('user_guilds').select('guild_id, is_owner, is_admin').eq('user_id', req.user.id);
+    const guildIds = (ug || []).map(x => x.guild_id);
+
+    // Também inclui servidores que foram explicitamente atribuídos em assigned_guilds
+    const assigned = req.admin.assigned_guilds || [];
+    const allIds = [...new Set([...guildIds, ...assigned])];
+
+    if (!allIds.length) return res.json({ ok: true, servers: [] });
+
+    const { data } = await supaAdmin.from('bot_guilds').select('*').in('guild_id', allIds).eq('in_guild', true).order('member_count', { ascending: false });
+    res.json({ ok: true, servers: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+async function canAccessGuild(req, guildId) {
+  if (['dev', 'admin'].includes(req.admin.role)) return true;
+  const { data: ug } = await supaAdmin.from('user_guilds').select('*').eq('user_id', req.user.id).eq('guild_id', guildId).maybeSingle();
+  if (ug) return true;
+  if ((req.admin.assigned_guilds || []).includes(guildId)) return true;
+  return false;
+}
+
+app.get('/api/me/servers/:guildId', requireAuth, async (req, res) => {
+  try {
+    if (!(await canAccessGuild(req, req.params.guildId))) return res.status(403).json({ error: 'Sem acesso' });
+    const gid = req.params.guildId;
+    const [g, cfg, st, ff] = await Promise.all([
+      supaAdmin.from('bot_guilds').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('configs').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('settings').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('ff_config').select('*').eq('guild_id', gid).maybeSingle(),
+    ]);
+    res.json({ ok: true, guild: g.data, config: cfg.data, settings: st.data, ff: ff.data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/me/servers/:guildId/stats', requireAuth, async (req, res) => {
+  try {
+    if (!(await canAccessGuild(req, req.params.guildId))) return res.status(403).json({ error: 'Sem acesso' });
+    const gid = req.params.guildId;
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [ticketsOpen, bets, orders, g] = await Promise.all([
+      supaAdmin.from('ticket_data').select('*', { count: 'exact', head: true }).eq('guild_id', gid).is('closed_at', null),
+      supaAdmin.from('ff_matches').select('*', { count: 'exact', head: true }).eq('guild_id', gid).gte('created_at', since),
+      supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered').gte('created_at', since),
+      supaAdmin.from('bot_guilds').select('member_count').eq('guild_id', gid).maybeSingle(),
+    ]);
+    res.json({ ok: true, stats: { members: g.data?.member_count || 0, tickets_open: ticketsOpen.count || 0, bets_30d: bets.count || 0, orders_30d: orders.count || 0 } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/me/servers/:guildId/tickets', requireAuth, async (req, res) => {
+  try {
+    if (!(await canAccessGuild(req, req.params.guildId))) return res.status(403).json({ error: 'Sem acesso' });
+    const { data } = await supaAdmin.from('ticket_data').select('*').eq('guild_id', req.params.guildId).order('opened_at', { ascending: false }).limit(50);
+    res.json({ ok: true, tickets: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/me/servers/:guildId/products', requireAuth, async (req, res) => {
+  try {
+    if (!(await canAccessGuild(req, req.params.guildId))) return res.status(403).json({ error: 'Sem acesso' });
+    const { data } = await supaAdmin.from('products').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(100);
+    res.json({ ok: true, products: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/me/servers/:guildId/orders', requireAuth, async (req, res) => {
+  try {
+    if (!(await canAccessGuild(req, req.params.guildId))) return res.status(403).json({ error: 'Sem acesso' });
+    const { data } = await supaAdmin.from('orders').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(50);
+    res.json({ ok: true, orders: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res) => {
+  try {
+    if (!(await canAccessGuild(req, req.params.guildId))) return res.status(403).json({ error: 'Sem acesso' });
+    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+    if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) return res.status(500).json({ error: 'DISCORD_CLIENT_ID/SECRET não configurados' });
+
+    const limit = Math.min(Number(req.body?.limit) || 20, 50);
+    const gid = req.params.guildId;
+    const { data: vers } = await supaAdmin.from('verifications').select('user_id, access_token, refresh_token, expires_at').limit(limit);
+    if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
+
+    let added = 0, failed = 0;
+    for (const v of vers) {
+      let token = v.access_token;
+      if (v.expires_at && new Date(v.expires_at) <= new Date()) {
+        try {
+          const r = await fetch('https://discord.com/api/oauth2/token', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: process.env.DISCORD_CLIENT_ID, client_secret: process.env.DISCORD_CLIENT_SECRET,
+              grant_type: 'refresh_token', refresh_token: v.refresh_token,
+            }),
+          });
+          const rd = await r.json();
+          if (rd.access_token) {
+            token = rd.access_token;
+            await supaAdmin.from('verifications').update({
+              access_token: rd.access_token, refresh_token: rd.refresh_token,
+              expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
+            }).eq('user_id', v.user_id);
+          } else { failed++; continue; }
+        } catch { failed++; continue; }
+      }
+      try {
+        const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: token }),
+        });
+        if (r.ok || r.status === 204) added++; else failed++;
+      } catch { failed++; }
+      await new Promise(r => setTimeout(r, 1100));
+    }
+    await audit(req, 'take_members', { metadata: { guild_id: gid, added, failed, total: vers.length } });
+    res.json({ ok: true, added, failed, total: vers.length });
+  } catch (e) { console.error('[TAKE-MEMBERS]', e); res.status(500).json({ error: e.message }); }
+});
+
 // ═══ DEV — USUÁRIOS ═══
 app.get('/api/dev/usuarios', requireDev, async (req, res) => {
   try {
@@ -321,7 +399,7 @@ app.get('/api/dev/usuarios', requireDev, async (req, res) => {
 
 app.get('/api/dev/usuarios/clientes', requireStaff, async (req, res) => {
   try {
-    const { data } = await supaAdmin.from('panel_admins').select('user_id,email,nome,discord_id,role,plan,assigned_guilds').eq('ativo', true).in('role', ['cliente', 'funcionario']).order('nome', { ascending: true });
+    const { data } = await supaAdmin.from('panel_admins').select('user_id,email,nome,discord_id,role,plan,assigned_guilds').eq('ativo', true).in('role', ['cliente', 'funcionario']).order('nome');
     res.json({ ok: true, clientes: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -343,9 +421,7 @@ app.post('/api/dev/usuarios', requireDev, async (req, res) => {
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id').eq('email', email).maybeSingle();
     if (existing) return res.status(400).json({ error: 'E-mail já cadastrado' });
     const finalPassword = password && password.length >= 8 ? password : genPassword(12);
-    const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({
-      email, password: finalPassword, email_confirm: true,
-    });
+    const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({ email, password: finalPassword, email_confirm: true });
     if (authErr) return res.status(400).json({ error: authErr.message });
     const { error: dbErr } = await supaAdmin.from('panel_admins').insert({
       user_id: authData.user.id, email, nome: nome || email.split('@')[0],
@@ -425,25 +501,21 @@ app.delete('/api/dev/usuarios/:userId', requireDev, async (req, res) => {
 });
 
 // ═══ KEYS ═══
-const TIERS = { basic: 1, premium: 1, ultra: 1, unlimited: 1 };
-
 app.post('/api/keys/generate', requireStaff, async (req, res) => {
   try {
     const { tier, duracao_dias, quantidade = 1, max_usos = 1, motivo, validade_key_dias } = req.body || {};
-    if (!TIERS[tier]) return res.status(400).json({ error: 'Tier inválido' });
+    if (!TIERS.includes(tier)) return res.status(400).json({ error: 'Tier inválido' });
     if (![7, 15, 30, 90, 180, 365, 0].includes(Number(duracao_dias))) return res.status(400).json({ error: 'Duração inválida' });
     const qty = Math.min(Math.max(parseInt(quantidade) || 1, 1), 50);
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const seg = (n) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     const geradas = [];
     for (let i = 0; i < qty; i++) {
-      const keyCode = `FRIO-${seg(4)}-${seg(4)}-${seg(4)}`;
+      const keyCode = genKeyCode();
       const expiresKey = validade_key_dias > 0 ? new Date(Date.now() + validade_key_dias * 86400000).toISOString() : null;
       const { data, error } = await supaAdmin.from('premium_keys').insert({
         key_code: keyCode, tier, duracao_dias: Number(duracao_dias),
         max_usos: Number(max_usos), usos_atuais: 0,
         gerado_por: req.user.id, gerado_por_email: req.user.email,
-        motivo: motivo || null, expira_em: expiresKey, ativo: true,
+        motivo: motivo || null, expira_em: expiresKey, ativo: true, is_pack: false,
       }).select().single();
       if (error) return res.status(500).json({ error: error.message });
       geradas.push(data);
@@ -453,16 +525,106 @@ app.post('/api/keys/generate', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PACK DE KEYS — gera 1 registro pack (5x4x3 = 60 keys quando resgatado)
+app.post('/api/keys/generate-pack', requireDev, async (req, res) => {
+  try {
+    const { quantidade = 1, motivo } = req.body || {};
+    const qty = Math.min(Math.max(parseInt(quantidade) || 1, 1), 20);
+    const gerados = [];
+    for (let i = 0; i < qty; i++) {
+      const keyCode = genKeyCode();
+      const packContents = {
+        tiers: ['basic', 'premium', 'ultra', 'unlimited'],
+        durations: [7, 15, 30],
+        quantity_each: 5,
+        total: 60,
+      };
+      const { data, error } = await supaAdmin.from('premium_keys').insert({
+        key_code: keyCode, tier: 'pack', duracao_dias: 0,
+        max_usos: 1, usos_atuais: 0,
+        gerado_por: req.user.id, gerado_por_email: req.user.email,
+        motivo: motivo || null, ativo: true, is_pack: true,
+        pack_contents: packContents,
+      }).select().single();
+      if (error) return res.status(500).json({ error: error.message });
+      gerados.push(data);
+    }
+    await audit(req, 'generate_pack', { metadata: { quantidade: gerados.length } });
+    res.json({ ok: true, packs: gerados });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Resgatar pack — gera as 60 keys e marca como usado
+app.post('/api/keys/redeem-pack', requireDev, async (req, res) => {
+  try {
+    const { key_id } = req.body || {};
+    if (!key_id) return res.status(400).json({ error: 'key_id obrigatório' });
+    const { data: pack } = await supaAdmin.from('premium_keys').select('*').eq('id', key_id).maybeSingle();
+    if (!pack) return res.status(404).json({ error: 'Pack não encontrado' });
+    if (!pack.is_pack) return res.status(400).json({ error: 'Não é um pack' });
+    if (!pack.ativo) return res.status(400).json({ error: 'Pack já resgatado' });
+
+    const tiers = ['basic', 'premium', 'ultra', 'unlimited'];
+    const durations = [7, 15, 30];
+    const qtyEach = 5;
+    const geradas = [];
+
+    for (const tier of tiers) {
+      for (const dias of durations) {
+        for (let i = 0; i < qtyEach; i++) {
+          const keyCode = genKeyCode();
+          const { data } = await supaAdmin.from('premium_keys').insert({
+            key_code: keyCode, tier, duracao_dias: dias,
+            max_usos: 1, usos_atuais: 0,
+            gerado_por: req.user.id, gerado_por_email: req.user.email,
+            motivo: `Pack #${pack.id}`, ativo: true,
+            is_pack: false, generated_from_pack: String(pack.id),
+          }).select().single();
+          if (data) geradas.push(data);
+        }
+      }
+    }
+
+    // Marca pack como usado
+    await supaAdmin.from('premium_keys').update({
+      ativo: false, usos_atuais: 1,
+    }).eq('id', pack.id);
+
+    // Registra em redemptions com nome especial
+    await supaAdmin.from('premium_redemptions').insert({
+      key_id: pack.id, key_code: pack.key_code,
+      guild_id: null, guild_name: 'Pack de Keys',
+      resgatado_por: req.user.id, resgatado_por_tag: req.user.email,
+      tier: 'pack', duracao_dias: 0,
+    });
+
+    await audit(req, 'redeem_pack', { metadata: { pack_id: pack.id, keys_generated: geradas.length } });
+
+    res.json({ ok: true, keys: geradas, total: geradas.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/keys', requireStaff, async (req, res) => {
   try {
-    const { status, tier, limit = 100, offset = 0 } = req.query;
+    const { status, tier, limit = 100, offset = 0, include_packs } = req.query;
     let q = supaAdmin.from('premium_keys').select('*').order('created_at', { ascending: false });
+    // Por padrão NÃO mostra packs (só quando include_packs=true)
+    if (include_packs !== 'true') q = q.eq('is_pack', false);
     if (status === 'active') q = q.eq('ativo', true);
     if (status === 'used') q = q.eq('ativo', false);
     if (tier) q = q.eq('tier', tier);
     const { data, error } = await q.range(Number(offset), Number(offset) + Number(limit) - 1);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true, keys: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/keys/packs', requireDev, async (req, res) => {
+  try {
+    const { limit = 100 } = req.query;
+    const { data, error } = await supaAdmin.from('premium_keys').select('*').eq('is_pack', true).order('created_at', { ascending: false }).limit(Number(limit));
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, packs: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -475,8 +637,12 @@ app.post('/api/keys/send', requireStaff, async (req, res) => {
     const { data: target } = await supaAdmin.from('panel_admins').select('user_id,email,nome,role,ativo').eq('user_id', user_id).maybeSingle();
     if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
     if (!target.ativo) return res.status(400).json({ error: 'Usuário inativo' });
+
     await supaAdmin.from('premium_keys').update({ sent_to: user_id, sent_at: new Date().toISOString() }).eq('id', key_id);
-    await notify(user_id, 'key_received', '🔑 Você recebeu uma key!', `Key: ${key.key_code}\nTier: ${key.tier.toUpperCase()}\nDuração: ${key.duracao_dias === 0 ? 'Permanente' : key.duracao_dias + ' dias'}`, { key_id, key_code: key.key_code, tier: key.tier, duracao_dias: key.duracao_dias });
+
+    const label = key.is_pack ? '📦 Pack de Keys' : `🔑 ${key.tier.toUpperCase()}`;
+    await notify(user_id, 'key_received', `${label} recebido!`, `Código: ${key.key_code}`, { key_id, key_code: key.key_code, tier: key.tier, is_pack: key.is_pack });
+
     await audit(req, 'send_key', { target_id: user_id, metadata: { key_id, key_code: key.key_code } });
     res.json({ ok: true, sent_to: target.email, key_code: key.key_code });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -498,138 +664,122 @@ app.get('/api/redemptions', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ═══ SERVIDORES ═══
-app.get('/api/me/servers', requireAuth, async (req, res) => {
+// ═══ CLIENTE — minhas keys e meus pedidos ═══
+app.get('/api/me/keys-sent', requireAuth, async (req, res) => {
   try {
-    if (['cliente', 'funcionario'].includes(req.admin.role)) {
-      const ids = req.admin.assigned_guilds || [];
-      if (!ids.length) return res.json({ ok: true, servers: [] });
-      const { data } = await supaAdmin.from('bot_guilds').select('*').in('guild_id', ids);
-      return res.json({ ok: true, servers: data || [] });
-    }
-    const { data } = await supaAdmin.from('bot_guilds').select('*').eq('in_guild', true).order('member_count', { ascending: false }).limit(500);
-    res.json({ ok: true, servers: data || [] });
+    const { data } = await supaAdmin.from('premium_keys').select('*').eq('sent_to', req.user.id).order('sent_at', { ascending: false }).limit(100);
+    res.json({ ok: true, keys: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/me/servers/:guildId', requireAuth, async (req, res) => {
+app.get('/api/me/orders', requireAuth, async (req, res) => {
   try {
-    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-    const gid = req.params.guildId;
-    const [g, cfg, st, ff] = await Promise.all([
-      supaAdmin.from('bot_guilds').select('*').eq('guild_id', gid).maybeSingle(),
-      supaAdmin.from('configs').select('*').eq('guild_id', gid).maybeSingle(),
-      supaAdmin.from('settings').select('*').eq('guild_id', gid).maybeSingle(),
-      supaAdmin.from('ff_config').select('*').eq('guild_id', gid).maybeSingle(),
-    ]);
-    res.json({ ok: true, guild: g.data, config: cfg.data, settings: st.data, ff: ff.data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/me/servers/:guildId/stats', requireAuth, async (req, res) => {
-  try {
-    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-    const gid = req.params.guildId;
-    const since = new Date(Date.now() - 30 * 86400000).toISOString();
-    const [ticketsOpen, bets, orders, g] = await Promise.all([
-      supaAdmin.from('ticket_data').select('*', { count: 'exact', head: true }).eq('guild_id', gid).is('closed_at', null),
-      supaAdmin.from('ff_matches').select('*', { count: 'exact', head: true }).eq('guild_id', gid).gte('created_at', since),
-      supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered').gte('created_at', since),
-      supaAdmin.from('bot_guilds').select('member_count').eq('guild_id', gid).maybeSingle(),
-    ]);
-    res.json({ ok: true, stats: { members: g.data?.member_count || 0, tickets_open: ticketsOpen.count || 0, bets_30d: bets.count || 0, orders_30d: orders.count || 0 } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/me/servers/:guildId/tickets', requireAuth, async (req, res) => {
-  try {
-    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-    const { data } = await supaAdmin.from('ticket_data').select('*').eq('guild_id', req.params.guildId).order('opened_at', { ascending: false }).limit(50);
-    res.json({ ok: true, tickets: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/me/servers/:guildId/products', requireAuth, async (req, res) => {
-  try {
-    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-    const { data } = await supaAdmin.from('products').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(100);
-    res.json({ ok: true, products: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/me/servers/:guildId/orders', requireAuth, async (req, res) => {
-  try {
-    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-    const { data } = await supaAdmin.from('orders').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(50);
+    const { data } = await supaAdmin.from('orders').select('*').eq('user_id', req.user.id).order('id', { ascending: false }).limit(100);
     res.json({ ok: true, orders: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res) => {
+// ═══ DEV — STATS GLOBAIS ═══
+app.get('/api/dev/stats-global', requireDev, async (req, res) => {
   try {
-    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
-    if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
-      return res.status(500).json({ error: 'DISCORD_CLIENT_ID/SECRET não configurados' });
-    }
-    const limit = Math.min(Number(req.body?.limit) || 20, 50);
-    const gid = req.params.guildId;
-    const { data: vers } = await supaAdmin.from('verifications').select('user_id, access_token, refresh_token, expires_at').limit(limit);
-    if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
-    let added = 0, failed = 0;
-    for (const v of vers) {
-      let token = v.access_token;
-      if (v.expires_at && new Date(v.expires_at) <= new Date()) {
-        try {
-          const r = await fetch('https://discord.com/api/oauth2/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-              client_id: process.env.DISCORD_CLIENT_ID,
-              client_secret: process.env.DISCORD_CLIENT_SECRET,
-              grant_type: 'refresh_token',
-              refresh_token: v.refresh_token,
-            }),
-          });
-          const rd = await r.json();
-          if (rd.access_token) {
-            token = rd.access_token;
-            await supaAdmin.from('verifications').update({
-              access_token: rd.access_token, refresh_token: rd.refresh_token,
-              expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
-            }).eq('user_id', v.user_id);
-          } else { failed++; continue; }
-        } catch { failed++; continue; }
-      }
-      try {
-        const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
-          method: 'PUT',
-          headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: token }),
-        });
-        if (r.ok || r.status === 204) added++; else failed++;
-      } catch { failed++; }
-      await new Promise(r => setTimeout(r, 1100));
-    }
-    await audit(req, 'take_members', { metadata: { guild_id: gid, added, failed, total: vers.length } });
-    res.json({ ok: true, added, failed, total: vers.length });
-  } catch (e) {
-    console.error('[TAKE-MEMBERS]', e);
-    res.status(500).json({ error: e.message });
-  }
+    const [guilds, users, keys, redemptions, notifs] = await Promise.all([
+      supaAdmin.from('bot_guilds').select('*', { count: 'exact', head: true }).eq('in_guild', true),
+      supaAdmin.from('panel_admins').select('*', { count: 'exact', head: true }).eq('ativo', true),
+      supaAdmin.from('premium_keys').select('*', { count: 'exact', head: true }).eq('is_pack', false),
+      supaAdmin.from('premium_redemptions').select('*', { count: 'exact', head: true }),
+      supaAdmin.from('site_notifications').select('*', { count: 'exact', head: true }),
+    ]);
+    const { data: ug } = await supaAdmin.from('user_guilds').select('user_id', { count: 'exact', head: true });
+    const { count: totalMembers } = await supaAdmin.from('bot_guilds').select('member_count', { count: 'exact' });
+    const { data: gd } = await supaAdmin.from('bot_guilds').select('member_count').eq('in_guild', true);
+    const sumMembers = (gd || []).reduce((a, x) => a + (x.member_count || 0), 0);
+
+    res.json({
+      ok: true,
+      stats: {
+        guilds: guilds.count || 0,
+        users: users.count || 0,
+        keys: keys.count || 0,
+        redemptions: redemptions.count || 0,
+        notifications: notifs.count || 0,
+        user_guilds: ug?.length || 0,
+        total_members: sumMembers,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ═══ DEV TOOLS ═══
+// ═══ DEV — BACKUP ═══
+app.get('/api/dev/backup', requireDev, async (req, res) => {
+  try {
+    const tables = ['panel_admins', 'bot_guilds', 'user_guilds', 'premium_keys', 'premium_redemptions', 'site_notifications', 'site_audit_log'];
+    const dump = { generated_at: new Date().toISOString(), tables: {} };
+    for (const t of tables) {
+      const { data } = await supaAdmin.from(t).select('*').limit(5000);
+      dump.tables[t] = data || [];
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="frio-backup-${Date.now()}.json"`);
+    res.send(JSON.stringify(dump, null, 2));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══ DEV — FORÇAR SYNC DE SERVIDORES ═══
+app.post('/api/dev/sync-servers', requireDev, async (req, res) => {
+  try {
+    // Só registra a intenção — o bot faz o trabalho real
+    await supaAdmin.from('bot_meta').upsert({
+      key: 'force_sync_servers',
+      value: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+    await audit(req, 'force_sync_servers', {});
+    res.json({ ok: true, message: 'Sync agendado. O bot vai atualizar em até 1 minuto.' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══ ADMIN — TICKETS GLOBAIS ═══
+app.get('/api/admin/tickets-global', requireAdmin, async (req, res) => {
+  try {
+    const { limit = 100 } = req.query;
+    const { data } = await supaAdmin.from('ticket_data').select('*').is('closed_at', null).order('opened_at', { ascending: false }).limit(Number(limit));
+    res.json({ ok: true, tickets: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══ ADMIN — FINANCEIRO ═══
+app.get('/api/admin/financial', requireAdmin, async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const { data: orders } = await supaAdmin.from('orders').select('total,status,created_at').gte('created_at', since);
+    const delivered = (orders || []).filter(o => o.status === 'delivered');
+    const total = delivered.reduce((a, o) => a + Number(o.total || 0), 0);
+    const { data: byDay } = await supaAdmin.from('orders').select('total,created_at').eq('status', 'delivered').gte('created_at', since);
+
+    const daily = {};
+    for (const o of byDay || []) {
+      const d = o.created_at.substring(0, 10);
+      daily[d] = (daily[d] || 0) + Number(o.total || 0);
+    }
+
+    res.json({
+      ok: true,
+      total: total,
+      count: delivered.length,
+      avg: delivered.length ? total / delivered.length : 0,
+      daily: Object.entries(daily).map(([date, value]) => ({ date, value })).sort((a, b) => a.date.localeCompare(b.date)),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══ DEV TOOLS (kill, maintenance, fp, broadcast, notif) ═══
 app.get('/api/dev/kill-switch', requireDev, async (req, res) => {
   const { data } = await supaAdmin.from('kill_switch').select('*').eq('id', 1).maybeSingle();
   res.json({ ok: true, active: !!data?.active, reason: data?.reason, enabled_by: data?.enabled_by, enabled_at: data?.enabled_at });
 });
 app.post('/api/dev/kill-switch', requireDev, async (req, res) => {
   const { active, reason } = req.body || {};
-  await supaAdmin.from('kill_switch').upsert({
-    id: 1, active: !!active, reason: reason || null,
-    enabled_by: req.user.id, enabled_at: active ? new Date().toISOString() : null,
-  });
+  await supaAdmin.from('kill_switch').upsert({ id: 1, active: !!active, reason: reason || null, enabled_by: req.user.id, enabled_at: active ? new Date().toISOString() : null });
   await audit(req, active ? 'kill_switch_on' : 'kill_switch_off', { metadata: { reason } });
   res.json({ ok: true });
 });
@@ -640,11 +790,7 @@ app.get('/api/dev/maintenance', requireDev, async (req, res) => {
 });
 app.post('/api/dev/maintenance', requireDev, async (req, res) => {
   const { active, reason } = req.body || {};
-  await supaAdmin.from('maintenance_mode').upsert({
-    id: 1, active: !!active, reason: reason || null, by: req.user.id,
-    started_at: active ? new Date().toISOString() : null,
-    updated_at: new Date().toISOString(),
-  });
+  await supaAdmin.from('maintenance_mode').upsert({ id: 1, active: !!active, reason: reason || null, by: req.user.id, started_at: active ? new Date().toISOString() : null, updated_at: new Date().toISOString() });
   await audit(req, active ? 'maintenance_on' : 'maintenance_off', { metadata: { reason } });
   res.json({ ok: true });
 });
@@ -658,10 +804,7 @@ app.post('/api/dev/force-premium', requireDev, async (req, res) => {
   if (!scope || !target_id) return res.status(400).json({ error: 'scope e target_id obrigatórios' });
   const permanent = !days || Number(days) === 0;
   const expires_at = permanent ? null : new Date(Date.now() + Number(days) * 86400000).toISOString();
-  await supaAdmin.from('force_premium').upsert({
-    scope, target_id, permanent, expires_at, reason: reason || null,
-    granted_by: req.user.id, granted_at: new Date().toISOString(),
-  }, { onConflict: 'scope,target_id' });
+  await supaAdmin.from('force_premium').upsert({ scope, target_id, permanent, expires_at, reason: reason || null, granted_by: req.user.id, granted_at: new Date().toISOString() }, { onConflict: 'scope,target_id' });
   await audit(req, 'force_premium_add', { metadata: { scope, target_id, days } });
   res.json({ ok: true });
 });
@@ -707,7 +850,6 @@ app.post('/api/notifications/read-all', requireAuth, async (req, res) => {
   await supaAdmin.from('site_notifications').update({ read: true }).eq('user_id', req.user.id).eq('read', false);
   res.json({ ok: true });
 });
-
 app.post('/api/dev/notifications', requireStaff, async (req, res) => {
   try {
     const { user_id, type = 'system', title, content, broadcast_to_role } = req.body || {};
@@ -735,4 +877,4 @@ app.get('/api/dev/audit', requireDev, async (req, res) => {
   res.json({ ok: true, logs: data || [] });
 });
 
-app.listen(PORT, () => console.log(`🌐 [PANEL v3.2] Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 [PANEL v3.3] Rodando na porta ${PORT}`));

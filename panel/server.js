@@ -41,7 +41,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// ═══ AUTH ═══
+// ═══ AUTH MIDDLEWARE ═══
 async function requireAuth(req, res, next) {
   try {
     let token = null;
@@ -73,7 +73,7 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// ⚠️ FIX CRÍTICO: roda requireAuth ANTES de checar role
+// Roda requireAuth ANTES de checar role
 function requireRole(...allowed) {
   return (req, res, next) => {
     requireAuth(req, res, () => {
@@ -106,7 +106,7 @@ function ownsGuild(req, guildId) {
   return (req.admin.assigned_guilds || []).includes(guildId);
 }
 
-// ═══ PUBLIC ═══
+// ═══ PUBLIC CONFIG ═══
 app.get('/api/public-config', (req, res) => res.json({ supabase_url: SUPABASE_URL, supabase_anon: SUPABASE_ANON }));
 
 // ═══ AUTH ═══
@@ -379,178 +379,150 @@ app.get('/api/me/servers', requireAuth, async (req, res) => {
 
 // ═══ SERVIDOR — detalhes + stats ═══
 app.get('/api/me/servers/:guildId', requireAuth, async (req, res) => {
-  if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-  const gid = req.params.guildId;
-  const [g, cfg, st, ff] = await Promise.all([
-    supaAdmin.from('bot_guilds').select('*').eq('guild_id', gid).maybeSingle(),
-    supaAdmin.from('configs').select('*').eq('guild_id', gid).maybeSingle(),
-    supaAdmin.from('settings').select('*').eq('guild_id', gid).maybeSingle(),
-    supaAdmin.from('ff_config').select('*').eq('guild_id', gid).maybeSingle(),
-  ]);
-  res.json({ ok: true, guild: g.data, config: cfg.data, settings: st.data, ff: ff.data });
+  try {
+    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+    const gid = req.params.guildId;
+    const [g, cfg, st, ff] = await Promise.all([
+      supaAdmin.from('bot_guilds').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('configs').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('settings').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('ff_config').select('*').eq('guild_id', gid).maybeSingle(),
+    ]);
+    res.json({ ok: true, guild: g.data, config: cfg.data, settings: st.data, ff: ff.data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/me/servers/:guildId/stats', requireAuth, async (req, res) => {
-  if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-  const gid = req.params.guildId;
-  const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const [ticketsOpen, bets, orders, g] = await Promise.all([
-    supaAdmin.from('ticket_data').select('*', { count: 'exact', head: true }).eq('guild_id', gid).is('closed_at', null),
-    supaAdmin.from('ff_matches').select('*', { count: 'exact', head: true }).eq('guild_id', gid).gte('created_at', since),
-    supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered').gte('created_at', since),
-    supaAdmin.from('bot_guilds').select('member_count').eq('guild_id', gid).maybeSingle(),
-  ]);
-  res.json({
-    ok: true,
-    stats: {
-      members: g.data?.member_count || 0,
-      tickets_open: ticketsOpen.count || 0,
-      bets_30d: bets.count || 0,
-      orders_30d: orders.count || 0,
-    },
-  });
+  try {
+    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+    const gid = req.params.guildId;
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [ticketsOpen, bets, orders, g] = await Promise.all([
+      supaAdmin.from('ticket_data').select('*', { count: 'exact', head: true }).eq('guild_id', gid).is('closed_at', null),
+      supaAdmin.from('ff_matches').select('*', { count: 'exact', head: true }).eq('guild_id', gid).gte('created_at', since),
+      supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered').gte('created_at', since),
+      supaAdmin.from('bot_guilds').select('member_count').eq('guild_id', gid).maybeSingle(),
+    ]);
+    res.json({
+      ok: true,
+      stats: {
+        members: g.data?.member_count || 0,
+        tickets_open: ticketsOpen.count || 0,
+        bets_30d: bets.count || 0,
+        orders_30d: orders.count || 0,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/me/servers/:guildId/tickets', requireAuth, async (req, res) => {
-  if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-  const { data } = await supaAdmin.from('ticket_data').select('*').eq('guild_id', req.params.guildId).order('opened_at', { ascending: false }).limit(50);
-  res.json({ ok: true, tickets: data || [] });
+  try {
+    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+    const { data } = await supaAdmin.from('ticket_data').select('*').eq('guild_id', req.params.guildId).order('opened_at', { ascending: false }).limit(50);
+    res.json({ ok: true, tickets: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/me/servers/:guildId/products', requireAuth, async (req, res) => {
-  if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-  const { data } = await supaAdmin.from('products').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(100);
-  res.json({ ok: true, products: data || [] });
+  try {
+    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+    const { data } = await supaAdmin.from('products').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(100);
+    res.json({ ok: true, products: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/me/servers/:guildId/orders', requireAuth, async (req, res) => {
-  if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-  const { data } = await supaAdmin.from('orders').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(50);
-  res.json({ ok: true, orders: data || [] });
+  try {
+    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+    const { data } = await supaAdmin.from('orders').select('*').eq('guild_id', req.params.guildId).order('id', { ascending: false }).limit(50);
+    res.json({ ok: true, orders: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ═══ Levar membros — APENAS DEV/ADMIN ═══
 app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res) => {
-  if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
-  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
-  if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
-    return res.status(500).json({ error: 'DISCORD_CLIENT_ID/SECRET não configurados' });
-  }
+  try {
+    if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
+    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+    if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
+      return res.status(500).json({ error: 'DISCORD_CLIENT_ID/SECRET não configurados' });
+    }
 
-  const limit = Math.min(Number(req.body?.limit) || 20, 50);
-  const gid = req.params.guildId;
+    const limit = Math.min(Number(req.body?.limit) || 20, 50);
+    const gid = req.params.guildId;
 
-  const { data: vers } = await supaAdmin
-    .from('verifications')
-    .select('user_id, access_token, refresh_token, expires_at')
-    .limit(limit);
+    const { data: vers } = await supaAdmin
+      .from('verifications')
+      .select('user_id, access_token, refresh_token, expires_at')
+      .limit(limit);
 
-  if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
+    if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
 
-  let added = 0, failed = 0;
+    let added = 0, failed = 0;
 
-  for (const v of vers) {
-    let token = v.access_token;
+    for (const v of vers) {
+      let token = v.access_token;
 
-    // Renova token se expirado
-    if (v.expires_at && new Date(v.expires_at) <= new Date()) {
-      try {
-        const r = await fetch('https://discord.com/api/oauth2/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_id: process.env.DISCORD_CLIENT_ID,
-            client_secret: process.env.DISCORD_CLIENT_SECRET,
-            grant_type: 'refresh_token',
-            refresh_token: v.refresh_token,
-          }),
-        });
-        const rd = await r.json();
-        if (rd.access_token) {
-          token = rd.access_token;
-          await supaAdmin.from('verifications').update({
-            access_token: rd.access_token,
-            refresh_token: rd.refresh_token,
-            expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
-          }).eq('user_id', v.user_id);
-        } else {
+      // Renova token se expirado
+      if (v.expires_at && new Date(v.expires_at) <= new Date()) {
+        try {
+          const r = await fetch('https://discord.com/api/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: process.env.DISCORD_CLIENT_ID,
+              client_secret: process.env.DISCORD_CLIENT_SECRET,
+              grant_type: 'refresh_token',
+              refresh_token: v.refresh_token,
+            }),
+          });
+          const rd = await r.json();
+          if (rd.access_token) {
+            token = rd.access_token;
+            await supaAdmin.from('verifications').update({
+              access_token: rd.access_token,
+              refresh_token: rd.refresh_token,
+              expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
+            }).eq('user_id', v.user_id);
+          } else {
+            failed++;
+            continue;
+          }
+        } catch {
           failed++;
           continue;
         }
+      }
+
+      // Adiciona ao servidor
+      try {
+        const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ access_token: token }),
+        });
+        if (r.ok || r.status === 204) added++;
+        else failed++;
       } catch {
         failed++;
-        continue;
       }
+
+      // Rate limit: 1 por segundo
+      await new Promise(r => setTimeout(r, 1100));
     }
 
-    // Adiciona ao servidor
-    try {
-      const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ access_token: token }),
-      });
-      if (r.ok || r.status === 204) added++;
-      else failed++;
-    } catch {
-      failed++;
-    }
+    await audit(req, 'take_members', {
+      metadata: { guild_id: gid, added, failed, total: vers.length },
+    });
 
-    // Rate limit: 1 por segundo
-    await new Promise(r => setTimeout(r, 1100));
+    res.json({ ok: true, added, failed, total: vers.length });
+  } catch (e) {
+    console.error('[TAKE-MEMBERS]', e);
+    res.status(500).json({ error: e.message });
   }
-
-  await audit(req, 'take_members', {
-    metadata: { guild_id: gid, added, failed, total: vers.length },
-  });
-
-  res.json({ ok: true, added, failed, total: vers.length });
-});
-  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
-  const limit = Math.min(Number(req.body?.limit) || 20, 50);
-  const gid = req.params.guildId;
-
-  const { data: vers } = await supaAdmin.from('verifications').select('user_id, access_token, refresh_token, expires_at').limit(limit);
-  if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
-
-  let added = 0, failed = 0;
-  for (const v of vers) {
-    let token = v.access_token;
-    if (v.expires_at && new Date(v.expires_at) <= new Date()) {
-      try {
-        const r = await fetch('https://discord.com/api/oauth2/token', {
-          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_id: process.env.DISCORD_CLIENT_ID,
-            client_secret: process.env.DISCORD_CLIENT_SECRET,
-            grant_type: 'refresh_token', refresh_token: v.refresh_token,
-          }),
-        });
-        const rd = await r.json();
-        if (rd.access_token) {
-          token = rd.access_token;
-          await supaAdmin.from('verifications').update({
-            access_token: rd.access_token, refresh_token: rd.refresh_token,
-            expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
-          }).eq('user_id', v.user_id);
-        } else { failed++; continue; }
-      } catch { failed++; continue; }
-    }
-    try {
-      const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
-        method: 'PUT',
-        headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: token }),
-      });
-      if (r.ok || r.status === 204) added++; else failed++;
-    } catch { failed++; }
-    await new Promise(r => setTimeout(r, 1100));
-  }
-  await audit(req, 'take_members', { metadata: { guild_id: gid, added, failed, total: vers.length } });
-  res.json({ ok: true, added, failed, total: vers.length });
 });
 
 // ═══ DEV TOOLS ═══

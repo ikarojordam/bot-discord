@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v3.1
+// 🔑 FRIO PANEL — Backend v3.2
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 const express = require('express');
@@ -30,6 +30,10 @@ function genPassword(len = 12) {
   return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 function cleanId(s) { return String(s || '').replace(/[<@!>]/g, '').trim(); }
+function baseUrl() {
+  return process.env.PANEL_URL
+    || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : 'http://localhost:10000');
+}
 
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
@@ -42,7 +46,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// ═══ AUTH ═══
+// ═══ AUTH MIDDLEWARE ═══
 async function requireAuth(req, res, next) {
   try {
     let token = null;
@@ -106,7 +110,7 @@ function ownsGuild(req, guildId) {
   return (req.admin.assigned_guilds || []).includes(guildId);
 }
 
-// ═══ PUBLIC ═══
+// ═══ PUBLIC CONFIG ═══
 app.get('/api/public-config', (req, res) => res.json({ supabase_url: SUPABASE_URL, supabase_anon: SUPABASE_ANON }));
 
 // ═══ AUTH ═══
@@ -115,7 +119,16 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'E-mail e senha obrigatórios' });
     const { data, error } = await supaPublic.auth.signInWithPassword({ email, password });
-    if (error) return res.status(401).json({ error: 'E-mail ou senha inválidos' });
+    if (error) {
+      const msg = String(error.message || '').toLowerCase();
+      if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+        return res.status(403).json({
+          error: 'Você precisa confirmar seu email antes de logar. Verifique sua caixa de entrada.',
+          code: 'EMAIL_NOT_CONFIRMED',
+        });
+      }
+      return res.status(401).json({ error: 'E-mail ou senha inválidos' });
+    }
     if (!data.session) return res.status(401).json({ error: 'Sessão não criada' });
 
     const { data: admin } = await supaAdmin.from('panel_admins').select('*').eq('user_id', data.user.id).maybeSingle();
@@ -165,25 +178,104 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
+// ═══ REGISTER — EXIGE CONFIRMAÇÃO DE EMAIL ═══
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, discord_id } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'E-mail e senha obrigatórios' });
-    if (password.length < 8) return res.status(400).json({ error: 'Senha muito curta' });
-    const { data: existing } = await supaAdmin.from('panel_admins').select('user_id, ativo').eq('email', email).maybeSingle();
-    if (existing) return res.status(400).json({ error: existing.ativo ? 'E-mail já cadastrado' : 'Aguarde aprovação' });
-    const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({ email, password, email_confirm: true });
-    if (authErr) return res.status(400).json({ error: authErr.message });
+    if (password.length < 8) return res.status(400).json({ error: 'Senha deve ter 8+ caracteres' });
+
+    const { data: existing } = await supaAdmin
+      .from('panel_admins')
+      .select('user_id, ativo, role')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.ativo) return res.status(400).json({ error: 'E-mail já cadastrado' });
+      return res.status(400).json({
+        error: 'Já existe um cadastro com este e-mail. Verifique sua caixa de entrada ou aguarde aprovação.',
+        code: 'PENDING_EXISTS',
+      });
+    }
+
+    const url = baseUrl();
+
+    // signUp dispara o email de confirmação automaticamente
+    const { data: signupData, error: signupErr } = await supaPublic.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${url}/confirm.html`,
+        data: { discord_id: discord_id ? cleanId(discord_id) : null },
+      },
+    });
+
+    if (signupErr) {
+      console.error('[REGISTER-SIGNUP]', signupErr.message);
+      return res.status(400).json({ error: signupErr.message });
+    }
+    if (!signupData?.user) return res.status(500).json({ error: 'Falha ao criar conta' });
+
     const { error: dbErr } = await supaAdmin.from('panel_admins').insert({
-      user_id: authData.user.id, email, nome: email.split('@')[0],
-      role: 'pending', plan: 'basic', ativo: false, is_owner: false,
+      user_id: signupData.user.id,
+      email,
+      nome: email.split('@')[0],
+      role: 'pending',
+      plan: 'basic',
+      ativo: false,
+      is_owner: false,
       discord_id: discord_id ? cleanId(discord_id) : null,
     });
-    if (dbErr) { await supaAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {}); return res.status(500).json({ error: dbErr.message }); }
-    await supaAdmin.from('site_audit_log').insert({ actor_id: authData.user.id, actor_email: email, action: 'register_pending', target_role: 'pending', ip: req.ip });
+
+    if (dbErr) {
+      await supaAdmin.auth.admin.deleteUser(signupData.user.id).catch(() => {});
+      return res.status(500).json({ error: dbErr.message });
+    }
+
+    await supaAdmin.from('site_audit_log').insert({
+      actor_id: signupData.user.id,
+      actor_email: email,
+      action: 'register_pending',
+      target_role: 'pending',
+      ip: req.ip,
+    });
+
     const { data: devs } = await supaAdmin.from('panel_admins').select('user_id').eq('role', 'dev').eq('ativo', true);
-    for (const d of devs || []) await notify(d.user_id, 'system', '🆕 Novo cadastro pendente', `${email} solicitou acesso.`, { user_id: authData.user.id });
-    return res.json({ ok: true, message: 'Cadastro enviado! Aguarde aprovação.' });
+    for (const d of devs || []) {
+      await notify(
+        d.user_id, 'system', '🆕 Novo cadastro pendente',
+        `${email} solicitou acesso. Aguardando confirmação de email + aprovação.`,
+        { user_id: signupData.user.id }
+      );
+    }
+
+    return res.json({
+      ok: true,
+      message: 'Cadastro criado! Verifique seu email pra confirmar a conta. Depois aguarde aprovação do DEV.',
+    });
+  } catch (e) {
+    console.error('[REGISTER]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reenviar email de confirmação
+app.post('/api/auth/resend-confirmation', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'E-mail obrigatório' });
+    const url = baseUrl();
+    const { error } = await supaPublic.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${url}/confirm.html` },
+    });
+    if (error) {
+      console.error('[RESEND]', error.message);
+      return res.status(400).json({ error: error.message });
+    }
+    return res.json({ ok: true, message: 'Email reenviado!' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -191,8 +283,8 @@ app.post('/api/auth/forgot', async (req, res) => {
   try {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: 'E-mail obrigatório' });
-    const baseUrl = process.env.PANEL_URL || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : 'http://localhost:10000');
-    await supaPublic.auth.resetPasswordForEmail(email, { redirectTo: `${baseUrl}/reset.html` });
+    const url = baseUrl();
+    await supaPublic.auth.resetPasswordForEmail(email, { redirectTo: `${url}/reset.html` });
     return res.json({ ok: true, message: 'Se o e-mail existir, enviaremos instruções.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -251,7 +343,9 @@ app.post('/api/dev/usuarios', requireDev, async (req, res) => {
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id').eq('email', email).maybeSingle();
     if (existing) return res.status(400).json({ error: 'E-mail já cadastrado' });
     const finalPassword = password && password.length >= 8 ? password : genPassword(12);
-    const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({ email, password: finalPassword, email_confirm: true });
+    const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({
+      email, password: finalPassword, email_confirm: true,
+    });
     if (authErr) return res.status(400).json({ error: authErr.message });
     const { error: dbErr } = await supaAdmin.from('panel_admins').insert({
       user_id: authData.user.id, email, nome: nome || email.split('@')[0],
@@ -288,14 +382,11 @@ app.post('/api/dev/usuarios/:userId/approve', requireDev, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Atualiza plano de um usuário
 app.patch('/api/dev/usuarios/:userId/plan', requireDev, async (req, res) => {
   try {
     const { plan } = req.body || {};
     if (!PLANS.includes(plan)) return res.status(400).json({ error: 'Plano inválido' });
-    const { error } = await supaAdmin.from('panel_admins').update({
-      plan, updated_at: new Date().toISOString(),
-    }).eq('user_id', req.params.userId);
+    const { error } = await supaAdmin.from('panel_admins').update({ plan, updated_at: new Date().toISOString() }).eq('user_id', req.params.userId);
     if (error) return res.status(500).json({ error: error.message });
     await audit(req, 'change_plan', { target_id: req.params.userId, metadata: { plan } });
     await notify(req.params.userId, 'system', '💎 Plano alterado!', `Seu plano agora é ${plan.toUpperCase()}.`, { plan });
@@ -375,32 +466,18 @@ app.get('/api/keys', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Envia uma key para um usuário (com notificação)
 app.post('/api/keys/send', requireStaff, async (req, res) => {
   try {
     const { key_id, user_id } = req.body || {};
     if (!key_id || !user_id) return res.status(400).json({ error: 'key_id e user_id obrigatórios' });
-
     const { data: key } = await supaAdmin.from('premium_keys').select('*').eq('id', key_id).maybeSingle();
     if (!key) return res.status(404).json({ error: 'Key não encontrada' });
-
     const { data: target } = await supaAdmin.from('panel_admins').select('user_id,email,nome,role,ativo').eq('user_id', user_id).maybeSingle();
     if (!target) return res.status(404).json({ error: 'Usuário não encontrado' });
     if (!target.ativo) return res.status(400).json({ error: 'Usuário inativo' });
-
-    // Marca key como enviada
-    await supaAdmin.from('premium_keys').update({
-      sent_to: user_id,
-      sent_at: new Date().toISOString(),
-    }).eq('id', key_id);
-
-    // Notificação
-    await notify(user_id, 'key_received', '🔑 Você recebeu uma key!', `Key: ${key.key_code}\nTier: ${key.tier.toUpperCase()}\nDuração: ${key.duracao_dias === 0 ? 'Permanente' : key.duracao_dias + ' dias'}`, {
-      key_id, key_code: key.key_code, tier: key.tier, duracao_dias: key.duracao_dias,
-    });
-
+    await supaAdmin.from('premium_keys').update({ sent_to: user_id, sent_at: new Date().toISOString() }).eq('id', key_id);
+    await notify(user_id, 'key_received', '🔑 Você recebeu uma key!', `Key: ${key.key_code}\nTier: ${key.tier.toUpperCase()}\nDuração: ${key.duracao_dias === 0 ? 'Permanente' : key.duracao_dias + ' dias'}`, { key_id, key_code: key.key_code, tier: key.tier, duracao_dias: key.duracao_dias });
     await audit(req, 'send_key', { target_id: user_id, metadata: { key_id, key_code: key.key_code } });
-
     res.json({ ok: true, sent_to: target.email, key_code: key.key_code });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -460,15 +537,7 @@ app.get('/api/me/servers/:guildId/stats', requireAuth, async (req, res) => {
       supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered').gte('created_at', since),
       supaAdmin.from('bot_guilds').select('member_count').eq('guild_id', gid).maybeSingle(),
     ]);
-    res.json({
-      ok: true,
-      stats: {
-        members: g.data?.member_count || 0,
-        tickets_open: ticketsOpen.count || 0,
-        bets_30d: bets.count || 0,
-        orders_30d: orders.count || 0,
-      },
-    });
+    res.json({ ok: true, stats: { members: g.data?.member_count || 0, tickets_open: ticketsOpen.count || 0, bets_30d: bets.count || 0, orders_30d: orders.count || 0 } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -496,7 +565,6 @@ app.get('/api/me/servers/:guildId/orders', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ═══ Levar membros — APENAS DEV/ADMIN ═══
 app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res) => {
   try {
     if (!ownsGuild(req, req.params.guildId)) return res.status(403).json({ error: 'Sem acesso' });
@@ -504,22 +572,13 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
     if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
       return res.status(500).json({ error: 'DISCORD_CLIENT_ID/SECRET não configurados' });
     }
-
     const limit = Math.min(Number(req.body?.limit) || 20, 50);
     const gid = req.params.guildId;
-
-    const { data: vers } = await supaAdmin
-      .from('verifications')
-      .select('user_id, access_token, refresh_token, expires_at')
-      .limit(limit);
-
+    const { data: vers } = await supaAdmin.from('verifications').select('user_id, access_token, refresh_token, expires_at').limit(limit);
     if (!vers?.length) return res.json({ ok: true, added: 0, failed: 0, total: 0 });
-
     let added = 0, failed = 0;
-
     for (const v of vers) {
       let token = v.access_token;
-
       if (v.expires_at && new Date(v.expires_at) <= new Date()) {
         try {
           const r = await fetch('https://discord.com/api/oauth2/token', {
@@ -536,30 +595,22 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
           if (rd.access_token) {
             token = rd.access_token;
             await supaAdmin.from('verifications').update({
-              access_token: rd.access_token,
-              refresh_token: rd.refresh_token,
+              access_token: rd.access_token, refresh_token: rd.refresh_token,
               expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString(),
             }).eq('user_id', v.user_id);
           } else { failed++; continue; }
         } catch { failed++; continue; }
       }
-
       try {
         const r = await fetch(`https://discord.com/api/v10/guilds/${gid}/members/${v.user_id}`, {
           method: 'PUT',
-          headers: {
-            Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ access_token: token }),
         });
-        if (r.ok || r.status === 204) added++;
-        else failed++;
+        if (r.ok || r.status === 204) added++; else failed++;
       } catch { failed++; }
-
       await new Promise(r => setTimeout(r, 1100));
     }
-
     await audit(req, 'take_members', { metadata: { guild_id: gid, added, failed, total: vers.length } });
     res.json({ ok: true, added, failed, total: vers.length });
   } catch (e) {
@@ -657,7 +708,6 @@ app.post('/api/notifications/read-all', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Envia notificação para um usuário
 app.post('/api/dev/notifications', requireStaff, async (req, res) => {
   try {
     const { user_id, type = 'system', title, content, broadcast_to_role } = req.body || {};
@@ -685,4 +735,4 @@ app.get('/api/dev/audit', requireDev, async (req, res) => {
   res.json({ ok: true, logs: data || [] });
 });
 
-app.listen(PORT, () => console.log(`🌐 [PANEL v3.1] Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 [PANEL v3.2] Rodando na porta ${PORT}`));

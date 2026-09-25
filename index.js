@@ -159,17 +159,16 @@ const client = new Client({
     GuildStickerManager: 30,
   }),
 
-  // ⚡ OTIMIZAÇÃO #O10: sweepers varrem caches velhos periodicamente
-  sweepers: {
+// ⚡ OTIMIZAÇÃO #O10: sweepers varrem caches velhos periodicamente
+sweepers: {
     ...Options.DefaultSweeperSettings,
-    messages: { interval: 300, lifetime: 600 },
+    messages: { interval: 300, lifetime: 600, filter: () => () => true },
     users: { interval: 3600, filter: () => u => u.bot && u.id !== client.user?.id },
     guildMembers: { interval: 600, filter: () => m => m.user.bot },
-    presences: { interval: 120 },
+    presences: { interval: 120, filter: () => () => true },
     voiceStates: { interval: 300, filter: () => vs => !vs.channelId },
-    threads: { interval: 3600, lifetime: 7200 },
-  },
-});
+    threads: { interval: 3600, lifetime: 7200, filter: () => () => true },
+},
 
 // ═══════════════════════════════════════════════════════════
 // DEVELOPERS — Bug #1 corrigido

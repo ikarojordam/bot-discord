@@ -7923,14 +7923,15 @@ client.on('interactionCreate', async (i) => {
       if (c === 'versiculo') {
         const sub = i.options.getSubcommand();
 
-        if (sub === 'aleatorio') {
-          await i.deferReply({ flags: EPHEMERAL });
+                if (sub === 'aleatorio') {
+          // ⚡ Público — versículo é pra todos verem!
+          await i.deferReply();
           const v = await buscarVersiculoBiblia();
           const e = new EmbedBuilder()
             .setTitle('📖 Versículo')
             .setColor('#FEE75C')
             .setDescription(`*"${v.txt}"*\n\n— **${v.ref}**`)
-            .setFooter({ text: 'Frio Bot • Versículo' })
+            .setFooter({ text: `Pedido por ${i.user.username}`, iconURL: i.user.displayAvatarURL() })
             .setTimestamp();
           if (i.guild?.iconURL()) e.setThumbnail(i.guild.iconURL({ size: 256 }));
           return i.editReply({ embeds: [e] });

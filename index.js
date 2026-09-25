@@ -596,9 +596,13 @@ async function isMediator(mu, g) {
 
 async function shopIsAdmin(i) {
   if (!i.guild) return false;
-  if (i.member.permissions.has('Administrator')) return true;
-  if (isDeveloper(i.user.id)) return true;
-  if (i.user.id === i.guild.ownerId) return true;
+  if (isDeveloper(i.user?.id)) return true;
+  if (i.user?.id === i.guild.ownerId) return true;
+  if (!i.member) {
+    try { i.member = await i.guild.members.fetch(i.user.id); } catch { return false; }
+  }
+  if (!i.member) return false;
+  if (i.member.permissions?.has?.('Administrator')) return true;
   const s = await getSettings(i.guild.id);
   return [s?.admin_role_id, s?.manager_role_id].filter(Boolean).some(r => i.member.roles.cache.has(r));
 }

@@ -168,7 +168,8 @@ sweepers: {
     presences: { interval: 120, filter: () => () => true },
     voiceStates: { interval: 300, filter: () => vs => !vs.channelId },
     threads: { interval: 3600, lifetime: 7200, filter: () => () => true },
-},
+},                
+});  
 
 // ═══════════════════════════════════════════════════════════
 // DEVELOPERS — Bug #1 corrigido
@@ -179,8 +180,8 @@ function isDeveloper(id) {
   if (DEVELOPER_IDS.includes(id)) return true;
   if (OWNER_ID && id === OWNER_ID) return true;
   return false;
- },
-});
+ }
+
 // ═══════════════════════════════════════════════════════════
 // UPDATE NOTES
 // ═══════════════════════════════════════════════════════════

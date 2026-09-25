@@ -2909,6 +2909,11 @@ function ffCalcPlayerPay(v, f, extra = 0, extraAtivo = false) {
 async function blockSlashIfMaintenance(i) {
   if (!i.guild) return false;
   if (i.user.id === i.guild.ownerId || isDeveloper(i.user.id)) return false;
+  // ⚡ FIX: garante member
+  if (!i.member) {
+    try { i.member = await i.guild.members.fetch(i.user.id); } catch {}
+  }
+  if (!i.member) return false;
 
   if (await isMaintenanceMode()) {
     if (shouldLog(`maint-block:${i.user.id}`, 30000)) {
@@ -4039,6 +4044,12 @@ function ticketCooldownCheck(userId, ms = 5000) {
 async function openTicket(i, panel, tipo, formAnswers = []) {
   const guild = i.guild;
   const cfg = await getConfig(guild.id);
+
+  // ⚡ FIX: garante members.me
+  if (!guild.members.me) {
+    try { await guild.members.fetchMe(); } catch {}
+  }
+  if (!guild.members.me) throw new Error('Bot não conseguiu se identificar. Tente novamente.');
 
   const me = guild.members.me;
   if (!me.permissions.has(PermissionFlagsBits.CreatePrivateThreads)) {

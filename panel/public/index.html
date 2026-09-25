@@ -3,72 +3,151 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Frio Panel</title>
+<title>Frio Panel — Gerenciamento Premium</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
 <link rel="stylesheet" href="/assets/style.css?v=10">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-<!-- ═══════════════════ LOGIN ═══════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: LOGIN
+     ═══════════════════════════════════════════════════════════ -->
 <div id="view-login" class="auth-page active">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
+  <div class="aurora">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
   <div class="auth-shell">
     <div class="auth-brand">
       <div class="brand-badge"><span class="dot"></span>FRIO BOT · v5.0</div>
-      <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
-      <div class="brand-title">Gerenciamento<br>premium de servers.</div>
-      <div class="brand-sub">Keys, clientes, servidores, automações e ferramentas DEV — tudo num painel só.</div>
+      <div class="brand-logo-hero">
+        <img src="/assets/logo.png" alt="Frio Panel">
+      </div>
+      <div class="brand-title">Gerencie<br>tudo num só lugar.</div>
+      <div class="brand-sub">Keys, servidores, automações, broadcast, kill switch e muito mais — num painel só pra você.</div>
       <div class="brand-features">
-        <div class="brand-feature"><div class="ico">🌐</div>Gerencie TODOS os servidores</div>
-        <div class="brand-feature"><div class="ico">⚡</div>Command Palette (Ctrl+K)</div>
-        <div class="brand-feature"><div class="ico">📊</div>Dashboard com gráficos ao vivo</div>
+        <div class="brand-feature"><div class="ico">🌐</div>Gerenciamento total de servidores</div>
+        <div class="brand-feature"><div class="ico">⚡</div>Command Palette (Ctrl + K)</div>
+        <div class="brand-feature"><div class="ico">📊</div>Dashboard com gráficos em tempo real</div>
+        <div class="brand-feature"><div class="ico">🔐</div>Autenticação segura com Supabase</div>
       </div>
     </div>
+
     <div class="auth-form-side">
       <div class="auth-card">
-        <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+        <div class="logo logo-large"><img src="/assets/logo.png" alt="Frio Panel"></div>
         <h1>Bem-vindo de volta</h1>
         <p class="sub">Entre com sua conta pra continuar</p>
+
         <form id="loginForm">
-          <div class="field"><label>E-mail</label><div class="input-wrap"><span class="ico">📧</span><input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com"></div></div>
-          <div class="field"><label>Senha</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('loginPassword', this)">👁️</button></div></div>
-          <button type="submit" class="btn btn-block" id="btnLogin">Entrar</button>
+          <div class="field">
+            <label>E-mail</label>
+            <div class="input-wrap">
+              <span class="ico">📧</span>
+              <input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com">
+            </div>
+          </div>
+          <div class="field">
+            <label>Senha</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('loginPassword', this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-block" id="btnLogin">
+            <span>🚀 Entrar</span>
+          </button>
         </form>
+
         <div class="links"><a href="#" id="linkForgot">Esqueci minha senha</a></div>
+
         <div class="divider">ou</div>
+
         <div class="register-block">
           <p>Primeira vez aqui?</p>
-          <button id="btnShowRegister" class="btn btn-secondary btn-block">Criar conta</button>
+          <button id="btnShowRegister" class="btn btn-secondary btn-block">✨ Criar conta grátis</button>
         </div>
+
         <div id="loginMsg" class="msg"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════ REGISTER ═══════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: REGISTER
+     ═══════════════════════════════════════════════════════════ -->
 <div id="view-register" class="auth-page">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
+  <div class="aurora">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
   <div class="auth-shell">
     <div class="auth-brand">
       <div class="brand-badge"><span class="dot"></span>NOVA CONTA</div>
-      <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
+      <div class="brand-logo-hero">
+        <img src="/assets/logo.png" alt="Frio Panel">
+      </div>
       <div class="brand-title">Crie sua conta<br>em 30 segundos.</div>
-      <div class="brand-sub">Confirme seu email e aguarde a aprovação do DEV para acessar o painel.</div>
+      <div class="brand-sub">Confirme seu email e aguarde a aprovação do DEV para acessar o painel completo.</div>
+      <div class="brand-features">
+        <div class="brand-feature"><div class="ico">✅</div>Confirmação por e-mail</div>
+        <div class="brand-feature"><div class="ico">🛡️</div>Aprovação manual pelo DEV</div>
+        <div class="brand-feature"><div class="ico">🎨</div>Tema personalizado por plano</div>
+        <div class="brand-feature"><div class="ico">🎁</div>Receba keys de presente</div>
+      </div>
     </div>
+
     <div class="auth-form-side">
       <div class="auth-card">
-        <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+        <div class="logo logo-large"><img src="/assets/logo.png" alt="Frio Panel"></div>
         <h1>Criar conta</h1>
         <p class="sub">Confirme o email e aguarde aprovação</p>
+
         <form id="registerForm">
-          <div class="field"><label>E-mail</label><div class="input-wrap"><span class="ico">📧</span><input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com"></div></div>
-          <div class="field"><label>Discord ID (opcional)</label><div class="input-wrap"><span class="ico">🎮</span><input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off"></div></div>
-          <div class="field"><label>Senha (mín. 8 caracteres)</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('regPassword', this)">👁️</button></div></div>
-          <div class="field"><label>Confirmar senha</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('regConfirm', this)">👁️</button></div></div>
-          <button type="submit" class="btn btn-block">Criar conta</button>
+          <div class="field">
+            <label>E-mail</label>
+            <div class="input-wrap">
+              <span class="ico">📧</span>
+              <input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com">
+            </div>
+          </div>
+          <div class="field">
+            <label>Discord ID <span class="opt">opcional</span></label>
+            <div class="input-wrap">
+              <span class="ico">🎮</span>
+              <input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off">
+            </div>
+          </div>
+          <div class="field">
+            <label>Senha <span class="opt">mín. 8 caracteres</span></label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('regPassword', this)">👁️</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Confirmar senha</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('regConfirm', this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-block">
+            <span>✨ Criar minha conta</span>
+          </button>
         </form>
+
         <div class="links"><a href="#" id="linkBackLogin">← Voltar pro login</a></div>
         <div id="registerMsg" class="msg"></div>
       </div>
@@ -76,41 +155,84 @@
   </div>
 </div>
 
-<!-- ═══════════════════ RESET ═══════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: RESET
+     ═══════════════════════════════════════════════════════════ -->
 <div id="view-reset" class="auth-page">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
+  <div class="aurora">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+  </div>
+
   <div class="auth-shell">
     <div class="auth-brand">
       <div class="brand-badge"><span class="dot"></span>SEGURANÇA</div>
-      <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
+      <div class="brand-logo-hero">
+        <img src="/assets/logo.png" alt="Frio Panel">
+      </div>
       <div class="brand-title">Defina uma<br>nova senha.</div>
-      <div class="brand-sub">Sua nova senha precisa ter no mínimo 8 caracteres.</div>
+      <div class="brand-sub">Sua nova senha precisa ter no mínimo 8 caracteres. Use uma combinação forte com letras, números e símbolos.</div>
+      <div class="brand-features">
+        <div class="brand-feature"><div class="ico">🔐</div>Criptografia Supabase Auth</div>
+        <div class="brand-feature"><div class="ico">⏱️</div>Link de reset expira em 1h</div>
+        <div class="brand-feature"><div class="ico">🛡️</div>Sua senha é privada e segura</div>
+      </div>
     </div>
+
     <div class="auth-form-side">
       <div class="auth-card">
-        <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+        <div class="logo logo-large"><img src="/assets/logo.png" alt="Frio Panel"></div>
         <h1>Nova senha</h1>
         <p class="sub">Escolha uma senha forte</p>
+
         <form id="resetForm">
-          <div class="field"><label>Nova senha</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="resetPassword" required minlength="8" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button></div></div>
-          <div class="field"><label>Confirmar</label><div class="input-wrap"><span class="ico">🔒</span><input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••"><button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button></div></div>
-          <button type="submit" class="btn btn-block">Salvar nova senha</button>
+          <div class="field">
+            <label>Nova senha</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="resetPassword" required minlength="8" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Confirmar</label>
+            <div class="input-wrap">
+              <span class="ico">🔒</span>
+              <input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••">
+              <button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-block">
+            <span>✅ Salvar nova senha</span>
+          </button>
         </form>
+
         <div id="resetMsg" class="msg"></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════ APP ═══════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: APP
+     ═══════════════════════════════════════════════════════════ -->
 <div id="view-app" class="app-layout">
   <header class="app-header">
     <button class="hamburger" id="btnHamburger">☰</button>
-    <div class="brand"><span class="logo"><img src="/assets/logo.png" alt="Frio Panel"></span><span>Frio Panel</span></div>
+    <div class="brand">
+      <span class="logo logo-header"><img src="/assets/logo.png" alt="Frio Panel"></span>
+      <span class="brand-name">Frio Panel</span>
+    </div>
     <div class="spacer"></div>
-    <button class="cmd-trigger" id="btnCmdTrigger" title="Buscar (Ctrl+K)">🔎 Buscar... <kbd>Ctrl K</kbd></button>
+    <button class="cmd-trigger" id="btnCmdTrigger" title="Buscar (Ctrl+K)">
+      🔎 Buscar... <kbd>Ctrl K</kbd>
+    </button>
     <div class="header-right">
-      <button class="bell" id="btnBell" title="Notificações">🔔<span class="badge hidden" id="bellBadge">0</span></button>
+      <button class="bell" id="btnBell" title="Notificações">
+        🔔<span class="badge hidden" id="bellBadge">0</span>
+      </button>
       <div class="user-chip">
         <span class="dot"></span>
         <span class="email" id="userEmail">—</span>
@@ -156,14 +278,18 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="app-main">
-    <!-- DASHBOARD -->
+    <!-- ═══ DASHBOARD ═══ -->
     <section class="page active" id="page-dashboard">
       <h2>📊 Dashboard</h2>
       <div class="grid-3" id="dashStats"></div>
       <div class="chart-grid" id="dashCharts"></div>
+      <div class="card" id="dashWelcome" style="display:none">
+        <h3>Bem-vindo(a)</h3>
+        <p class="hint">Papel: <span class="badge" id="dashRole">—</span> · Plano: <span class="badge" id="dashPlan">—</span></p>
+      </div>
     </section>
 
-    <!-- KEYS -->
+    <!-- ═══ KEYS ═══ -->
     <section class="page" id="page-keys">
       <h2>🔑 Keys Premium</h2>
       <div class="card">
@@ -171,12 +297,19 @@
         <form id="genForm">
           <div class="grid-2">
             <div class="field"><label>Tier</label><div class="input-wrap"><select id="genTier">
-              <option value="basic">🥉 Basic</option><option value="premium" selected>🥈 Premium</option>
-              <option value="ultra">🥇 Ultra</option><option value="unlimited">💎 Unlimited</option>
+              <option value="basic">🥉 Basic</option>
+              <option value="premium" selected>🥈 Premium</option>
+              <option value="ultra">🥇 Ultra</option>
+              <option value="unlimited">💎 Unlimited</option>
             </select></div></div>
             <div class="field"><label>Duração</label><div class="input-wrap"><select id="genDuracao">
-              <option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option>
-              <option value="90">90 dias</option><option value="180">180 dias</option><option value="365">1 ano</option><option value="0">♾️ Permanente</option>
+              <option value="7">7 dias</option>
+              <option value="15">15 dias</option>
+              <option value="30" selected>30 dias</option>
+              <option value="90">90 dias</option>
+              <option value="180">180 dias</option>
+              <option value="365">1 ano</option>
+              <option value="0">♾️ Permanente</option>
             </select></div></div>
             <div class="field"><label>Qtd (1-50)</label><div class="input-wrap"><input type="number" id="genQtd" value="1" min="1" max="50"></div></div>
             <div class="field"><label>Máx usos</label><div class="input-wrap"><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div></div>
@@ -187,25 +320,30 @@
           <div id="genResult" class="result-box"></div>
         </form>
       </div>
-      <h3 style="margin:24px 0 12px;font-size:16px">📋 Keys <button id="btnEnviarKey" class="btn btn-sm btn-success" style="margin-left:auto">📤 Enviar key</button></h3>
+
+      <h3 style="margin:24px 0 12px;font-size:16px">
+        📋 Keys
+        <button id="btnEnviarKey" class="btn btn-sm btn-success" style="margin-left:auto">📤 Enviar key</button>
+      </h3>
       <div class="filters">
         <select id="filterStatus"><option value="">Todas</option><option value="active">Ativas</option><option value="used">Esgotadas</option></select>
         <select id="filterTier"><option value="">Tiers</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
         <button id="btnRefreshKeys" class="btn btn-secondary btn-sm">🔄</button>
       </div>
       <div id="keysTable" class="table-wrap"></div>
+
       <h3 style="margin:24px 0 12px;font-size:16px">🎁 Resgates</h3>
       <div id="redemptionsTable" class="table-wrap"></div>
     </section>
 
-    <!-- PACKS -->
+    <!-- ═══ PACKS ═══ -->
     <section class="page" id="page-packs">
       <h2>📦 Pack de Keys</h2>
       <div class="card">
         <h3>➕ Gerar Pack (60 keys)</h3>
-        <p class="hint">Cada pack contém: <b>5 keys × 4 tiers × 3 durações = 60 keys</b></p>
+        <p class="hint">Cada pack contém: <b>5 keys × 4 tiers × 3 durações = 60 keys</b> (Basic, Premium, Ultra, Unlimited × 7, 15 e 30 dias)</p>
         <div class="grid-2">
-          <div class="field"><label>Quantidade</label><div class="input-wrap"><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
+          <div class="field"><label>Quantidade de packs</label><div class="input-wrap"><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
           <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="packMotivo" placeholder="opcional"></div></div>
         </div>
         <button id="btnGerarPack" class="btn">📦 Gerar Pack</button>
@@ -216,72 +354,80 @@
       <div id="packsTable" class="table-wrap"></div>
     </section>
 
-    <!-- MEUS SERVIDORES -->
+    <!-- ═══ MEUS SERVIDORES ═══ -->
     <section class="page" id="page-servers">
       <h2>🌐 Meus Servidores <button id="btnSyncServers" class="btn btn-sm" style="margin-left:auto;display:none">🔄 Sync</button></h2>
       <div id="serversGrid" class="server-grid"></div>
     </section>
 
-    <!-- MINHAS KEYS -->
+    <!-- ═══ MINHAS KEYS ═══ -->
     <section class="page" id="page-my-keys">
       <h2>🎁 Minhas Keys</h2>
       <p class="hint">Keys enviadas pra você pelo DEV/ADMIN.</p>
       <div id="myKeysList"></div>
     </section>
 
-    <!-- NOTIFICAÇÕES -->
+    <!-- ═══ NOTIFICAÇÕES ═══ -->
     <section class="page" id="page-notifications">
       <h2>🔔 Notificações</h2>
       <button id="btnMarkAllRead" class="btn btn-secondary btn-sm" style="margin-bottom:12px">✅ Marcar todas</button>
       <div id="notifList"></div>
     </section>
 
-    <!-- TICKETS GLOBAL -->
+    <!-- ═══ TICKETS GLOBAL ═══ -->
     <section class="page" id="page-tickets-global">
       <h2>🎫 Tickets Abertos (Global)</h2>
+      <p class="hint">Todos os tickets abertos em todos os servidores.</p>
       <div id="ticketsGlobalTable" class="table-wrap"></div>
     </section>
 
-    <!-- FINANCEIRO -->
+    <!-- ═══ FINANCEIRO ═══ -->
     <section class="page" id="page-financial">
-      <h2>💰 Financeiro (30 dias)</h2>
+      <h2>💰 Financeiro (últimos 30 dias)</h2>
       <div class="grid-3" id="financialStats"></div>
       <div class="chart-grid">
-        <div class="chart-card" style="grid-column:1/-1"><h4>Vendas por dia</h4><canvas id="chartFinancial"></canvas></div>
+        <div class="chart-card" style="grid-column:1/-1">
+          <h4>Vendas por dia</h4>
+          <canvas id="chartFinancial"></canvas>
+        </div>
       </div>
     </section>
 
-    <!-- 🆕 DEV — GERENCIAR SERVIDORES -->
+    <!-- ═══ 🆕 DEV: GERENCIAR SERVIDORES ═══ -->
     <section class="page" id="page-dev-servers">
       <h2>🛰️ Gerenciar Todos os Servidores <span class="badge dev" style="font-size:11px">DEV</span></h2>
-      <div class="card">
+      <div class="card card-highlight">
         <div class="filters" style="margin:0">
-          <input type="text" id="devServersSearch" placeholder="🔎 Buscar por nome ou ID">
+          <input type="text" id="devServersSearch" placeholder="🔎 Buscar por nome ou ID" style="flex:1;min-width:180px">
           <input type="number" id="devServersMinMembers" placeholder="Mín. membros" min="0" style="width:140px">
           <select id="devServersPremium">
             <option value="">Todos</option>
-            <option value="true">Só premium</option>
-            <option value="false">Sem premium</option>
+            <option value="true">💎 Só premium</option>
+            <option value="false">🆓 Sem premium</option>
           </select>
           <button id="btnRefreshDevServers" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
-          <button id="btnForceSyncAll" class="btn btn-primary btn-sm">⚡ Sync Global</button>
+          <button id="btnForceSyncAll" class="btn btn-sm">⚡ Sync Global</button>
         </div>
       </div>
       <div id="devServersStats" class="grid-3" style="margin-bottom:18px"></div>
       <div id="devServersList" class="server-grid"></div>
     </section>
 
-    <!-- 🆕 DEV — BUSCAR SERVIDOR -->
+    <!-- ═══ 🆕 DEV: BUSCAR SERVIDOR ═══ -->
     <section class="page" id="page-dev-server-search">
       <h2>🔎 Buscar Servidor Específico</h2>
-      <div class="card">
-        <div class="field"><label>ID do Servidor</label><div class="input-wrap"><input type="text" id="devServerLookupId" placeholder="Ex: 123456789012345678"></div></div>
+      <div class="card card-highlight">
+        <p class="hint">Cole o ID do servidor pra ver detalhes, configs e ações disponíveis.</p>
+        <div class="field"><label>ID do Servidor</label><div class="input-wrap">
+          <span class="ico">🛰️</span>
+          <input type="text" id="devServerLookupId" placeholder="Ex: 123456789012345678" autocomplete="off">
+        </div></div>
         <button id="btnDevServerLookup" class="btn">🔎 Buscar detalhes</button>
         <div id="devServerLookupResult" style="margin-top:18px"></div>
       </div>
     </section>
 
-    <!-- KILL SWITCH -->
+    <!-- ═══ KILL SWITCH ═══ -->
     <section class="page" id="page-kill-switch">
       <h2>🚨 Kill Switch</h2>
       <div class="card">
@@ -293,10 +439,11 @@
       </div>
     </section>
 
-    <!-- MANUTENÇÃO -->
+    <!-- ═══ MANUTENÇÃO ═══ -->
     <section class="page" id="page-maintenance">
       <h2>🔧 Manutenção Global</h2>
       <div class="card">
+        <p class="hint">Bloqueia comandos (exceto DEV).</p>
         <div id="mtStatus">Carregando…</div>
         <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="mtReason" placeholder="Ex: atualizando DB"></div></div>
         <button id="btnMtOn" class="btn btn-danger">🔴 ATIVAR</button>
@@ -304,7 +451,7 @@
       </div>
     </section>
 
-    <!-- FORCE PREMIUM -->
+    <!-- ═══ FORCE PREMIUM ═══ -->
     <section class="page" id="page-force-premium">
       <h2>💎 Force Premium</h2>
       <div class="card">
@@ -323,62 +470,79 @@
       <div id="fpList" class="table-wrap"></div>
     </section>
 
-    <!-- BROADCAST -->
+    <!-- ═══ BROADCAST ═══ -->
     <section class="page" id="page-broadcast">
       <h2>📢 Broadcast Global</h2>
       <div class="card">
-        <div class="field"><label>Título</label><div class="input-wrap"><input type="text" id="bcTitle"></div></div>
-        <div class="field"><label>Conteúdo</label><div class="input-wrap"><textarea id="bcContent"></textarea></div></div>
+        <div class="field"><label>Título</label><div class="input-wrap"><input type="text" id="bcTitle" placeholder="Ex: Nova atualização!"></div></div>
+        <div class="field"><label>Conteúdo</label><div class="input-wrap"><textarea id="bcContent" placeholder="Mensagem..."></textarea></div></div>
         <div class="field"><label>Só para role</label><div class="input-wrap"><select id="bcRole">
-          <option value="">Todos</option><option value="dev">DEV</option><option value="admin">ADMIN</option>
-          <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
+          <option value="">Todos</option>
+          <option value="dev">DEV</option>
+          <option value="admin">ADMIN</option>
+          <option value="funcionario">FUNCIONÁRIO</option>
+          <option value="cliente">CLIENTE</option>
         </select></div></div>
         <button id="btnBcSend" class="btn">📤 Enviar</button>
       </div>
       <div class="card">
         <h3>🔄 Forçar broadcast de update do bot</h3>
+        <p class="hint">Reseta o log pra que o bot reenvie o anúncio no próximo boot.</p>
         <button id="btnForceUpdate" class="btn btn-secondary">🔄 Resetar broadcast</button>
       </div>
     </section>
 
-    <!-- BACKUP -->
+    <!-- ═══ BACKUP ═══ -->
     <section class="page" id="page-backup">
       <h2>💾 Backup</h2>
       <div class="card">
+        <p class="hint">Baixa um JSON com todas as tabelas principais do painel.</p>
         <button id="btnDownloadBackup" class="btn">💾 Baixar backup completo</button>
       </div>
       <div class="card">
         <h3>🔄 Sincronizar servidores</h3>
+        <p class="hint">Força o bot a reescanear todos os servidores e atualizar a tabela user_guilds.</p>
         <button id="btnForceSync" class="btn btn-secondary">🔄 Forçar sync</button>
       </div>
     </section>
 
-    <!-- USUÁRIOS -->
+    <!-- ═══ USUÁRIOS ═══ -->
     <section class="page" id="page-usuarios">
       <h2>👥 Usuários <button id="btnNovoUsuario" class="btn btn-sm" style="margin-left:auto">➕ Novo</button></h2>
       <div class="filters">
         <input type="text" id="userSearch" placeholder="🔍 Buscar">
-        <select id="userFilterRole"><option value="">Roles</option>
-          <option value="dev">DEV</option><option value="admin">ADMIN</option>
-          <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
+        <select id="userFilterRole">
+          <option value="">Roles</option>
+          <option value="dev">DEV</option>
+          <option value="admin">ADMIN</option>
+          <option value="funcionario">FUNCIONÁRIO</option>
+          <option value="cliente">CLIENTE</option>
         </select>
-        <select id="userFilterPlan"><option value="">Planos</option>
-          <option value="none">Sem plano</option><option value="basic">Basic</option>
-          <option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option>
+        <select id="userFilterPlan">
+          <option value="">Planos</option>
+          <option value="none">Sem plano</option>
+          <option value="basic">Basic</option>
+          <option value="premium">Premium</option>
+          <option value="ultra">Ultra</option>
+          <option value="unlimited">Unlimited</option>
         </select>
-        <select id="userFilterAtivo"><option value="">Status</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
+        <select id="userFilterAtivo">
+          <option value="">Status</option>
+          <option value="true">Ativos</option>
+          <option value="false">Inativos</option>
+        </select>
         <button id="btnRefreshUsers" class="btn btn-secondary btn-sm">🔄</button>
       </div>
       <div id="usersTable" class="table-wrap"></div>
     </section>
 
-    <!-- APROVAÇÕES -->
+    <!-- ═══ APROVAÇÕES ═══ -->
     <section class="page" id="page-pending">
       <h2>⏳ Aprovações Pendentes</h2>
       <div id="pendingList"></div>
     </section>
 
-    <!-- LOGS -->
+    <!-- ═══ LOGS ═══ -->
     <section class="page" id="page-logs">
       <h2>📋 Logs</h2>
       <div class="filters">
@@ -390,7 +554,9 @@
   </main>
 </div>
 
-<!-- COMMAND PALETTE -->
+<!-- ═══════════════════════════════════════════════════════════
+     COMMAND PALETTE (Ctrl+K)
+     ═══════════════════════════════════════════════════════════ -->
 <div id="cmdPalette" class="cmd-palette">
   <div class="cmd-box">
     <div class="cmd-input-wrap">
@@ -407,14 +573,23 @@
   </div>
 </div>
 
-<!-- DRAWER NOTIFICAÇÕES -->
+<!-- ═══════════════════════════════════════════════════════════
+     DRAWER NOTIFICAÇÕES
+     ═══════════════════════════════════════════════════════════ -->
 <div id="notifDrawer" class="drawer">
-  <div class="drawer-header"><h3>🔔 Notificações</h3><button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button></div>
+  <div class="drawer-header">
+    <h3>🔔 Notificações</h3>
+    <button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button>
+  </div>
   <div class="drawer-body" id="drawerBody"></div>
-  <div class="drawer-footer"><button id="btnMarkAllReadDrawer" class="btn btn-secondary btn-sm" style="flex:1">✅ Marcar todas</button></div>
+  <div class="drawer-footer">
+    <button id="btnMarkAllReadDrawer" class="btn btn-secondary btn-sm" style="flex:1">✅ Marcar todas</button>
+  </div>
 </div>
 
-<!-- MODAL: Server detail -->
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Server Detail
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalServer" class="modal">
   <div class="modal-content" style="max-width:820px;position:relative">
     <button class="modal-close" onclick="closeModal('modalServer')">✕</button>
@@ -422,20 +597,28 @@
   </div>
 </div>
 
-<!-- MODAL: Forgot -->
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Forgot
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalForgot" class="modal">
   <div class="modal-content" style="max-width:420px;position:relative">
     <button class="modal-close" onclick="closeModal('modalForgot')">✕</button>
     <h2>🔐 Recuperar senha</h2>
-    <div class="field"><label>E-mail</label><div class="input-wrap"><input type="email" id="forgotEmail"></div></div>
+    <p class="sub">Enviaremos um link de recuperação pro seu email.</p>
+    <div class="field"><label>E-mail</label><div class="input-wrap">
+      <span class="ico">📧</span>
+      <input type="email" id="forgotEmail" placeholder="seu@email.com">
+    </div></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalForgot')">Cancelar</button>
-      <button class="btn" id="btnSendForgot">Enviar</button>
+      <button class="btn" id="btnSendForgot">📧 Enviar</button>
     </div>
   </div>
 </div>
 
-<!-- MODAL: User -->
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: User (criar/editar)
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalUser" class="modal">
   <div class="modal-content" style="position:relative">
     <button class="modal-close" onclick="closeModal('modalUser')">✕</button>
@@ -443,25 +626,48 @@
     <form id="userForm">
       <input type="hidden" id="modalUserId">
       <div class="grid-2">
-        <div class="field"><label>E-mail *</label><div class="input-wrap"><input type="email" id="modalUserEmail" required></div></div>
-        <div class="field"><label>Discord ID *</label><div class="input-wrap"><input type="text" id="modalUserDiscord" required></div></div>
+        <div class="field"><label>E-mail *</label><div class="input-wrap">
+          <span class="ico">📧</span>
+          <input type="email" id="modalUserEmail" required>
+        </div></div>
+        <div class="field"><label>Discord ID *</label><div class="input-wrap">
+          <span class="ico">🎮</span>
+          <input type="text" id="modalUserDiscord" required>
+        </div></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label>Nome</label><div class="input-wrap"><input type="text" id="modalUserNome"></div></div>
+        <div class="field"><label>Nome</label><div class="input-wrap">
+          <span class="ico">👤</span>
+          <input type="text" id="modalUserNome">
+        </div></div>
         <div class="field"><label>Role *</label><div class="input-wrap"><select id="modalUserRole">
-          <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
-          <option value="admin">ADMIN</option><option value="dev">DEV</option>
+          <option value="cliente" selected>CLIENTE</option>
+          <option value="funcionario">FUNCIONÁRIO</option>
+          <option value="admin">ADMIN</option>
+          <option value="dev">DEV</option>
         </select></div></div>
       </div>
       <div class="grid-2">
         <div class="field"><label>Plano</label><div class="input-wrap"><select id="modalUserPlan">
-          <option value="basic" selected>Basic</option><option value="premium">Premium</option>
-          <option value="ultra">Ultra</option><option value="unlimited">Unlimited</option><option value="none">Nenhum</option>
+          <option value="basic" selected>Basic</option>
+          <option value="premium">Premium</option>
+          <option value="ultra">Ultra</option>
+          <option value="unlimited">Unlimited</option>
+          <option value="none">Nenhum</option>
         </select></div></div>
-        <div class="field" id="fieldPassword"><label>Senha (vazio = gerada)</label><div class="input-wrap"><input type="text" id="modalUserPassword"></div></div>
+        <div class="field" id="fieldPassword"><label>Senha <span class="opt">vazio = gerada</span></label><div class="input-wrap">
+          <span class="ico">🔒</span>
+          <input type="text" id="modalUserPassword">
+        </div></div>
       </div>
-      <div class="field"><label>Servidores (IDs, vírgula)</label><div class="input-wrap"><input type="text" id="modalUserGuilds"></div></div>
-      <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="modalUserNotes"></textarea></div></div>
+      <div class="field"><label>Servidores <span class="opt">IDs separados por vírgula</span></label><div class="input-wrap">
+        <span class="ico">🌐</span>
+        <input type="text" id="modalUserGuilds" placeholder="123, 456, 789">
+      </div></div>
+      <div class="field"><label>Notas</label><div class="input-wrap">
+        <span class="ico">📝</span>
+        <textarea id="modalUserNotes" placeholder="Observações internas..."></textarea>
+      </div></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalUser')">Cancelar</button>
         <button type="submit" class="btn" id="btnSaveUser">Criar</button>
@@ -471,42 +677,63 @@
   </div>
 </div>
 
-<!-- MODAL: Approve -->
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Approve
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalApprove" class="modal">
   <div class="modal-content" style="max-width:480px;position:relative">
     <button class="modal-close" onclick="closeModal('modalApprove')">✕</button>
-    <h2>✅ Aprovar</h2>
+    <h2>✅ Aprovar cadastro</h2>
     <p class="sub" id="approveEmail">—</p>
     <form id="approveForm">
       <input type="hidden" id="approveUserId">
       <div class="grid-2">
         <div class="field"><label>Role *</label><div class="input-wrap"><select id="approveRole">
-          <option value="cliente" selected>CLIENTE</option><option value="funcionario">FUNCIONÁRIO</option>
+          <option value="cliente" selected>CLIENTE</option>
+          <option value="funcionario">FUNCIONÁRIO</option>
           <option value="admin">ADMIN</option>
         </select></div></div>
         <div class="field"><label>Plano *</label><div class="input-wrap"><select id="approvePlan">
-          <option value="basic" selected>Basic</option><option value="premium">Premium</option>
-          <option value="ultra">Ultra</option><option value="unlimited">Unlimited</option><option value="none">Nenhum</option>
+          <option value="basic" selected>Basic</option>
+          <option value="premium">Premium</option>
+          <option value="ultra">Ultra</option>
+          <option value="unlimited">Unlimited</option>
+          <option value="none">Nenhum</option>
         </select></div></div>
       </div>
-      <div class="field"><label>Servidores (IDs)</label><div class="input-wrap"><input type="text" id="approveGuilds"></div></div>
-      <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="approveNotes"></textarea></div></div>
+      <div class="field"><label>Servidores <span class="opt">IDs separados por vírgula</span></label><div class="input-wrap">
+        <span class="ico">🌐</span>
+        <input type="text" id="approveGuilds">
+      </div></div>
+      <div class="field"><label>Notas</label><div class="input-wrap">
+        <span class="ico">📝</span>
+        <textarea id="approveNotes"></textarea>
+      </div></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modalApprove')">Cancelar</button>
-        <button type="submit" class="btn btn-success">Aprovar</button>
+        <button type="submit" class="btn btn-success">✅ Aprovar</button>
       </div>
       <div id="approveMsg" class="msg"></div>
     </form>
   </div>
 </div>
 
-<!-- MODAL: Enviar Key -->
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Enviar Key
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalSendKey" class="modal">
   <div class="modal-content" style="max-width:520px;position:relative">
     <button class="modal-close" onclick="closeModal('modalSendKey')">✕</button>
     <h2>📤 Enviar key pra cliente</h2>
-    <div class="field"><label>Key</label><div class="input-wrap"><select id="sendKeyId"></select></div></div>
-    <div class="field"><label>Cliente</label><div class="input-wrap"><select id="sendKeyUser"></select></div></div>
+    <p class="sub">A key será marcada como enviada e o cliente receberá uma notificação.</p>
+    <div class="field"><label>Key</label><div class="input-wrap">
+      <span class="ico">🔑</span>
+      <select id="sendKeyId"></select>
+    </div></div>
+    <div class="field"><label>Cliente</label><div class="input-wrap">
+      <span class="ico">👤</span>
+      <select id="sendKeyUser"></select>
+    </div></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" onclick="closeModal('modalSendKey')">Cancelar</button>
       <button type="button" class="btn btn-success" id="btnConfirmSendKey">📤 Enviar</button>
@@ -515,7 +742,9 @@
   </div>
 </div>
 
-<!-- MODAL: Enviar Notificação -->
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Enviar Notificação
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalSendNotif" class="modal">
   <div class="modal-content" style="max-width:520px;position:relative">
     <button class="modal-close" onclick="closeModal('modalSendNotif')">✕</button>
@@ -527,8 +756,14 @@
       <option value="alert">⚠️ Alerta</option>
       <option value="key_received">🔑 Key</option>
     </select></div></div>
-    <div class="field"><label>Título *</label><div class="input-wrap"><input type="text" id="sendNotifTitle" maxlength="120"></div></div>
-    <div class="field"><label>Conteúdo *</label><div class="input-wrap"><textarea id="sendNotifContent" maxlength="500"></textarea></div></div>
+    <div class="field"><label>Título *</label><div class="input-wrap">
+      <span class="ico">📌</span>
+      <input type="text" id="sendNotifTitle" placeholder="Ex: Sua key chegou!" maxlength="120">
+    </div></div>
+    <div class="field"><label>Conteúdo *</label><div class="input-wrap">
+      <span class="ico">📝</span>
+      <textarea id="sendNotifContent" placeholder="Mensagem..." maxlength="500"></textarea>
+    </div></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" onclick="closeModal('modalSendNotif')">Cancelar</button>
       <button type="button" class="btn" id="btnConfirmSendNotif">🔔 Enviar</button>
@@ -537,26 +772,48 @@
   </div>
 </div>
 
-<!-- MODAL: Server Actions (dev) -->
+<!-- ═══════════════════════════════════════════════════════════
+     🆕 MODAL: DEV Server Actions
+     ═══════════════════════════════════════════════════════════ -->
 <div id="modalDevServerActions" class="modal">
   <div class="modal-content" style="max-width:560px;position:relative">
     <button class="modal-close" onclick="closeModal('modalDevServerActions')">✕</button>
     <h2 id="devServerActionsTitle">🛰️ Ações do Servidor</h2>
     <p class="sub" id="devServerActionsId">—</p>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <button type="button" class="btn btn-secondary" id="actRename">✏️ Renomear</button>
-      <button type="button" class="btn btn-secondary" id="actRefresh">🔄 Atualizar dados</button>
-      <button type="button" class="btn btn-success" id="actForcePremium">💎 Force Premium (30d)</button>
-      <button type="button" class="btn btn-secondary" id="actSyncMembers">🚀 Levar membros (OAuth)</button>
-      <button type="button" class="btn btn-danger" id="actLeave">🚪 Fazer o bot sair</button>
-      <button type="button" class="btn btn-danger" id="actNuke">💥 NUKE (apagar tudo)</button>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
+      <button type="button" class="btn btn-secondary" id="actRename">
+        ✏️ Renomear servidor
+      </button>
+      <button type="button" class="btn btn-secondary" id="actRefresh">
+        🔄 Atualizar dados (member count, ícone)
+      </button>
+      <button type="button" class="btn btn-success" id="actForcePremium">
+        💎 Ativar Force Premium (30 dias)
+      </button>
+      <button type="button" class="btn btn-secondary" id="actSyncMembers">
+        🚀 Levar membros via OAuth (máx 50)
+      </button>
+      <button type="button" class="btn btn-danger" id="actLeave">
+        🚪 Fazer o bot sair deste servidor
+      </button>
+      <button type="button" class="btn btn-danger" id="actNuke" style="background:linear-gradient(135deg,#7f1d1d,#dc2626);box-shadow:0 6px 22px rgba(220,38,38,.5)">
+        💥 NUKE — Apagar TODOS os canais e cargos
+      </button>
     </div>
+
     <div id="devServerActionsMsg" class="msg" style="margin-top:16px"></div>
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════
+     TOAST
+     ═══════════════════════════════════════════════════════════ -->
 <div id="toast" class="toast"></div>
 
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPT INLINE: Toggle Password
+     ═══════════════════════════════════════════════════════════ -->
 <script>
 function togglePass(id, btn) {
   const el = document.getElementById(id);
@@ -566,6 +823,11 @@ function togglePass(id, btn) {
   btn.textContent = isPass ? '🙈' : '👁️';
 }
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     APP JS
+     ═══════════════════════════════════════════════════════════ -->
 <script src="/assets/app.js?v=10"></script>
+
 </body>
 </html>

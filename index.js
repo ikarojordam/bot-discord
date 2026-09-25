@@ -179,8 +179,8 @@ function isDeveloper(id) {
   if (DEVELOPER_IDS.includes(id)) return true;
   if (OWNER_ID && id === OWNER_ID) return true;
   return false;
-}
-
+ },
+});
 // ═══════════════════════════════════════════════════════════
 // UPDATE NOTES
 // ═══════════════════════════════════════════════════════════

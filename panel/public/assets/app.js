@@ -1117,4 +1117,200 @@ $('#btnRefreshLogs')?.addEventListener('click', loadLogs);
 $$('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); }));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadNotifications(); });
 
+// ═══════════════════════════════════════════════════════════
+// v5.0 — Command Palette
+// ═══════════════════════════════════════════════════════════
+const CMD_ACTIONS = [
+  { icon: '📊', label: 'Dashboard',        nav: 'dashboard' },
+  { icon: '🔑', label: 'Keys Premium',     nav: 'keys', roles: ['dev','admin','funcionario'] },
+  { icon: '📦', label: 'Packs',            nav: 'packs', roles: ['dev'] },
+  { icon: '🌐', label: 'Meus Servidores',  nav: 'servers' },
+  { icon: '🎁', label: 'Minhas Keys',      nav: 'my-keys' },
+  { icon: '🔔', label: 'Notificações',     nav: 'notifications' },
+  { icon: '🎫', label: 'Tickets Global',   nav: 'tickets-global', roles: ['dev','admin'] },
+  { icon: '💰', label: 'Financeiro',       nav: 'financial', roles: ['dev','admin'] },
+  { icon: '🛰️', label: 'Gerenciar Servidores', nav: 'dev-servers', roles: ['dev'] },
+  { icon: '🔎', label: 'Buscar Servidor',  nav: 'dev-server-search', roles: ['dev'] },
+  { icon: '🚨', label: 'Kill Switch',      nav: 'kill-switch', roles: ['dev'] },
+  { icon: '🔧', label: 'Manutenção',       nav: 'maintenance', roles: ['dev'] },
+  { icon: '💎', label: 'Force Premium',    nav: 'force-premium', roles: ['dev'] },
+  { icon: '📢', label: 'Broadcast',        nav: 'broadcast', roles: ['dev'] },
+  { icon: '💾', label: 'Backup',           nav: 'backup', roles: ['dev'] },
+  { icon: '👥', label: 'Usuários',         nav: 'usuarios', roles: ['dev'] },
+  { icon: '⏳', label: 'Aprovações',       nav: 'pending', roles: ['dev'] },
+  { icon: '📋', label: 'Logs',             nav: 'logs', roles: ['dev'] },
+];
+
+let cmdSelectedIdx = 0;
+let cmdFiltered = [];
+
+function openCmdPalette() {
+  const el = $('#cmdPalette'); if (!el) return;
+  el.classList.add('active');
+  const input = $('#cmdInput');
+  if (input) { input.value = ''; input.focus(); }
+  renderCmdResults('');
+}
+function closeCmdPalette() { $('#cmdPalette')?.classList.remove('active'); }
+
+function renderCmdResults(q) {
+  const role = state.role || 'cliente';
+  const query = q.toLowerCase().trim();
+  cmdFiltered = CMD_ACTIONS.filter(a => {
+    if (a.roles && !a.roles.includes(role)) return false;
+    if (!query) return true;
+    return a.label.toLowerCase().includes(query);
+  });
+  cmdSelectedIdx = 0;
+  const res = $('#cmdResults');
+  if (!res) return;
+  if (!cmdFiltered.length) { res.innerHTML = '<div class="empty" style="padding:24px">Nada encontrado</div>'; return; }
+  res.innerHTML = cmdFiltered.map((a, i) => `<div class="cmd-item ${i === cmdSelectedIdx ? 'active' : ''}" data-idx="${i}">
+    <span class="cmd-ico">${a.icon}</span>
+    <span class="cmd-label">${escapeHtml(a.label)}</span>
+    <span class="cmd-hint">→</span>
+  </div>`).join('');
+  res.querySelectorAll('.cmd-item').forEach(el => el.addEventListener('click', () => {
+    const a = cmdFiltered[Number(el.dataset.idx)];
+    if (a) { closeCmdPalette(); goToPage(a.nav); }
+  }));
+}
+function navigateCmd(delta) {
+  if (!cmdFiltered.length) return;
+  cmdSelectedIdx = (cmdSelectedIdx + delta + cmdFiltered.length) % cmdFiltered.length;
+  $$('#cmdResults .cmd-item').forEach((el, i) => el.classList.toggle('active', i === cmdSelectedIdx));
+  $$('#cmdResults .cmd-item')[cmdSelectedIdx]?.scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const el = $('#cmdPalette');
+    if (el?.classList.contains('active')) closeCmdPalette(); else openCmdPalette();
+    return;
+  }
+  const palette = $('#cmdPalette');
+  if (!palette?.classList.contains('active')) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeCmdPalette(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); navigateCmd(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); navigateCmd(-1); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const a = cmdFiltered[cmdSelectedIdx];
+    if (a) { closeCmdPalette(); goToPage(a.nav); }
+  }
+});
+$('#btnCmdTrigger')?.addEventListener('click', openCmdPalette);
+$('#cmdInput')?.addEventListener('input', e => renderCmdResults(e.target.value));
+$('#cmdPalette')?.addEventListener('click', e => { if (e.target === $('#cmdPalette')) closeCmdPalette(); });
+
+// ═══════════════════════════════════════════════════════════
+// v5.0 — DEV: Gerenciar Servidores
+// ═══════════════════════════════════════════════════════════
+async function loadDevServers() {
+  const grid = $('#devServersList'); if (!grid) return;
+  grid.innerHTML = Array(6).fill('<div class="skel skel-card"></div>').join('');
+  const stats = $('#devServersStats'); if (stats) stats.innerHTML = '';
+
+  try {
+    const params = new URLSearchParams();
+    const search = $('#devServersSearch')?.value.trim();
+    const minMembers = $('#devServersMinMembers')?.value;
+    const premium = $('#devServersPremium')?.value;
+    if (search) params.set('search', search);
+    if (minMembers) params.set('min_members', minMembers);
+    if (premium) params.set('has_premium', premium);
+    params.set('limit', '200');
+
+    const r = await api('/api/dev/servers?' + params);
+    const servers = r.servers || [];
+
+    if (stats) {
+      const premiumCount = servers.filter(s => s.is_premium).length;
+      const totalMembers = servers.reduce((a, s) => a + (s.member_count || 0), 0);
+      stats.innerHTML = `
+        <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${servers.length}</div><div class="lbl">Servidores</div></div></div>
+        <div class="stat-mini"><div class="ico-box">💎</div><div class="info"><div class="num">${premiumCount}</div><div class="lbl">Premium</div></div></div>
+        <div class="stat-mini"><div class="ico-box">👥</div><div class="info"><div class="num">${totalMembers.toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div></div>
+      `;
+    }
+
+    if (!servers.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="icon">🌐</span>Nenhum servidor encontrado</div>';
+      return;
+    }
+
+    grid.innerHTML = servers.map(s => `
+      <div class="server-card" data-gid="${escapeHtml(s.guild_id)}">
+        ${s.is_premium ? '<span class="badge-premium">💎 PREMIUM</span>' : ''}
+        <div class="head">
+          <div class="ico">${s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🌐'}</div>
+          <div style="min-width:0">
+            <div class="name">${escapeHtml(s.name || '—')}</div>
+            <div class="meta">${escapeHtml(s.guild_id || '')}</div>
+          </div>
+        </div>
+        <div class="stats">
+          <span>👥 ${Number(s.member_count || 0).toLocaleString('pt-BR')}</span>
+          <span>${s.in_guild ? '🟢 No servidor' : '🔴 Fora'}</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary btn-sm" data-act="detail">🔍 Detalhes</button>
+          <button class="btn btn-secondary btn-sm" data-act="actions">⚡ Ações</button>
+        </div>
+      </div>
+    `).join('');
+
+    grid.querySelectorAll('[data-gid]').forEach(card => {
+      const gid = card.dataset.gid;
+      card.querySelector('[data-act="detail"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerDetail(gid); });
+      card.querySelector('[data-act="actions"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerActions(gid); });
+    });
+  } catch (e) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1;color:#f87171">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function openDevServerDetail(guildId) {
+  openModal('modalServer');
+  $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
+  try {
+    const r = await api(`/api/dev/servers/${guildId}/full`);
+    const g = r.guild || {};
+    const c = r.config || {};
+    const ff = r.ff || {};
+    const fp = r.force_premium;
+    const counts = r.counts || {};
+
+    const premiumBadge = fp ? `<span class="badge unlimited">💎 FORCE ${fp.permanent ? 'PERMANENTE' : fp.expires_at ? 'até ' + fmtDateShort(fp.expires_at) : ''}</span>` : '';
+    const cfgPremium = c.is_premium ? `<span class="badge ${c.premium_tier || 'basic'}">✓ ${(c.premium_tier || 'basic').toUpperCase()}</span>` : '<span class="badge used">Sem premium</span>';
+
+    $('#serverDetail').innerHTML = `
+      <div class="server-detail-head">
+        <div class="icon">${g.icon ? `<img src="${escapeHtml(g.icon)}">` : '🌐'}</div>
+        <div style="flex:1;min-width:0">
+          <h2>${escapeHtml(g.name || 'Servidor')}</h2>
+          <p>${escapeHtml(guildId)} ${premiumBadge}</p>
+        </div>
+      </div>
+      <div class="mini-stats">
+        <div class="mini-stat"><div class="num">${Number(g.member_count || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
+        <div class="mini-stat"><div class="num">${counts.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
+        <div class="mini-stat"><div class="num">${counts.bets_total || 0}</div><div class="lbl">Apostas</div></div>
+        <div class="mini-stat"><div class="num">${counts.orders_delivered || 0}</div><div class="lbl">Vendas</div></div>
+        <div class="mini-stat"><div class="num">${counts.products || 0}</div><div class="lbl">Produtos</div></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3 style="font-size:14px;margin-bottom:10px">📋 Configurações</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
+          <span class="stat-pill">Tipo: ${escapeHtml(c.server_type || 'personalizado')}</span>
+          <span class="stat-pill">${cfgPremium}</span>
+          <span class="stat-pill">Anti-link: ${c.anti_link ? '🟢' : '🔴'}</span>
+          <span class="stat-pill">Anti-conv: ${c.anti_invite ? '🟢' : '🔴'}</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:10px">🎮 Free Fire</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
+
+         
 boot();

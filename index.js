@@ -583,6 +583,7 @@ async function isTicketStaff(mu, g, panelRoleId = null, typeRoleId = null) {
 
 async function isMediator(mu, g) {
   const id = mu?.user?.id || mu?.id;
+  if (!id) return false;
   if (isDeveloper(id)) return true;
   if (id === g.ownerId) return true;
   const m = await fetchMember(g, id);

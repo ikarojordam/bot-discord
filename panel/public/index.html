@@ -5,24 +5,24 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=9">
+<link rel="stylesheet" href="/assets/style.css?v=10">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-<!-- LOGIN -->
+<!-- ═══════════════════ LOGIN ═══════════════════ -->
 <div id="view-login" class="auth-page active">
   <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
   <div class="auth-shell">
     <div class="auth-brand">
-      <div class="brand-badge"><span class="dot"></span>FRIO BOT · v4</div>
+      <div class="brand-badge"><span class="dot"></span>FRIO BOT · v5.0</div>
       <div class="brand-ice"><img src="/assets/logo.png" alt="Frio Panel"></div>
       <div class="brand-title">Gerenciamento<br>premium de servers.</div>
-      <div class="brand-sub">Keys, clientes, notificações, force premium e ferramentas DEV — tudo num painel só.</div>
+      <div class="brand-sub">Keys, clientes, servidores, automações e ferramentas DEV — tudo num painel só.</div>
       <div class="brand-features">
-        <div class="brand-feature"><div class="ico">🔑</div>Keys ilimitadas por tier</div>
-        <div class="brand-feature"><div class="ico">🌐</div>Multi-servidores com OAuth</div>
-        <div class="brand-feature"><div class="ico">📊</div>Dashboard com gráficos em tempo real</div>
+        <div class="brand-feature"><div class="ico">🌐</div>Gerencie TODOS os servidores</div>
+        <div class="brand-feature"><div class="ico">⚡</div>Command Palette (Ctrl+K)</div>
+        <div class="brand-feature"><div class="ico">📊</div>Dashboard com gráficos ao vivo</div>
       </div>
     </div>
     <div class="auth-form-side">
@@ -47,7 +47,7 @@
   </div>
 </div>
 
-<!-- REGISTER -->
+<!-- ═══════════════════ REGISTER ═══════════════════ -->
 <div id="view-register" class="auth-page">
   <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
   <div class="auth-shell">
@@ -76,7 +76,7 @@
   </div>
 </div>
 
-<!-- RESET -->
+<!-- ═══════════════════ RESET ═══════════════════ -->
 <div id="view-reset" class="auth-page">
   <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
   <div class="auth-shell">
@@ -102,12 +102,13 @@
   </div>
 </div>
 
-<!-- APP -->
+<!-- ═══════════════════ APP ═══════════════════ -->
 <div id="view-app" class="app-layout">
   <header class="app-header">
     <button class="hamburger" id="btnHamburger">☰</button>
     <div class="brand"><span class="logo"><img src="/assets/logo.png" alt="Frio Panel"></span><span>Frio Panel</span></div>
     <div class="spacer"></div>
+    <button class="cmd-trigger" id="btnCmdTrigger" title="Buscar (Ctrl+K)">🔎 Buscar... <kbd>Ctrl K</kbd></button>
     <div class="header-right">
       <button class="bell" id="btnBell" title="Notificações">🔔<span class="badge hidden" id="bellBadge">0</span></button>
       <div class="user-chip">
@@ -126,13 +127,17 @@
       <a data-nav="dashboard" class="active"><span class="icon">📊</span>Dashboard</a>
       <a data-nav="keys" data-roles="dev,admin,funcionario"><span class="icon">🔑</span>Keys</a>
       <a data-nav="packs" data-roles="dev"><span class="icon">📦</span>Packs</a>
-      <a data-nav="servers"><span class="icon">🌐</span>Servidores</a>
+      <a data-nav="servers"><span class="icon">🌐</span>Meus Servidores</a>
       <a data-nav="my-keys"><span class="icon">🎁</span>Minhas Keys</a>
       <a data-nav="notifications"><span class="icon">🔔</span>Notificações <span class="badge hidden" id="navNotifBadge" style="margin-left:auto">0</span></a>
 
       <div class="section-title admin-only">ADMIN</div>
       <a data-nav="tickets-global" data-roles="dev,admin"><span class="icon">🎫</span>Tickets Global</a>
       <a data-nav="financial" data-roles="dev,admin"><span class="icon">💰</span>Financeiro</a>
+
+      <div class="section-title dev-only">🌐 SERVIDORES (DEV)</div>
+      <a data-nav="dev-servers" data-roles="dev"><span class="icon">🛰️</span>Gerenciar Servidores</a>
+      <a data-nav="dev-server-search" data-roles="dev"><span class="icon">🔎</span>Buscar Servidor</a>
 
       <div class="section-title dev-only">DEV TOOLS</div>
       <a data-nav="kill-switch" data-roles="dev"><span class="icon">🚨</span>Kill Switch</a>
@@ -156,10 +161,6 @@
       <h2>📊 Dashboard</h2>
       <div class="grid-3" id="dashStats"></div>
       <div class="chart-grid" id="dashCharts"></div>
-      <div class="card" id="dashWelcome">
-        <h3>Bem-vindo(a)</h3>
-        <p class="hint">Papel: <span class="badge" id="dashRole">—</span> · Plano: <span class="badge" id="dashPlan">—</span></p>
-      </div>
     </section>
 
     <!-- KEYS -->
@@ -202,24 +203,22 @@
       <h2>📦 Pack de Keys</h2>
       <div class="card">
         <h3>➕ Gerar Pack (60 keys)</h3>
-        <p class="hint">Cada pack contém: <b>5 keys × 4 tiers × 3 durações = 60 keys</b> (Basic, Premium, Ultra, Unlimited × 7, 15 e 30 dias)</p>
+        <p class="hint">Cada pack contém: <b>5 keys × 4 tiers × 3 durações = 60 keys</b></p>
         <div class="grid-2">
-          <div class="field"><label>Quantidade de packs</label><div class="input-wrap"><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
+          <div class="field"><label>Quantidade</label><div class="input-wrap"><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
           <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="packMotivo" placeholder="opcional"></div></div>
         </div>
         <button id="btnGerarPack" class="btn">📦 Gerar Pack</button>
         <div id="packResult" class="result-box"></div>
       </div>
       <h3 style="margin:24px 0 12px;font-size:16px">📋 Packs gerados</h3>
-      <div class="filters">
-        <button id="btnRefreshPacks" class="btn btn-secondary btn-sm">🔄</button>
-      </div>
+      <div class="filters"><button id="btnRefreshPacks" class="btn btn-secondary btn-sm">🔄</button></div>
       <div id="packsTable" class="table-wrap"></div>
     </section>
 
-    <!-- SERVIDORES -->
+    <!-- MEUS SERVIDORES -->
     <section class="page" id="page-servers">
-      <h2>🌐 Servidores <button id="btnSyncServers" class="btn btn-sm" style="margin-left:auto;display:none" data-roles="dev">🔄 Sync</button></h2>
+      <h2>🌐 Meus Servidores <button id="btnSyncServers" class="btn btn-sm" style="margin-left:auto;display:none">🔄 Sync</button></h2>
       <div id="serversGrid" class="server-grid"></div>
     </section>
 
@@ -240,19 +239,45 @@
     <!-- TICKETS GLOBAL -->
     <section class="page" id="page-tickets-global">
       <h2>🎫 Tickets Abertos (Global)</h2>
-      <p class="hint">Todos os tickets abertos em todos os servidores.</p>
       <div id="ticketsGlobalTable" class="table-wrap"></div>
     </section>
 
     <!-- FINANCEIRO -->
     <section class="page" id="page-financial">
-      <h2>💰 Financeiro (últimos 30 dias)</h2>
+      <h2>💰 Financeiro (30 dias)</h2>
       <div class="grid-3" id="financialStats"></div>
       <div class="chart-grid">
-        <div class="chart-card" style="grid-column:1/-1">
-          <h4>Vendas por dia</h4>
-          <canvas id="chartFinancial"></canvas>
+        <div class="chart-card" style="grid-column:1/-1"><h4>Vendas por dia</h4><canvas id="chartFinancial"></canvas></div>
+      </div>
+    </section>
+
+    <!-- 🆕 DEV — GERENCIAR SERVIDORES -->
+    <section class="page" id="page-dev-servers">
+      <h2>🛰️ Gerenciar Todos os Servidores <span class="badge dev" style="font-size:11px">DEV</span></h2>
+      <div class="card">
+        <div class="filters" style="margin:0">
+          <input type="text" id="devServersSearch" placeholder="🔎 Buscar por nome ou ID">
+          <input type="number" id="devServersMinMembers" placeholder="Mín. membros" min="0" style="width:140px">
+          <select id="devServersPremium">
+            <option value="">Todos</option>
+            <option value="true">Só premium</option>
+            <option value="false">Sem premium</option>
+          </select>
+          <button id="btnRefreshDevServers" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+          <button id="btnForceSyncAll" class="btn btn-primary btn-sm">⚡ Sync Global</button>
         </div>
+      </div>
+      <div id="devServersStats" class="grid-3" style="margin-bottom:18px"></div>
+      <div id="devServersList" class="server-grid"></div>
+    </section>
+
+    <!-- 🆕 DEV — BUSCAR SERVIDOR -->
+    <section class="page" id="page-dev-server-search">
+      <h2>🔎 Buscar Servidor Específico</h2>
+      <div class="card">
+        <div class="field"><label>ID do Servidor</label><div class="input-wrap"><input type="text" id="devServerLookupId" placeholder="Ex: 123456789012345678"></div></div>
+        <button id="btnDevServerLookup" class="btn">🔎 Buscar detalhes</button>
+        <div id="devServerLookupResult" style="margin-top:18px"></div>
       </div>
     </section>
 
@@ -272,7 +297,6 @@
     <section class="page" id="page-maintenance">
       <h2>🔧 Manutenção Global</h2>
       <div class="card">
-        <p class="hint">Bloqueia comandos (exceto DEV).</p>
         <div id="mtStatus">Carregando…</div>
         <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="mtReason" placeholder="Ex: atualizando DB"></div></div>
         <button id="btnMtOn" class="btn btn-danger">🔴 ATIVAR</button>
@@ -303,8 +327,8 @@
     <section class="page" id="page-broadcast">
       <h2>📢 Broadcast Global</h2>
       <div class="card">
-        <div class="field"><label>Título</label><div class="input-wrap"><input type="text" id="bcTitle" placeholder="Ex: Nova atualização!"></div></div>
-        <div class="field"><label>Conteúdo</label><div class="input-wrap"><textarea id="bcContent" placeholder="Mensagem..."></textarea></div></div>
+        <div class="field"><label>Título</label><div class="input-wrap"><input type="text" id="bcTitle"></div></div>
+        <div class="field"><label>Conteúdo</label><div class="input-wrap"><textarea id="bcContent"></textarea></div></div>
         <div class="field"><label>Só para role</label><div class="input-wrap"><select id="bcRole">
           <option value="">Todos</option><option value="dev">DEV</option><option value="admin">ADMIN</option>
           <option value="funcionario">FUNCIONÁRIO</option><option value="cliente">CLIENTE</option>
@@ -313,7 +337,6 @@
       </div>
       <div class="card">
         <h3>🔄 Forçar broadcast de update do bot</h3>
-        <p class="hint">Reseta o log pra que o bot reenvie o anúncio no próximo boot.</p>
         <button id="btnForceUpdate" class="btn btn-secondary">🔄 Resetar broadcast</button>
       </div>
     </section>
@@ -322,12 +345,10 @@
     <section class="page" id="page-backup">
       <h2>💾 Backup</h2>
       <div class="card">
-        <p class="hint">Baixa um JSON com todas as tabelas principais do painel.</p>
         <button id="btnDownloadBackup" class="btn">💾 Baixar backup completo</button>
       </div>
       <div class="card">
         <h3>🔄 Sincronizar servidores</h3>
-        <p class="hint">Força o bot a reescanear todos os servidores e atualizar a tabela user_guilds.</p>
         <button id="btnForceSync" class="btn btn-secondary">🔄 Forçar sync</button>
       </div>
     </section>
@@ -369,6 +390,23 @@
   </main>
 </div>
 
+<!-- COMMAND PALETTE -->
+<div id="cmdPalette" class="cmd-palette">
+  <div class="cmd-box">
+    <div class="cmd-input-wrap">
+      <span class="cmd-icon">🔎</span>
+      <input type="text" id="cmdInput" placeholder="Ir para... ou buscar ação" autocomplete="off">
+      <kbd>ESC</kbd>
+    </div>
+    <div id="cmdResults" class="cmd-results"></div>
+    <div class="cmd-footer">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+      <span><kbd>Enter</kbd> selecionar</span>
+      <span><kbd>ESC</kbd> fechar</span>
+    </div>
+  </div>
+</div>
+
 <!-- DRAWER NOTIFICAÇÕES -->
 <div id="notifDrawer" class="drawer">
   <div class="drawer-header"><h3>🔔 Notificações</h3><button class="btn btn-ghost btn-sm" id="btnCloseDrawer">✕</button></div>
@@ -378,7 +416,7 @@
 
 <!-- MODAL: Server detail -->
 <div id="modalServer" class="modal">
-  <div class="modal-content" style="max-width:800px;position:relative">
+  <div class="modal-content" style="max-width:820px;position:relative">
     <button class="modal-close" onclick="closeModal('modalServer')">✕</button>
     <div id="serverDetail"></div>
   </div>
@@ -467,7 +505,6 @@
   <div class="modal-content" style="max-width:520px;position:relative">
     <button class="modal-close" onclick="closeModal('modalSendKey')">✕</button>
     <h2>📤 Enviar key pra cliente</h2>
-    <p class="sub">A key será marcada como enviada e o cliente receberá uma notificação.</p>
     <div class="field"><label>Key</label><div class="input-wrap"><select id="sendKeyId"></select></div></div>
     <div class="field"><label>Cliente</label><div class="input-wrap"><select id="sendKeyUser"></select></div></div>
     <div class="modal-actions">
@@ -490,13 +527,31 @@
       <option value="alert">⚠️ Alerta</option>
       <option value="key_received">🔑 Key</option>
     </select></div></div>
-    <div class="field"><label>Título *</label><div class="input-wrap"><input type="text" id="sendNotifTitle" placeholder="Ex: Sua key chegou!" maxlength="120"></div></div>
-    <div class="field"><label>Conteúdo *</label><div class="input-wrap"><textarea id="sendNotifContent" placeholder="Mensagem..." maxlength="500"></textarea></div></div>
+    <div class="field"><label>Título *</label><div class="input-wrap"><input type="text" id="sendNotifTitle" maxlength="120"></div></div>
+    <div class="field"><label>Conteúdo *</label><div class="input-wrap"><textarea id="sendNotifContent" maxlength="500"></textarea></div></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" onclick="closeModal('modalSendNotif')">Cancelar</button>
       <button type="button" class="btn" id="btnConfirmSendNotif">🔔 Enviar</button>
     </div>
     <div id="sendNotifMsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- MODAL: Server Actions (dev) -->
+<div id="modalDevServerActions" class="modal">
+  <div class="modal-content" style="max-width:560px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalDevServerActions')">✕</button>
+    <h2 id="devServerActionsTitle">🛰️ Ações do Servidor</h2>
+    <p class="sub" id="devServerActionsId">—</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button type="button" class="btn btn-secondary" id="actRename">✏️ Renomear</button>
+      <button type="button" class="btn btn-secondary" id="actRefresh">🔄 Atualizar dados</button>
+      <button type="button" class="btn btn-success" id="actForcePremium">💎 Force Premium (30d)</button>
+      <button type="button" class="btn btn-secondary" id="actSyncMembers">🚀 Levar membros (OAuth)</button>
+      <button type="button" class="btn btn-danger" id="actLeave">🚪 Fazer o bot sair</button>
+      <button type="button" class="btn btn-danger" id="actNuke">💥 NUKE (apagar tudo)</button>
+    </div>
+    <div id="devServerActionsMsg" class="msg" style="margin-top:16px"></div>
   </div>
 </div>
 
@@ -511,6 +566,6 @@ function togglePass(id, btn) {
   btn.textContent = isPass ? '🙈' : '👁️';
 }
 </script>
-<script src="/assets/app.js?v=9"></script>
+<script src="/assets/app.js?v=10"></script>
 </body>
 </html>

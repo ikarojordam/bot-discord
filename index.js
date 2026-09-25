@@ -128,6 +128,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // ═══════════════════════════════════════════════════════════
 // DISCORD CLIENT — OTIMIZADO PARA 2000+ GUILDS
+// ⚡ api: discordapp.com/api/v9 → contorna bloqueio Cloudflare no Render
 // ═══════════════════════════════════════════════════════════
 const client = new Client({
   intents: [
@@ -142,7 +143,16 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
   ],
   partials: ['CHANNEL', 'MESSAGE', 'REACTION'],
-  rest: { timeout: 30000, retries: 3, retryAfter: 5000 },
+
+  // ⚡ FIX CRÍTICO: discord.com está bloqueado pelo Cloudflare no Render
+  // discordapp.com/api/v9 responde 200 (testado em set/2026)
+  rest: {
+    api: 'https://discordapp.com/api',
+    version: '9',
+    timeout: 30000,
+    retries: 3,
+    retryAfter: 5000,
+  },
 
   // ⚡ OTIMIZAÇÃO CRÍTICA #O1: limita caches em RAM (~600 MB liberados)
   makeCache: Options.cacheWithLimits({
@@ -159,8 +169,8 @@ const client = new Client({
     GuildStickerManager: 30,
   }),
 
-// ⚡ OTIMIZAÇÃO #O10: sweepers varrem caches velhos periodicamente
-sweepers: {
+  // ⚡ OTIMIZAÇÃO #O10: sweepers varrem caches velhos periodicamente
+  sweepers: {
     ...Options.DefaultSweeperSettings,
     messages: { interval: 300, lifetime: 600, filter: () => () => true },
     users: { interval: 3600, filter: () => u => u.bot && u.id !== client.user?.id },
@@ -168,8 +178,10 @@ sweepers: {
     presences: { interval: 120, filter: () => () => true },
     voiceStates: { interval: 300, filter: () => vs => !vs.channelId },
     threads: { interval: 3600, lifetime: 7200, filter: () => () => true },
-},                
-});  
+  },
+});
+
+
 
 // ═══════════════════════════════════════════════════════════
 // DEVELOPERS — Bug #1 corrigido

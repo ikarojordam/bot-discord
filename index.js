@@ -7692,6 +7692,13 @@ async function handleResgatar(i) {
 // INTERACTION CREATE — HANDLER PRINCIPAL
 // ═══════════════════════════════════════════════════════════
 client.on('interactionCreate', async (i) => {
+  // ⚡ FIX: garante member e me populados (evita "Cannot read properties of null")
+  if (i.guild && !i.member && i.user?.id) {
+    try { i.member = await i.guild.members.fetch(i.user.id); } catch {}
+  }
+  if (i.guild && !i.guild.members.me) {
+    try { await i.guild.members.fetchMe(); } catch {}
+  }
   try {
     const isDev = i.user?.id && isDeveloper(i.user.id);
 

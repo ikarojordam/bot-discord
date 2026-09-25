@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL v3.4 — Frontend + Charts
+// FRIO PANEL v5.0 — Frontend + Charts + Command Palette + Dev Servers
 // ═══════════════════════════════════════════════════════════
 
 const $  = (s, r = document) => r.querySelector(s);
@@ -86,28 +86,31 @@ function buildSidebar() {
     if (st.classList.contains('admin-only')) st.classList.toggle('hidden', !['dev','admin'].includes(role));
   });
 }
+function openSidebar()  { $('#sidebar')?.classList.add('open'); $('#sidebarOverlay')?.classList.add('active'); }
+function closeSidebar() { $('#sidebar')?.classList.remove('open'); $('#sidebarOverlay')?.classList.remove('active'); }
+
 function goToPage(name) {
   state.currentPage = name;
   $$('#sidebar a[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === name));
   $$('.app-main .page').forEach(p => p.classList.toggle('active', p.id === `page-${name}`));
   closeSidebar();
-  if (name === 'dashboard')     renderDashboard();
-  if (name === 'keys')          { loadKeys(); loadRedemptions(); }
-  if (name === 'packs')         loadPacks();
-  if (name === 'servers')       loadServers();
-  if (name === 'my-keys')       loadMyKeys();
-  if (name === 'notifications') { renderNotifPage(); loadNotifications(); }
-  if (name === 'tickets-global') loadTicketsGlobal();
-  if (name === 'financial')     loadFinancial();
-  if (name === 'usuarios')      loadUsers();
-  if (name === 'pending')       loadPending();
-  if (name === 'logs')          loadLogs();
-  if (name === 'kill-switch')   loadKillSwitch();
-  if (name === 'maintenance')   loadMaintenance();
-  if (name === 'force-premium') loadForcePremium();
+  if (name === 'dashboard')            renderDashboard();
+  if (name === 'keys')                 { loadKeys(); loadRedemptions(); }
+  if (name === 'packs')                loadPacks();
+  if (name === 'servers')              loadServers();
+  if (name === 'my-keys')              loadMyKeys();
+  if (name === 'notifications')        { renderNotifPage(); loadNotifications(); }
+  if (name === 'tickets-global')       loadTicketsGlobal();
+  if (name === 'financial')            loadFinancial();
+  if (name === 'usuarios')             loadUsers();
+  if (name === 'pending')              loadPending();
+  if (name === 'logs')                 loadLogs();
+  if (name === 'kill-switch')          loadKillSwitch();
+  if (name === 'maintenance')          loadMaintenance();
+  if (name === 'force-premium')        loadForcePremium();
+  if (name === 'dev-servers')          loadDevServers();
+  if (name === 'dev-server-search')    { const el = $('#devServerLookupId'); if (el) { el.value = ''; el.focus(); } }
 }
-function openSidebar()  { $('#sidebar')?.classList.add('open'); $('#sidebarOverlay')?.classList.add('active'); }
-function closeSidebar() { $('#sidebar')?.classList.remove('open'); $('#sidebarOverlay')?.classList.remove('active'); }
 
 async function boot() {
   const hash = new URLSearchParams(window.location.hash.substring(1));
@@ -127,14 +130,99 @@ function hydrateApp({ user, admin }) {
   const up = $('#userPlan'); if (up) { up.textContent = PLAN_LABEL[admin.plan] || '—'; }
   const dr = $('#dashRole'); if (dr) { dr.textContent = admin.role.toUpperCase(); dr.className = `badge ${admin.role}`; }
   const dp = $('#dashPlan'); if (dp) { dp.textContent = PLAN_LABEL[admin.plan] || '—'; }
-  // Botão sync servers só pra dev
   const btnSync = $('#btnSyncServers');
   if (btnSync && admin.role === 'dev') btnSync.style.display = 'inline-flex';
   buildSidebar(); showView('app'); renderDashboard(); loadNotifications(); startPolling();
 }
 
 // ═══════════════════════════════════════════════════════════
-// DASHBOARD COM GRÁFICOS
+// COMMAND PALETTE (Ctrl+K)
+// ═══════════════════════════════════════════════════════════
+const CMD_ACTIONS = [
+  { icon: '📊', label: 'Dashboard',        nav: 'dashboard' },
+  { icon: '🔑', label: 'Keys Premium',     nav: 'keys', roles: ['dev','admin','funcionario'] },
+  { icon: '📦', label: 'Packs',            nav: 'packs', roles: ['dev'] },
+  { icon: '🌐', label: 'Meus Servidores',  nav: 'servers' },
+  { icon: '🎁', label: 'Minhas Keys',      nav: 'my-keys' },
+  { icon: '🔔', label: 'Notificações',     nav: 'notifications' },
+  { icon: '🎫', label: 'Tickets Global',   nav: 'tickets-global', roles: ['dev','admin'] },
+  { icon: '💰', label: 'Financeiro',       nav: 'financial', roles: ['dev','admin'] },
+  { icon: '🛰️', label: 'Gerenciar Servidores', nav: 'dev-servers', roles: ['dev'] },
+  { icon: '🔎', label: 'Buscar Servidor',  nav: 'dev-server-search', roles: ['dev'] },
+  { icon: '🚨', label: 'Kill Switch',      nav: 'kill-switch', roles: ['dev'] },
+  { icon: '🔧', label: 'Manutenção',       nav: 'maintenance', roles: ['dev'] },
+  { icon: '💎', label: 'Force Premium',    nav: 'force-premium', roles: ['dev'] },
+  { icon: '📢', label: 'Broadcast',        nav: 'broadcast', roles: ['dev'] },
+  { icon: '💾', label: 'Backup',           nav: 'backup', roles: ['dev'] },
+  { icon: '👥', label: 'Usuários',         nav: 'usuarios', roles: ['dev'] },
+  { icon: '⏳', label: 'Aprovações',       nav: 'pending', roles: ['dev'] },
+  { icon: '📋', label: 'Logs',             nav: 'logs', roles: ['dev'] },
+];
+
+let cmdSelectedIdx = 0;
+let cmdFiltered = [];
+
+function openCmdPalette() {
+  const el = $('#cmdPalette'); if (!el) return;
+  el.classList.add('active');
+  const input = $('#cmdInput');
+  if (input) { input.value = ''; input.focus(); }
+  renderCmdResults('');
+}
+function closeCmdPalette() { $('#cmdPalette')?.classList.remove('active'); }
+
+function renderCmdResults(q) {
+  const role = state.role || 'cliente';
+  const query = q.toLowerCase().trim();
+  cmdFiltered = CMD_ACTIONS.filter(a => {
+    if (a.roles && !a.roles.includes(role)) return false;
+    if (!query) return true;
+    return a.label.toLowerCase().includes(query);
+  });
+  cmdSelectedIdx = 0;
+  const res = $('#cmdResults');
+  if (!res) return;
+  if (!cmdFiltered.length) { res.innerHTML = '<div class="empty" style="padding:24px">Nada encontrado</div>'; return; }
+  res.innerHTML = cmdFiltered.map((a, i) => `<div class="cmd-item ${i === cmdSelectedIdx ? 'active' : ''}" data-idx="${i}">
+    <span class="cmd-ico">${a.icon}</span>
+    <span class="cmd-label">${escapeHtml(a.label)}</span>
+    <span class="cmd-hint">→</span>
+  </div>`).join('');
+  res.querySelectorAll('.cmd-item').forEach(el => el.addEventListener('click', () => {
+    const a = cmdFiltered[Number(el.dataset.idx)];
+    if (a) { closeCmdPalette(); goToPage(a.nav); }
+  }));
+}
+function navigateCmd(delta) {
+  if (!cmdFiltered.length) return;
+  cmdSelectedIdx = (cmdSelectedIdx + delta + cmdFiltered.length) % cmdFiltered.length;
+  $$('#cmdResults .cmd-item').forEach((el, i) => el.classList.toggle('active', i === cmdSelectedIdx));
+  $$('#cmdResults .cmd-item')[cmdSelectedIdx]?.scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const el = $('#cmdPalette');
+    if (el?.classList.contains('active')) closeCmdPalette(); else openCmdPalette();
+    return;
+  }
+  const palette = $('#cmdPalette');
+  if (!palette?.classList.contains('active')) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeCmdPalette(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); navigateCmd(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); navigateCmd(-1); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const a = cmdFiltered[cmdSelectedIdx];
+    if (a) { closeCmdPalette(); goToPage(a.nav); }
+  }
+});
+$('#btnCmdTrigger')?.addEventListener('click', openCmdPalette);
+$('#cmdInput')?.addEventListener('input', e => renderCmdResults(e.target.value));
+$('#cmdPalette')?.addEventListener('click', e => { if (e.target === $('#cmdPalette')) closeCmdPalette(); });
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD
 // ═══════════════════════════════════════════════════════════
 async function renderDashboard() {
   const grid = $('#dashStats');
@@ -146,7 +234,6 @@ async function renderDashboard() {
   try {
     const stats = await api('/api/dashboard/stats');
 
-    // ─── CLIENTE / FUNCIONARIO ───
     if (state.role === 'cliente' || state.role === 'funcionario') {
       grid.innerHTML = `
         <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${stats.stats.servers || 0}</div><div class="lbl">Servidores</div></div></div>
@@ -156,7 +243,6 @@ async function renderDashboard() {
       return;
     }
 
-    // ─── DEV / ADMIN ───
     const s = stats.stats;
     grid.innerHTML = `
       <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${s.guilds || 0}</div><div class="lbl">Servidores</div></div></div>
@@ -169,7 +255,6 @@ async function renderDashboard() {
       <div class="stat-mini"><div class="ico-box">🔔</div><div class="info"><div class="num">${s.notifications || 0}</div><div class="lbl">Notificações</div></div></div>
     `;
 
-    // ─── GRÁFICOS ───
     const chartData = await api('/api/dashboard/charts');
     const c = chartData.charts;
     charts.innerHTML = `
@@ -191,14 +276,11 @@ function destroyChart(key) {
 }
 
 function drawCharts(c) {
-  const isDark = true;
-  const textColor = '#9ba0aa';
   const gridColor = 'rgba(255,255,255,.06)';
-  Chart.defaults.color = textColor;
+  Chart.defaults.color = '#9ba0aa';
   Chart.defaults.font.family = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
   Chart.defaults.font.size = 12;
 
-  // ── Keys geradas por dia ──
   destroyChart('keysByDay');
   const ctx1 = $('#chartKeysByDay');
   if (ctx1) {
@@ -207,32 +289,20 @@ function drawCharts(c) {
       data: {
         labels: c.keys_by_day.map(x => x.date.substring(5)),
         datasets: [{
-          label: 'Keys',
-          data: c.keys_by_day.map(x => x.count),
-          borderColor: '#5865F2',
-          backgroundColor: 'rgba(88,101,242,.15)',
-          fill: true,
-          tension: 0.4,
-          borderWidth: 2.5,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: '#5865F2',
-          pointHoverBorderColor: '#fff',
+          label: 'Keys', data: c.keys_by_day.map(x => x.count),
+          borderColor: '#5865F2', backgroundColor: 'rgba(88,101,242,.15)',
+          fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5,
         }],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
+      options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
           y: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
-        },
-      },
+        } },
     });
   }
 
-  // ── Keys por tier ──
   destroyChart('keysByTier');
   const ctx2 = $('#chartKeysByTier');
   if (ctx2) {
@@ -243,23 +313,14 @@ function drawCharts(c) {
         datasets: [{
           data: [c.keys_by_tier.basic, c.keys_by_tier.premium, c.keys_by_tier.ultra, c.keys_by_tier.unlimited],
           backgroundColor: ['#92400e', '#8a90a0', '#fbbf24', '#8B5CF6'],
-          borderColor: 'rgba(20,22,27,1)',
-          borderWidth: 4,
-          hoverOffset: 8,
+          borderColor: 'rgba(20,22,27,1)', borderWidth: 4, hoverOffset: 8,
         }],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '65%',
-        plugins: {
-          legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
-        },
-      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '65%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } } },
     });
   }
 
-  // ── Users por role ──
   destroyChart('usersByRole');
   const ctx3 = $('#chartUsersByRole');
   if (ctx3) {
@@ -270,23 +331,14 @@ function drawCharts(c) {
         datasets: [{
           data: [c.users_by_role.dev, c.users_by_role.admin, c.users_by_role.funcionario, c.users_by_role.cliente, c.users_by_role.pending],
           backgroundColor: ['#8B5CF6', '#ED4245', '#5865F2', '#22c55e', '#fbbf24'],
-          borderColor: 'rgba(20,22,27,1)',
-          borderWidth: 4,
-          hoverOffset: 8,
+          borderColor: 'rgba(20,22,27,1)', borderWidth: 4, hoverOffset: 8,
         }],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '65%',
-        plugins: {
-          legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
-        },
-      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '65%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } } },
     });
   }
 
-  // ── Users por plano ──
   destroyChart('usersByPlan');
   const ctx4 = $('#chartUsersByPlan');
   if (ctx4) {
@@ -297,30 +349,19 @@ function drawCharts(c) {
         datasets: [{
           label: 'Usuários',
           data: [c.users_by_plan.none, c.users_by_plan.basic, c.users_by_plan.premium, c.users_by_plan.ultra, c.users_by_plan.unlimited],
-          backgroundColor: [
-            'rgba(107,113,128,.6)',
-            'rgba(251,191,122,.75)',
-            'rgba(200,210,225,.75)',
-            'rgba(255,215,80,.75)',
-            'rgba(167,139,250,.8)',
-          ],
-          borderRadius: 8,
-          borderSkipped: false,
+          backgroundColor: ['rgba(107,113,128,.6)', 'rgba(251,191,122,.75)', 'rgba(200,210,225,.75)', 'rgba(255,215,80,.75)', 'rgba(167,139,250,.8)'],
+          borderRadius: 8, borderSkipped: false,
         }],
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
+      options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false } },
           y: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
-        },
-      },
+        } },
     });
   }
 
-  // ── Top servidores ──
   destroyChart('topServers');
   const ctx5 = $('#chartTopServers');
   if (ctx5) {
@@ -329,24 +370,17 @@ function drawCharts(c) {
       data: {
         labels: c.top_servers.map(x => x.name?.length > 22 ? x.name.substring(0, 22) + '…' : (x.name || '?')),
         datasets: [{
-          label: 'Membros',
-          data: c.top_servers.map(x => x.member_count),
-          backgroundColor: 'rgba(139,92,246,.7)',
-          hoverBackgroundColor: 'rgba(167,139,250,.95)',
-          borderRadius: 8,
-          borderSkipped: false,
+          label: 'Membros', data: c.top_servers.map(x => x.member_count),
+          backgroundColor: 'rgba(139,92,246,.7)', hoverBackgroundColor: 'rgba(167,139,250,.95)',
+          borderRadius: 8, borderSkipped: false,
         }],
       },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
           y: { grid: { display: false }, ticks: { font: { size: 11 } } },
-        },
-      },
+        } },
     });
   }
 }
@@ -418,7 +452,6 @@ async function loadRedemptions() {
   } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
 }
 
-// ═══ ENVIAR KEY ═══
 async function loadClientesOptions() {
   try { const r = await api('/api/dev/usuarios/clientes'); return r.clientes || []; }
   catch { return []; }
@@ -452,7 +485,9 @@ $('#btnConfirmSendKey')?.addEventListener('click', async () => {
   finally { btn.disabled = false; }
 });
 
-// ═══ PACKS ═══
+// ═══════════════════════════════════════════════════════════
+// PACKS
+// ═══════════════════════════════════════════════════════════
 $('#btnGerarPack')?.addEventListener('click', async () => {
   const btn = $('#btnGerarPack'); btn.disabled = true;
   const box = $('#packResult'); box.innerHTML = '<div class="loading">Gerando packs…</div>';
@@ -489,7 +524,6 @@ async function loadPacks() {
   } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
 }
 window.sendPackQuick = function (id) {
-  const pack = state.cachedKeys.find(x => String(x.id) === String(id));
   $('#sendKeyId').innerHTML = `<option value="${escapeHtml(String(id))}" selected>📦 Pack</option>`;
   openSendKey();
 };
@@ -503,7 +537,9 @@ window.redeemPack = async function (id) {
 };
 $('#btnRefreshPacks')?.addEventListener('click', loadPacks);
 
-// ═══ SERVIDORES ═══
+// ═══════════════════════════════════════════════════════════
+// SERVIDORES (user)
+// ═══════════════════════════════════════════════════════════
 async function loadServers() {
   const g = $('#serversGrid'); if (!g) return;
   g.innerHTML = '<div class="loading">Carregando…</div>';
@@ -532,17 +568,14 @@ async function openServerDetail(guildId) {
   $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
   openModal('modalServer');
   try {
-    const [info, stats] = await Promise.all([
-      api(`/api/me/servers/${guildId}/stats`).catch(() => ({})),
-      api(`/api/me/servers/${guildId}/stats`).catch(() => ({})),
-    ]);
+    const stats = await api(`/api/me/servers/${guildId}/stats`).catch(() => ({}));
     const g = stats.guild || {};
     const s = stats.stats || {};
     const canManage = ['dev', 'admin'].includes(state.role);
     const actionsTabBtn = canManage ? `<button class="detail-tab" data-tab="actions">⚡ Ações</button>` : '';
     const actionsPanel = canManage ? `<div class="detail-panel" id="dt-actions">
       <div class="card"><h3>🚀 Levar membros</h3>
-      <p class="hint">Adiciona usuários verificados ao servidor. Rate limit: ~1 por segundo.</p>
+      <p class="hint">Adiciona usuários verificados. Rate limit: ~1 por segundo.</p>
       <div class="field"><label>Quantidade (máx 50)</label><div class="input-wrap"><input type="number" id="tmLimit" value="20" min="1" max="50"></div></div>
       <button id="btnTakeMembers" class="btn">🚀 Levar membros</button>
       <div id="tmResult" class="msg"></div></div>
@@ -627,7 +660,9 @@ async function takeMembers() {
   finally { btn.disabled = false; btn.textContent = '🚀 Levar membros'; }
 }
 
-// ═══ MINHAS KEYS ═══
+// ═══════════════════════════════════════════════════════════
+// MINHAS KEYS
+// ═══════════════════════════════════════════════════════════
 async function loadMyKeys() {
   const el = $('#myKeysList'); if (!el) return;
   el.innerHTML = '<div class="loading">Carregando…</div>';
@@ -650,7 +685,9 @@ async function loadMyKeys() {
   } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
-// ═══ TICKETS GLOBAL ═══
+// ═══════════════════════════════════════════════════════════
+// TICKETS GLOBAL
+// ═══════════════════════════════════════════════════════════
 async function loadTicketsGlobal() {
   const t = $('#ticketsGlobalTable'); if (!t) return;
   t.innerHTML = '<div class="loading">Carregando…</div>';
@@ -667,7 +704,9 @@ async function loadTicketsGlobal() {
   } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
-// ═══ FINANCEIRO ═══
+// ═══════════════════════════════════════════════════════════
+// FINANCEIRO
+// ═══════════════════════════════════════════════════════════
 async function loadFinancial() {
   const stats = $('#financialStats');
   stats.innerHTML = '<div class="loading">Carregando…</div>';
@@ -686,14 +725,9 @@ async function loadFinancial() {
         data: {
           labels: r.daily.map(x => x.date.substring(5)),
           datasets: [{
-            label: 'Vendas (R$)',
-            data: r.daily.map(x => x.value),
-            borderColor: '#22c55e',
-            backgroundColor: 'rgba(34,197,94,.15)',
-            fill: true,
-            tension: 0.4,
-            borderWidth: 2.5,
-            pointRadius: 0,
+            label: 'Vendas (R$)', data: r.daily.map(x => x.value),
+            borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.15)',
+            fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 0,
           }],
         },
         options: {
@@ -709,7 +743,228 @@ async function loadFinancial() {
   } catch (e) { stats.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
-// ═══ NOTIFICAÇÕES ═══
+// ═══════════════════════════════════════════════════════════
+// 🆕 DEV — GERENCIAR SERVIDORES
+// ═══════════════════════════════════════════════════════════
+async function loadDevServers() {
+  const grid = $('#devServersList'); if (!grid) return;
+  grid.innerHTML = Array(6).fill('<div class="skel skel-card"></div>').join('');
+  const stats = $('#devServersStats'); if (stats) stats.innerHTML = '';
+
+  try {
+    const params = new URLSearchParams();
+    const search = $('#devServersSearch')?.value.trim();
+    const minMembers = $('#devServersMinMembers')?.value;
+    const premium = $('#devServersPremium')?.value;
+    if (search) params.set('search', search);
+    if (minMembers) params.set('min_members', minMembers);
+    if (premium) params.set('has_premium', premium);
+    params.set('limit', '200');
+
+    const r = await api('/api/dev/servers?' + params);
+    const servers = r.servers || [];
+
+    if (stats) {
+      const premiumCount = servers.filter(s => s.is_premium).length;
+      const totalMembers = servers.reduce((a, s) => a + (s.member_count || 0), 0);
+      stats.innerHTML = `
+        <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${servers.length}</div><div class="lbl">Servidores</div></div></div>
+        <div class="stat-mini"><div class="ico-box">💎</div><div class="info"><div class="num">${premiumCount}</div><div class="lbl">Premium</div></div></div>
+        <div class="stat-mini"><div class="ico-box">👥</div><div class="info"><div class="num">${totalMembers.toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div></div>
+      `;
+    }
+
+    if (!servers.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="icon">🌐</span>Nenhum servidor encontrado</div>';
+      return;
+    }
+
+    grid.innerHTML = servers.map(s => `
+      <div class="server-card" data-gid="${escapeHtml(s.guild_id)}">
+        ${s.is_premium ? '<span class="badge-premium">💎 PREMIUM</span>' : ''}
+        <div class="head">
+          <div class="ico">${s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🌐'}</div>
+          <div style="min-width:0">
+            <div class="name">${escapeHtml(s.name || '—')}</div>
+            <div class="meta">${escapeHtml(s.guild_id || '')}</div>
+          </div>
+        </div>
+        <div class="stats">
+          <span>👥 ${Number(s.member_count || 0).toLocaleString('pt-BR')}</span>
+          <span>${s.in_guild ? '🟢 No servidor' : '🔴 Fora'}</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary btn-sm" data-act="detail">🔍 Detalhes</button>
+          <button class="btn btn-secondary btn-sm" data-act="actions">⚡ Ações</button>
+        </div>
+      </div>
+    `).join('');
+
+    grid.querySelectorAll('[data-gid]').forEach(card => {
+      const gid = card.dataset.gid;
+      card.querySelector('[data-act="detail"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerDetail(gid); });
+      card.querySelector('[data-act="actions"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerActions(gid); });
+    });
+  } catch (e) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1;color:#f87171">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function openDevServerDetail(guildId) {
+  openModal('modalServer');
+  $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
+  try {
+    const r = await api(`/api/dev/servers/${guildId}/full`);
+    const g = r.guild || {};
+    const c = r.config || {};
+    const ff = r.ff || {};
+    const fp = r.force_premium;
+    const counts = r.counts || {};
+
+    const premiumBadge = fp ? `<span class="badge unlimited">💎 FORCE ${fp.permanent ? 'PERMANENTE' : fp.expires_at ? 'até ' + fmtDateShort(fp.expires_at) : ''}</span>` : '';
+    const cfgPremium = c.is_premium ? `<span class="badge ${c.premium_tier || 'basic'}">✓ ${(c.premium_tier || 'basic').toUpperCase()}</span>` : '<span class="badge used">Sem premium</span>';
+
+    $('#serverDetail').innerHTML = `
+      <div class="server-detail-head">
+        <div class="icon">${g.icon ? `<img src="${escapeHtml(g.icon)}">` : '🌐'}</div>
+        <div style="flex:1;min-width:0">
+          <h2>${escapeHtml(g.name || 'Servidor')}</h2>
+          <p>${escapeHtml(guildId)} ${premiumBadge}</p>
+        </div>
+      </div>
+      <div class="mini-stats">
+        <div class="mini-stat"><div class="num">${Number(g.member_count || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
+        <div class="mini-stat"><div class="num">${counts.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
+        <div class="mini-stat"><div class="num">${counts.bets_total || 0}</div><div class="lbl">Apostas</div></div>
+        <div class="mini-stat"><div class="num">${counts.orders_delivered || 0}</div><div class="lbl">Vendas</div></div>
+        <div class="mini-stat"><div class="num">${counts.products || 0}</div><div class="lbl">Produtos</div></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3 style="font-size:14px;margin-bottom:10px">📋 Configurações</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
+          <span class="stat-pill">Tipo: ${escapeHtml(c.server_type || 'personalizado')}</span>
+          <span class="stat-pill">${cfgPremium}</span>
+          <span class="stat-pill">Anti-link: ${c.anti_link ? '🟢' : '🔴'}</span>
+          <span class="stat-pill">Anti-conv: ${c.anti_invite ? '🟢' : '🔴'}</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:10px">🎮 Free Fire</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
+          <span class="stat-pill">PIX: ${escapeHtml(ff?.mp_access_token ? 'Mercado Pago' : ff?.pix_key ? 'Estático' : 'Nenhum')}</span>
+          <span class="stat-pill">Manutenção: ${ff?.maintenance ? '🔴' : '🟢'}</span>
+          <span class="stat-pill">Mediador: ${ff?.mediator_role_id ? '✅' : '❌'}</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('modalServer')">Fechar</button>
+        <button class="btn" onclick="closeModal('modalServer'); openDevServerActions('${escapeHtml(guildId)}')">⚡ Ações</button>
+      </div>
+    `;
+  } catch (e) { $('#serverDetail').innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+let _devActionsGid = null;
+function openDevServerActions(guildId) {
+  _devActionsGid = guildId;
+  $('#devServerActionsTitle').textContent = '⚡ Ações';
+  $('#devServerActionsId').textContent = guildId;
+  $('#devServerActionsMsg').style.display = 'none';
+  openModal('modalDevServerActions');
+}
+$('#actRename')?.addEventListener('click', async () => {
+  if (!_devActionsGid) return;
+  const name = prompt('Novo nome do servidor:');
+  if (!name || name.length < 2) return;
+  try {
+    await api(`/api/dev/servers/${_devActionsGid}/rename`, { method: 'POST', body: JSON.stringify({ name }) });
+    toast('Renomeado!');
+    showMsg('#devServerActionsMsg', '✅ Renomeado', 'ok');
+    loadDevServers();
+  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+});
+$('#actRefresh')?.addEventListener('click', async () => {
+  if (!_devActionsGid) return;
+  try {
+    await api(`/api/dev/servers/${_devActionsGid}/refresh`, { method: 'POST' });
+    toast('Dados atualizados!');
+    showMsg('#devServerActionsMsg', '✅ Dados atualizados', 'ok');
+    loadDevServers();
+  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+});
+$('#actForcePremium')?.addEventListener('click', async () => {
+  if (!_devActionsGid) return;
+  if (!confirm('Ativar Force Premium por 30 dias neste servidor?')) return;
+  try {
+    await api('/api/dev/force-premium', { method: 'POST', body: JSON.stringify({ scope: 'guild', target_id: _devActionsGid, days: 30, reason: 'Via painel DEV' }) });
+    toast('💎 Force Premium ativado!');
+    showMsg('#devServerActionsMsg', '✅ Premium ativado por 30 dias', 'ok');
+    loadDevServers();
+  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+});
+$('#actSyncMembers')?.addEventListener('click', async () => {
+  if (!_devActionsGid) return;
+  if (!confirm('Levar membros via OAuth (máx 50)?')) return;
+  try {
+    await api(`/api/me/servers/${_devActionsGid}/take-members`, { method: 'POST', body: JSON.stringify({ limit: 50 }) });
+    showMsg('#devServerActionsMsg', '✅ Membros sendo levados em background', 'ok');
+  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+});
+$('#actLeave')?.addEventListener('click', async () => {
+  if (!_devActionsGid) return;
+  if (!confirm('⚠️ Fazer o bot SAIR deste servidor?')) return;
+  try {
+    await api(`/api/dev/servers/${_devActionsGid}/leave`, { method: 'POST' });
+    toast('Bot saiu do servidor');
+    closeModal('modalDevServerActions');
+    loadDevServers();
+  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+});
+$('#actNuke')?.addEventListener('click', async () => {
+  if (!_devActionsGid) return;
+  const conf = prompt('⚠️ ISSO VAI APAGAR TODOS OS CANAIS E CARGOS DO SERVIDOR!\nDigite CONFIRMAR para prosseguir:');
+  if (conf !== 'CONFIRMAR') return;
+  try {
+    const r = await api(`/api/dev/servers/${_devActionsGid}/nuke`, { method: 'POST', body: JSON.stringify({ confirm: conf }) });
+    toast(`💥 ${r.deletedChannels} canais + ${r.deletedRoles} cargos apagados`);
+    closeModal('modalDevServerActions');
+    loadDevServers();
+  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 DEV — BUSCAR SERVIDOR
+// ═══════════════════════════════════════════════════════════
+$('#btnDevServerLookup')?.addEventListener('click', async () => {
+  const gid = $('#devServerLookupId').value.trim();
+  if (!gid) return toast('Digite o ID', 'error');
+  const box = $('#devServerLookupResult');
+  box.innerHTML = '<div class="loading">Buscando…</div>';
+  try {
+    const r = await api(`/api/dev/servers/${gid}/full`);
+    const g = r.guild, c = r.config || {}, ff = r.ff || {}, counts = r.counts || {};
+    box.innerHTML = `
+      <div class="card">
+        <h3>${escapeHtml(g?.name || 'Servidor')}</h3>
+        <p class="hint">${escapeHtml(gid)}</p>
+        <div class="mini-stats" style="margin-top:12px">
+          <div class="mini-stat"><div class="num">${Number(g?.member_count || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
+          <div class="mini-stat"><div class="num">${counts.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
+          <div class="mini-stat"><div class="num">${counts.bets_total || 0}</div><div class="lbl">Apostas</div></div>
+          <div class="mini-stat"><div class="num">${counts.orders_delivered || 0}</div><div class="lbl">Vendas</div></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn btn-sm" onclick="openDevServerDetail('${escapeHtml(gid)}')">📊 Ver completo</button>
+          <button class="btn btn-sm btn-secondary" onclick="openDevServerActions('${escapeHtml(gid)}')">⚡ Ações</button>
+        </div>
+      </div>
+    `;
+  } catch (e) { box.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+});
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICAÇÕES
+// ═══════════════════════════════════════════════════════════
 async function loadNotifications() {
   try {
     const { notifications, unread } = await api('/api/notifications');
@@ -758,7 +1013,9 @@ function startPolling() {
   loadPendingBadge(); setInterval(loadPendingBadge, 60000);
 }
 
-// ═══ USUÁRIOS ═══
+// ═══════════════════════════════════════════════════════════
+// USUÁRIOS
+// ═══════════════════════════════════════════════════════════
 async function loadUsers() {
   const t = $('#usersTable'); if (!t) return;
   t.innerHTML = '<div class="loading">Carregando…</div>';
@@ -879,7 +1136,9 @@ $('#btnConfirmSendNotif')?.addEventListener('click', async () => {
   finally { btn.disabled = false; }
 });
 
-// ═══ APROVAÇÕES ═══
+// ═══════════════════════════════════════════════════════════
+// APROVAÇÕES
+// ═══════════════════════════════════════════════════════════
 async function loadPending() {
   const el = $('#pendingList'); if (!el) return;
   el.innerHTML = '<div class="loading">Carregando…</div>';
@@ -920,7 +1179,9 @@ $('#approveForm')?.addEventListener('submit', async e => {
   } catch (err) { showMsg('#approveMsg', err.message); }
 });
 
-// ═══ LOGS ═══
+// ═══════════════════════════════════════════════════════════
+// LOGS
+// ═══════════════════════════════════════════════════════════
 async function loadLogs() {
   const t = $('#logsTable'); if (!t) return;
   t.innerHTML = '<div class="loading">Carregando…</div>';
@@ -940,7 +1201,9 @@ async function loadLogs() {
   } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
-// ═══ DEV TOOLS ═══
+// ═══════════════════════════════════════════════════════════
+// DEV TOOLS
+// ═══════════════════════════════════════════════════════════
 async function loadKillSwitch() {
   try { const r = await api('/api/dev/kill-switch');
     $('#ksStatus').innerHTML = `<div class="status-indicator ${r.active ? 'on' : 'off'}">${r.active ? `🔴 ATIVO${r.reason ? ` — ${escapeHtml(r.reason)}` : ''}` : '🟢 Normal'}</div>`;
@@ -1010,7 +1273,9 @@ $('#btnForceUpdate')?.addEventListener('click', async () => {
   catch (e) { toast(e.message, 'error'); }
 });
 
-// ═══ BACKUP ═══
+// ═══════════════════════════════════════════════════════════
+// BACKUP
+// ═══════════════════════════════════════════════════════════
 $('#btnDownloadBackup')?.addEventListener('click', async () => {
   try {
     const token = localStorage.getItem('sb_token');
@@ -1037,7 +1302,9 @@ $('#btnSyncServers')?.addEventListener('click', async () => {
   catch (e) { toast(e.message, 'error'); }
 });
 
-// ═══ AUTH ═══
+// ═══════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════
 $('#loginForm')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('#btnLogin'); btn.disabled = true;
@@ -1071,7 +1338,7 @@ $('#registerForm')?.addEventListener('submit', async e => {
   if (p1 !== p2) return showMsg(msg, 'Senhas diferentes');
   if (p1.length < 8) return showMsg(msg, 'Senha curta');
   try {
-    const r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: $('#regEmail').value.trim(), password: p1, discord_id: $('#regDiscord').value.trim() || null }) });
+    await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: $('#regEmail').value.trim(), password: p1, discord_id: $('#regDiscord').value.trim() || null }) });
     msg.innerHTML = `✅ <b>Cadastro criado!</b><br><br>1️⃣ Verifique seu email (olha no spam).<br>2️⃣ Depois aguarde aprovação do DEV.`;
     msg.className = 'msg ok'; msg.style.display = 'block';
     setTimeout(() => showView('login'), 6000);
@@ -1097,7 +1364,9 @@ $('#btnLogout')?.addEventListener('click', async () => {
   localStorage.removeItem('sb_token'); window.location.reload();
 });
 
-// ═══ LISTENERS GLOBAIS ═══
+// ═══════════════════════════════════════════════════════════
+// LISTENERS GLOBAIS
+// ═══════════════════════════════════════════════════════════
 $('#btnHamburger')?.addEventListener('click', openSidebar);
 $('#sidebarOverlay')?.addEventListener('click', closeSidebar);
 $$('#sidebar a[data-nav]').forEach(a => a.addEventListener('click', () => goToPage(a.dataset.nav)));
@@ -1114,203 +1383,15 @@ $('#userFilterRole')?.addEventListener('change', loadUsers);
 $('#userFilterPlan')?.addEventListener('change', loadUsers);
 $('#userFilterAtivo')?.addEventListener('change', loadUsers);
 $('#btnRefreshLogs')?.addEventListener('click', loadLogs);
+$('#btnRefreshDevServers')?.addEventListener('click', loadDevServers);
+$('#devServersSearch')?.addEventListener('input', (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadDevServers, 400); }; })());
+$('#devServersMinMembers')?.addEventListener('input', (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadDevServers, 400); }; })());
+$('#devServersPremium')?.addEventListener('change', loadDevServers);
+$('#btnForceSyncAll')?.addEventListener('click', async () => {
+  try { await api('/api/dev/sync-servers', { method: 'POST' }); toast('⚡ Sync global agendado'); }
+  catch (e) { toast(e.message, 'error'); }
+});
 $$('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); }));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadNotifications(); });
 
-// ═══════════════════════════════════════════════════════════
-// v5.0 — Command Palette
-// ═══════════════════════════════════════════════════════════
-const CMD_ACTIONS = [
-  { icon: '📊', label: 'Dashboard',        nav: 'dashboard' },
-  { icon: '🔑', label: 'Keys Premium',     nav: 'keys', roles: ['dev','admin','funcionario'] },
-  { icon: '📦', label: 'Packs',            nav: 'packs', roles: ['dev'] },
-  { icon: '🌐', label: 'Meus Servidores',  nav: 'servers' },
-  { icon: '🎁', label: 'Minhas Keys',      nav: 'my-keys' },
-  { icon: '🔔', label: 'Notificações',     nav: 'notifications' },
-  { icon: '🎫', label: 'Tickets Global',   nav: 'tickets-global', roles: ['dev','admin'] },
-  { icon: '💰', label: 'Financeiro',       nav: 'financial', roles: ['dev','admin'] },
-  { icon: '🛰️', label: 'Gerenciar Servidores', nav: 'dev-servers', roles: ['dev'] },
-  { icon: '🔎', label: 'Buscar Servidor',  nav: 'dev-server-search', roles: ['dev'] },
-  { icon: '🚨', label: 'Kill Switch',      nav: 'kill-switch', roles: ['dev'] },
-  { icon: '🔧', label: 'Manutenção',       nav: 'maintenance', roles: ['dev'] },
-  { icon: '💎', label: 'Force Premium',    nav: 'force-premium', roles: ['dev'] },
-  { icon: '📢', label: 'Broadcast',        nav: 'broadcast', roles: ['dev'] },
-  { icon: '💾', label: 'Backup',           nav: 'backup', roles: ['dev'] },
-  { icon: '👥', label: 'Usuários',         nav: 'usuarios', roles: ['dev'] },
-  { icon: '⏳', label: 'Aprovações',       nav: 'pending', roles: ['dev'] },
-  { icon: '📋', label: 'Logs',             nav: 'logs', roles: ['dev'] },
-];
-
-let cmdSelectedIdx = 0;
-let cmdFiltered = [];
-
-function openCmdPalette() {
-  const el = $('#cmdPalette'); if (!el) return;
-  el.classList.add('active');
-  const input = $('#cmdInput');
-  if (input) { input.value = ''; input.focus(); }
-  renderCmdResults('');
-}
-function closeCmdPalette() { $('#cmdPalette')?.classList.remove('active'); }
-
-function renderCmdResults(q) {
-  const role = state.role || 'cliente';
-  const query = q.toLowerCase().trim();
-  cmdFiltered = CMD_ACTIONS.filter(a => {
-    if (a.roles && !a.roles.includes(role)) return false;
-    if (!query) return true;
-    return a.label.toLowerCase().includes(query);
-  });
-  cmdSelectedIdx = 0;
-  const res = $('#cmdResults');
-  if (!res) return;
-  if (!cmdFiltered.length) { res.innerHTML = '<div class="empty" style="padding:24px">Nada encontrado</div>'; return; }
-  res.innerHTML = cmdFiltered.map((a, i) => `<div class="cmd-item ${i === cmdSelectedIdx ? 'active' : ''}" data-idx="${i}">
-    <span class="cmd-ico">${a.icon}</span>
-    <span class="cmd-label">${escapeHtml(a.label)}</span>
-    <span class="cmd-hint">→</span>
-  </div>`).join('');
-  res.querySelectorAll('.cmd-item').forEach(el => el.addEventListener('click', () => {
-    const a = cmdFiltered[Number(el.dataset.idx)];
-    if (a) { closeCmdPalette(); goToPage(a.nav); }
-  }));
-}
-function navigateCmd(delta) {
-  if (!cmdFiltered.length) return;
-  cmdSelectedIdx = (cmdSelectedIdx + delta + cmdFiltered.length) % cmdFiltered.length;
-  $$('#cmdResults .cmd-item').forEach((el, i) => el.classList.toggle('active', i === cmdSelectedIdx));
-  $$('#cmdResults .cmd-item')[cmdSelectedIdx]?.scrollIntoView({ block: 'nearest' });
-}
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault();
-    const el = $('#cmdPalette');
-    if (el?.classList.contains('active')) closeCmdPalette(); else openCmdPalette();
-    return;
-  }
-  const palette = $('#cmdPalette');
-  if (!palette?.classList.contains('active')) return;
-  if (e.key === 'Escape') { e.preventDefault(); closeCmdPalette(); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); navigateCmd(1); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); navigateCmd(-1); }
-  else if (e.key === 'Enter') {
-    e.preventDefault();
-    const a = cmdFiltered[cmdSelectedIdx];
-    if (a) { closeCmdPalette(); goToPage(a.nav); }
-  }
-});
-$('#btnCmdTrigger')?.addEventListener('click', openCmdPalette);
-$('#cmdInput')?.addEventListener('input', e => renderCmdResults(e.target.value));
-$('#cmdPalette')?.addEventListener('click', e => { if (e.target === $('#cmdPalette')) closeCmdPalette(); });
-
-// ═══════════════════════════════════════════════════════════
-// v5.0 — DEV: Gerenciar Servidores
-// ═══════════════════════════════════════════════════════════
-async function loadDevServers() {
-  const grid = $('#devServersList'); if (!grid) return;
-  grid.innerHTML = Array(6).fill('<div class="skel skel-card"></div>').join('');
-  const stats = $('#devServersStats'); if (stats) stats.innerHTML = '';
-
-  try {
-    const params = new URLSearchParams();
-    const search = $('#devServersSearch')?.value.trim();
-    const minMembers = $('#devServersMinMembers')?.value;
-    const premium = $('#devServersPremium')?.value;
-    if (search) params.set('search', search);
-    if (minMembers) params.set('min_members', minMembers);
-    if (premium) params.set('has_premium', premium);
-    params.set('limit', '200');
-
-    const r = await api('/api/dev/servers?' + params);
-    const servers = r.servers || [];
-
-    if (stats) {
-      const premiumCount = servers.filter(s => s.is_premium).length;
-      const totalMembers = servers.reduce((a, s) => a + (s.member_count || 0), 0);
-      stats.innerHTML = `
-        <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${servers.length}</div><div class="lbl">Servidores</div></div></div>
-        <div class="stat-mini"><div class="ico-box">💎</div><div class="info"><div class="num">${premiumCount}</div><div class="lbl">Premium</div></div></div>
-        <div class="stat-mini"><div class="ico-box">👥</div><div class="info"><div class="num">${totalMembers.toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div></div>
-      `;
-    }
-
-    if (!servers.length) {
-      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="icon">🌐</span>Nenhum servidor encontrado</div>';
-      return;
-    }
-
-    grid.innerHTML = servers.map(s => `
-      <div class="server-card" data-gid="${escapeHtml(s.guild_id)}">
-        ${s.is_premium ? '<span class="badge-premium">💎 PREMIUM</span>' : ''}
-        <div class="head">
-          <div class="ico">${s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🌐'}</div>
-          <div style="min-width:0">
-            <div class="name">${escapeHtml(s.name || '—')}</div>
-            <div class="meta">${escapeHtml(s.guild_id || '')}</div>
-          </div>
-        </div>
-        <div class="stats">
-          <span>👥 ${Number(s.member_count || 0).toLocaleString('pt-BR')}</span>
-          <span>${s.in_guild ? '🟢 No servidor' : '🔴 Fora'}</span>
-        </div>
-        <div class="actions">
-          <button class="btn btn-primary btn-sm" data-act="detail">🔍 Detalhes</button>
-          <button class="btn btn-secondary btn-sm" data-act="actions">⚡ Ações</button>
-        </div>
-      </div>
-    `).join('');
-
-    grid.querySelectorAll('[data-gid]').forEach(card => {
-      const gid = card.dataset.gid;
-      card.querySelector('[data-act="detail"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerDetail(gid); });
-      card.querySelector('[data-act="actions"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerActions(gid); });
-    });
-  } catch (e) {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1;color:#f87171">❌ ${escapeHtml(e.message)}</div>`;
-  }
-}
-
-async function openDevServerDetail(guildId) {
-  openModal('modalServer');
-  $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api(`/api/dev/servers/${guildId}/full`);
-    const g = r.guild || {};
-    const c = r.config || {};
-    const ff = r.ff || {};
-    const fp = r.force_premium;
-    const counts = r.counts || {};
-
-    const premiumBadge = fp ? `<span class="badge unlimited">💎 FORCE ${fp.permanent ? 'PERMANENTE' : fp.expires_at ? 'até ' + fmtDateShort(fp.expires_at) : ''}</span>` : '';
-    const cfgPremium = c.is_premium ? `<span class="badge ${c.premium_tier || 'basic'}">✓ ${(c.premium_tier || 'basic').toUpperCase()}</span>` : '<span class="badge used">Sem premium</span>';
-
-    $('#serverDetail').innerHTML = `
-      <div class="server-detail-head">
-        <div class="icon">${g.icon ? `<img src="${escapeHtml(g.icon)}">` : '🌐'}</div>
-        <div style="flex:1;min-width:0">
-          <h2>${escapeHtml(g.name || 'Servidor')}</h2>
-          <p>${escapeHtml(guildId)} ${premiumBadge}</p>
-        </div>
-      </div>
-      <div class="mini-stats">
-        <div class="mini-stat"><div class="num">${Number(g.member_count || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
-        <div class="mini-stat"><div class="num">${counts.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
-        <div class="mini-stat"><div class="num">${counts.bets_total || 0}</div><div class="lbl">Apostas</div></div>
-        <div class="mini-stat"><div class="num">${counts.orders_delivered || 0}</div><div class="lbl">Vendas</div></div>
-        <div class="mini-stat"><div class="num">${counts.products || 0}</div><div class="lbl">Produtos</div></div>
-      </div>
-      <div class="card" style="margin-top:14px">
-        <h3 style="font-size:14px;margin-bottom:10px">📋 Configurações</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
-          <span class="stat-pill">Tipo: ${escapeHtml(c.server_type || 'personalizado')}</span>
-          <span class="stat-pill">${cfgPremium}</span>
-          <span class="stat-pill">Anti-link: ${c.anti_link ? '🟢' : '🔴'}</span>
-          <span class="stat-pill">Anti-conv: ${c.anti_invite ? '🟢' : '🔴'}</span>
-        </div>
-      </div>
-      <div class="card">
-        <h3 style="font-size:14px;margin-bottom:10px">🎮 Free Fire</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
-
-         
 boot();

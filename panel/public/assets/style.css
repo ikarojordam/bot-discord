@@ -1700,3 +1700,134 @@ table td button + button {
 @media (max-width: 900px) {
   .auth-brand::after { display: none; }
 }
+/* ═══════════════════════════════════════════════════════════
+   v5.0 — LOGO HERO + BRAND DESTACADO
+   ═══════════════════════════════════════════════════════════ */
+
+/* Logo gigante no auth-brand */
+.brand-logo-hero {
+  margin-bottom: 28px;
+  position: relative;
+  animation: enter-fade .8s ease both;
+}
+.brand-logo-hero img {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  display: block;
+  filter:
+    drop-shadow(0 0 50px rgba(88,101,242,.75))
+    drop-shadow(0 0 100px rgba(139,92,246,.45))
+    drop-shadow(0 0 150px rgba(232,121,249,.25));
+  animation: logo-float 6s ease-in-out infinite;
+}
+@keyframes logo-float {
+  0%, 100% { transform: translateY(0) rotate(-2deg) scale(1); }
+  50% { transform: translateY(-14px) rotate(2deg) scale(1.03); }
+}
+
+/* Logo grande dentro do auth-card */
+.logo.logo-large img {
+  width: 110px;
+  height: 110px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  filter:
+    drop-shadow(0 0 40px rgba(88,101,242,.7))
+    drop-shadow(0 0 80px rgba(139,92,246,.4));
+  animation: logo-float 4s ease-in-out infinite;
+}
+
+/* Logo no header — mais visível */
+.logo.logo-header img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+  filter: drop-shadow(0 0 12px rgba(88,101,242,.5));
+  transition: filter .3s, transform .3s;
+}
+.app-header .brand:hover .logo-header img {
+  filter: drop-shadow(0 0 20px rgba(139,92,246,.8));
+  transform: scale(1.08) rotate(-3deg);
+}
+
+/* Nome da marca no header mais premium */
+.brand-name {
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -.4px;
+  background: linear-gradient(135deg, #fff 0%, #c7d2fe 50%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Opt em labels (texto pequeno tipo "opcional") */
+.field label .opt {
+  font-size: 10px;
+  color: var(--txt-3);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+
+/* Mobile: logo ainda grande mas adaptado */
+@media (max-width: 900px) {
+  .brand-logo-hero img {
+    width: 130px;
+    height: 130px;
+  }
+  .logo.logo-large img {
+    width: 90px;
+    height: 90px;
+  }
+  .logo.logo-header img {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand-logo-hero img {
+    width: 110px;
+    height: 110px;
+  }
+  .logo.logo-large img {
+    width: 80px;
+    height: 80px;
+  }
+}
+
+/* Animação de entrada refinada */
+@keyframes enter-fade {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Auth brand com padding melhor pra caber a logo grande */
+.auth-brand {
+  padding: 60px 6vw;
+}
+
+/* Header com altura um pouco maior pra logo destacar */
+.app-header {
+  height: 68px;
+}
+:root {
+  --header-h: 68px;
+}
+
+/* Botão "Sair" com hover mais claro */
+#btnLogout {
+  font-weight: 600;
+  transition: all .2s;
+}
+#btnLogout:hover {
+  background: rgba(237,66,69,.15);
+  color: #fca5a5;
+  transform: translateY(-1px);
+}

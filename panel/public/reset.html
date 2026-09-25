@@ -4,34 +4,90 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Frio Panel — Nova senha</title>
-<link rel="stylesheet" href="/assets/style.css">
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="stylesheet" href="/assets/style.css?v=10">
 </head>
-<body class="auth-page">
-<div class="auth-card">
-  <div class="logo">🔐</div>
-  <h1>Nova senha</h1>
-  <p class="sub">Digite sua nova senha abaixo</p>
+<body>
 
-  <form id="resetForm">
-    <div class="field">
-      <label>Nova senha</label>
-      <input type="password" id="newPassword" required minlength="8">
-    </div>
-    <div class="field">
-      <label>Confirmar senha</label>
-      <input type="password" id="confirmPassword" required minlength="8">
-    </div>
-    <button type="submit" id="btnReset">Salvar nova senha</button>
-  </form>
+<div class="auth-page active" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#05060a;padding:20px">
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
 
-  <div id="msg" class="msg"></div>
+  <div class="auth-card" style="max-width:460px;width:100%;position:relative;z-index:1">
+    <div class="logo"><img src="/assets/logo.png" alt="Frio Panel"></div>
+    <h1>Nova senha</h1>
+    <p class="sub">Escolha uma senha forte com pelo menos 8 caracteres</p>
+
+    <form id="resetForm">
+      <div class="field">
+        <label>Nova senha</label>
+        <div class="input-wrap">
+          <span class="ico">🔒</span>
+          <input type="password" id="resetPassword" required minlength="8" placeholder="••••••••" autocomplete="new-password">
+          <button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirmar senha</label>
+        <div class="input-wrap">
+          <span class="ico">🔒</span>
+          <input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••" autocomplete="new-password">
+          <button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button>
+        </div>
+      </div>
+      <button type="submit" id="btnReset" class="btn btn-block">Salvar nova senha</button>
+    </form>
+
+    <div class="links" style="margin-top:18px"><a href="/">← Voltar pro login</a></div>
+    <div id="msg" class="msg"></div>
+  </div>
 </div>
 
+<div id="toast" class="toast"></div>
+
 <script>
-  // O Supabase coloca o token no hash (#access_token=...)
-  const hash = new URLSearchParams(window.location.hash.substring(1));
-  window.__RESET_TOKEN__ = hash.get('access_token');
+const hash = new URLSearchParams(window.location.hash.substring(1));
+window.__RESET_TOKEN__ = hash.get('access_token');
+
+function togglePass(id, btn) {
+  const el = document.getElementById(id); if (!el) return;
+  const p = el.type === 'password';
+  el.type = p ? 'text' : 'password';
+  btn.textContent = p ? '🙈' : '👁️';
+}
+
+function showMsg(text, type = 'error') {
+  const m = document.getElementById('msg');
+  m.textContent = text; m.className = 'msg ' + type; m.style.display = 'block';
+}
+function toast(text, type = 'ok') {
+  const t = document.getElementById('toast');
+  t.textContent = text; t.className = `toast ${type} active`;
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('active'), 3200);
+}
+
+document.getElementById('resetForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const p1 = document.getElementById('resetPassword').value;
+  const p2 = document.getElementById('resetConfirm').value;
+  if (p1 !== p2) return showMsg('As senhas não coincidem');
+  if (p1.length < 8) return showMsg('Senha muito curta (mín. 8)');
+  if (!window.__RESET_TOKEN__) return showMsg('Token de recuperação ausente. Solicite um novo link.');
+  const btn = document.getElementById('btnReset'); btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    const r = await fetch('/api/auth/update-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: window.__RESET_TOKEN__, new_password: p1 }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Erro');
+    showMsg('✅ Senha alterada! Redirecionando…', 'ok');
+    toast('Senha alterada com sucesso!');
+    setTimeout(() => { window.location.hash = ''; window.location.href = '/'; }, 1800);
+  } catch (err) {
+    showMsg(err.message);
+    btn.disabled = false; btn.textContent = 'Salvar nova senha';
+  }
+});
 </script>
-<script src="/assets/app.js"></script>
 </body>
 </html>

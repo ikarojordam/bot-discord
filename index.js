@@ -8057,11 +8057,22 @@ client.on('interactionCreate', async (i) => {
       }
 
       // ─── Loja: comprar ───
-      if (cid === 'loja:pickproduct') {
+            if (cid === 'loja:pickproduct') {
+        // ⚡ FIX: garante member e me antes de usar
+        if (!i.member) {
+          try { i.member = await guild.members.fetch(i.user.id); } catch {}
+        }
+        if (!i.member) return i.reply({ content: '❌ Não consegui te identificar.', flags: EPHEMERAL });
+        if (!guild.members.me) {
+          try { await guild.members.fetchMe(); } catch {}
+        }
+        if (!guild.members.me) return i.update({ content: '❌ Erro interno do bot.', embeds: [], components: [] }).catch(() => {});
         if (await blockIfMaintenance(i)) return;
+
         const { data: p } = await supabase.from('products').select('*').eq('id', value).maybeSingle();
-        if (!p) return i.update({ content: '❌', embeds: [], components: [] });
-        if (Number(p.price) <= 0) return i.update({ content: '⚠️ Produto sem preço.', embeds: [], components: [] });
+        if (!p) return i.update({ content: '❌ Produto não existe.', embeds: [], components: [] });
+        if (Number(p.price) <= 0) return i.update({ content: '⚠️ Produto sem preço definido.', embeds: [], components: [] });
+
         await i.deferUpdate();
         try {
           const ch = await guild.channels.create({
@@ -8077,12 +8088,19 @@ client.on('interactionCreate', async (i) => {
             guild_id: guild.id, user_id: i.user.id, status: 'open',
             subtotal: Number(p.price), total: Number(p.price), channel_id: ch.id,
           }).select().single();
+
+          if (!o?.id) {
+            await ch.delete().catch(() => {});
+            return i.editReply({ content: '❌ Erro ao criar pedido.', embeds: [], components: [] });
+          }
+
           try {
             await supabase.from('order_items').insert({
               order_id: o.id, product_id: p.id, product_name: p.name,
               quantity: 1, unit_price: Number(p.price), total: Number(p.price),
             });
           } catch {}
+
           const e = new EmbedBuilder().setTitle('🛒 Seu carrinho').setColor('#5865F2')
             .addFields(
               { name: 'Itens', value: `• **${p.name}** — ${brl(p.price)}` },
@@ -8097,7 +8115,10 @@ client.on('interactionCreate', async (i) => {
           );
           await ch.send({ content: `<@${i.user.id}>`, embeds: [e], components: [row] });
           await i.editReply({ content: `✅ ${ch}`, embeds: [], components: [] });
-        } catch (e) { await i.editReply({ content: `❌ ${e.message}`, embeds: [], components: [] }); }
+        } catch (e) {
+          console.error('[LOJA-COMPRA]', e);
+          await i.editReply({ content: `❌ ${e.message}`, embeds: [], components: [] }).catch(() => {});
+        }
         return;
       }
 
@@ -8683,10 +8704,16 @@ client.on('interactionCreate', async (i) => {
       // ─── Loja pública ───
       if (ns === 'loja') {
         if (await blockIfMaintenance(i)) return;
-        if (action === 'comprar') {
+                if (action === 'comprar') {
+          // ⚡ FIX: garante member populado
+          if (!i.member) {
+            try { i.member = await guild.members.fetch(i.user.id); } catch {}
+          }
+          if (!i.member) return i.reply({ content: '❌ Não consegui te identificar.', flags: EPHEMERAL });
           const { data: prods } = await supabase.from('products').select('*').eq('guild_id', guild.id).eq('active', true).limit(25);
           const list = [];
           for (const p of prods || []) {
+            if (!p || !p.id) continue;
             if (p.infinite_content) { list.push(p); continue; }
             const { count } = await supabase.from('inventory').select('id', { count: 'exact', head: true }).eq('product_id', p.id).eq('status', 'available');
             if ((count || 0) > 0) list.push(p);

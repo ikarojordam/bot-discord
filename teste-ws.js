@@ -140,3 +140,68 @@ setTimeout(() => {
     });
   }, 40000);
 }, 8000);
+// ═══════════════════════════════════════════════════════
+// Passo 3.5 — TESTE DO REST API (o que discord.js precisa)
+// ═══════════════════════════════════════════════════════
+setTimeout(async () => {
+  console.log('\n═══════════════════════════════════════════');
+  console.log('🔬 TESTANDO REST API DO DISCORD');
+  console.log('═══════════════════════════════════════════\n');
+
+  async function teste(nome, url, headers = {}) {
+    console.log(`\n🔍 [${nome}] ${url}`);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 15000);
+    try {
+      const r = await fetch(url, { headers, signal: controller.signal });
+      clearTimeout(t);
+      const text = await r.text();
+      console.log(`   Status: ${r.status}`);
+      console.log(`   Content-Type: ${r.headers.get('content-type')}`);
+      console.log(`   CF-Ray: ${r.headers.get('cf-ray') || 'n/a'}`);
+      console.log(`   Body[0:200]: ${text.substring(0, 200)}`);
+      const isJson = text.trim().startsWith('{') || text.trim().startsWith('[');
+      console.log(`   ${isJson ? '✅ JSON' : '❌ HTML/Bloqueado'}`);
+    } catch (e) {
+      clearTimeout(t);
+      console.error(`   ❌ ERRO: ${e.message} (${e.name})`);
+    }
+  }
+
+  const token = process.env.DISCORD_TOKEN;
+  const uaDiscordJS = 'DiscordBot (https://github.com/discordjs/discord.js, 14.16.3)';
+
+  // Teste 1: sem User-Agent
+  await teste('SEM-UA', 'https://discord.com/api/v10/gateway', {});
+
+  // Teste 2: com User-Agent correto
+  await teste('COM-UA', 'https://discord.com/api/v10/gateway', {
+    'User-Agent': uaDiscordJS,
+  });
+
+  // Teste 3: /users/@me com token
+  await teste('USERS-ME', 'https://discord.com/api/v10/users/@me', {
+    'Authorization': `Bot ${token}`,
+    'User-Agent': uaDiscordJS,
+  });
+
+  // Teste 4: /gateway/bot (o que discord.js faz no login)
+  await teste('GATEWAY-BOT', 'https://discord.com/api/v10/gateway/bot', {
+    'Authorization': `Bot ${token}`,
+    'User-Agent': uaDiscordJS,
+  });
+
+  // Teste 5: discordapp.com (alternativa)
+  await teste('DISCORDAPP', 'https://discordapp.com/api/v10/gateway/bot', {
+    'Authorization': `Bot ${token}`,
+    'User-Agent': uaDiscordJS,
+  });
+
+  // Teste 6: www.discord.com (as vezes resolve diferente)
+  await teste('WWW', 'https://www.discord.com/api/v10/gateway/bot', {
+    'Authorization': `Bot ${token}`,
+    'User-Agent': uaDiscordJS,
+  });
+
+  console.log('\n═══════════════════════════════════════════\n');
+}, 4500);

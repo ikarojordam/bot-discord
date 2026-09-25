@@ -90,6 +90,42 @@ setTimeout(() => {
 }, 5000);
 
 // ═══════════════════════════════════════════════════════
+// Passo 3.6 — Achar base URL que NÃO está bloqueada
+// ═══════════════════════════════════════════════════════
+setTimeout(async () => {
+  console.log('\n═══════════════════════════════════════════');
+  console.log('🔬 BUSCANDO BASE URL FUNCIONAL');
+  console.log('═══════════════════════════════════════════\n');
+
+  const token = process.env.DISCORD_TOKEN;
+  const ua = 'DiscordBot (https://github.com/discordjs/discord.js, 14.16.3)';
+  const headers = { 'Authorization': `Bot ${token}`, 'User-Agent': ua };
+
+  const urls = [
+    'https://discordapp.com/api/v10/gateway/bot',
+    'https://discordapp.com/api/v9/gateway/bot',
+    'https://discordapp.com/api/v8/gateway/bot',
+    'https://discordapp.com/api/gateway/bot',
+    'https://canary.discord.com/api/v10/gateway/bot',
+    'https://ptb.discord.com/api/v10/gateway/bot',
+    'https://discord.co/api/v10/gateway/bot',
+  ];
+
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { headers });
+      const text = await r.text();
+      const isJson = text.trim().startsWith('{');
+      console.log(`${isJson && r.status === 200 ? '✅' : '❌'} [${r.status}] ${url}`);
+      if (isJson) console.log(`   → ${text.substring(0, 150)}`);
+    } catch (e) {
+      console.log(`💥 [ERR] ${url} → ${e.message}`);
+    }
+  }
+  console.log('\n═══════════════════════════════════════════\n');
+}, 6000);
+
+// ═══════════════════════════════════════════════════════
 // Passo 4 — Testar discord.js login
 // ═══════════════════════════════════════════════════════
 setTimeout(() => {

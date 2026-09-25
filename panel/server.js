@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v3.4
+// 🔑 FRIO PANEL — Backend v5.0 — Premium + Gerenciar Servers
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 const express = require('express');
@@ -258,7 +258,6 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       }});
     }
 
-    // DEV/ADMIN
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
     const [guilds, users, keys, redemptions, notifs, activeKeys, pendingUsers] = await Promise.all([
       supaAdmin.from('bot_guilds').select('*', { count: 'exact', head: true }).eq('in_guild', true),
@@ -290,7 +289,6 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
   try {
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
 
-    // Keys por tier
     const { data: keys } = await supaAdmin.from('premium_keys').select('tier, created_at, ativo').eq('is_pack', false).gte('created_at', since30);
     const byTier = { basic: 0, premium: 0, ultra: 0, unlimited: 0 };
     const byDay = {};
@@ -301,7 +299,6 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
     }
     const keysByDay = Object.entries(byDay).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
 
-    // Redemptions por dia
     const { data: reds } = await supaAdmin.from('premium_redemptions').select('created_at').gte('created_at', since30);
     const redDay = {};
     for (const r of reds || []) {
@@ -310,17 +307,14 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
     }
     const redsByDay = Object.entries(redDay).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
 
-    // Users por role
     const { data: users } = await supaAdmin.from('panel_admins').select('role');
     const byRole = { dev: 0, admin: 0, funcionario: 0, cliente: 0, pending: 0 };
     for (const u of users || []) if (byRole[u.role] !== undefined) byRole[u.role]++;
 
-    // Users por plano
     const { data: usersPlan } = await supaAdmin.from('panel_admins').select('plan').eq('ativo', true);
     const byPlan = { basic: 0, premium: 0, ultra: 0, unlimited: 0, none: 0 };
     for (const u of usersPlan || []) if (byPlan[u.plan || 'basic'] !== undefined) byPlan[u.plan || 'basic']++;
 
-    // Top servidores
     const { data: top } = await supaAdmin.from('bot_guilds').select('guild_id,name,member_count,icon').eq('in_guild', true).order('member_count', { ascending: false }).limit(10);
 
     res.json({ ok: true, charts: {
@@ -334,7 +328,7 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ═══ SERVIDORES ═══
+// ═══ SERVIDORES (user) ═══
 app.get('/api/me/servers', requireAuth, async (req, res) => {
   try {
     if (['dev', 'admin'].includes(req.admin.role)) {
@@ -443,6 +437,174 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, async (req, res)
     }
     await audit(req, 'take_members', { metadata: { guild_id: gid, added, failed, total: vers.length } });
     res.json({ ok: true, added, failed, total: vers.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 DEV — GERENCIAR TODOS OS SERVIDORES
+// ═══════════════════════════════════════════════════════════
+app.get('/api/dev/servers', requireDev, async (req, res) => {
+  try {
+    const { search, min_members, has_premium, limit = 100, offset = 0 } = req.query;
+    let q = supaAdmin.from('bot_guilds').select('*', { count: 'exact' }).eq('in_guild', true);
+    if (search) q = q.or(`name.ilike.%${search}%,guild_id.eq.${search}`);
+    if (min_members) q = q.gte('member_count', Number(min_members));
+    q = q.order('member_count', { ascending: false });
+    const { data, error, count } = await q.range(Number(offset), Number(offset) + Number(limit) - 1);
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Busca premium de todos
+    const ids = (data || []).map(g => g.guild_id);
+    let premiumIds = new Set();
+    if (ids.length) {
+      const { data: fps } = await supaAdmin.from('force_premium').select('target_id').eq('scope', 'guild').in('target_id', ids);
+      const { data: cfgs } = await supaAdmin.from('configs').select('guild_id,is_premium,premium_tier').in('guild_id', ids).eq('is_premium', true);
+      for (const f of fps || []) premiumIds.add(f.target_id);
+      for (const c of cfgs || []) premiumIds.add(c.guild_id);
+    }
+
+    const enriched = (data || []).map(g => ({
+      ...g,
+      is_premium: premiumIds.has(g.guild_id),
+    }));
+
+    const filtered = has_premium === 'true' ? enriched.filter(g => g.is_premium)
+                   : has_premium === 'false' ? enriched.filter(g => !g.is_premium)
+                   : enriched;
+
+    res.json({ ok: true, servers: filtered, total: count || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/dev/servers/:guildId/full', requireDev, async (req, res) => {
+  try {
+    const gid = req.params.guildId;
+    const [g, cfg, ff, fps, tickets, bets, orders, products] = await Promise.all([
+      supaAdmin.from('bot_guilds').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('configs').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('ff_config').select('*').eq('guild_id', gid).maybeSingle(),
+      supaAdmin.from('force_premium').select('*').eq('scope', 'guild').eq('target_id', gid).maybeSingle(),
+      supaAdmin.from('ticket_data').select('*', { count: 'exact', head: true }).eq('guild_id', gid).is('closed_at', null),
+      supaAdmin.from('ff_matches').select('*', { count: 'exact', head: true }).eq('guild_id', gid),
+      supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered'),
+      supaAdmin.from('products').select('*', { count: 'exact', head: true }).eq('guild_id', gid),
+    ]);
+    res.json({
+      ok: true,
+      guild: g.data,
+      config: cfg.data,
+      ff: ff.data,
+      force_premium: fps.data,
+      counts: {
+        tickets_open: tickets.count || 0,
+        bets_total: bets.count || 0,
+        orders_delivered: orders.count || 0,
+        products: products.count || 0,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/dev/servers/:guildId/leave', requireDev, async (req, res) => {
+  try {
+    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+    const gid = req.params.guildId;
+    const r = await fetch(`https://discord.com/api/v10/users/@me/guilds/${gid}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
+    });
+    if (!r.ok && r.status !== 204) {
+      const err = await r.json().catch(() => ({}));
+      return res.status(400).json({ error: err.message || `Discord HTTP ${r.status}` });
+    }
+    await supaAdmin.from('bot_guilds').update({ in_guild: false }).eq('guild_id', gid);
+    await audit(req, 'force_leave_guild', { metadata: { guild_id: gid } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/dev/servers/:guildId/rename', requireDev, async (req, res) => {
+  try {
+    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+    const gid = req.params.guildId;
+    const name = String(req.body?.name || '').trim();
+    if (!name || name.length > 100) return res.status(400).json({ error: 'Nome inválido (1-100 chars)' });
+    const r = await fetch(`https://discord.com/api/v10/guilds/${gid}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return res.status(400).json({ error: err.message || `Discord HTTP ${r.status}` });
+    }
+    await supaAdmin.from('bot_guilds').update({ name }).eq('guild_id', gid);
+    await audit(req, 'force_rename_guild', { metadata: { guild_id: gid, name } });
+    res.json({ ok: true, name });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/dev/servers/:guildId/refresh', requireDev, async (req, res) => {
+  try {
+    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+    const gid = req.params.guildId;
+    const r = await fetch(`https://discord.com/api/v10/guilds/${gid}?with_counts=true`, {
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` },
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return res.status(400).json({ error: err.message || `Discord HTTP ${r.status}` });
+    }
+    const d = await r.json();
+    await supaAdmin.from('bot_guilds').upsert({
+      guild_id: d.id,
+      name: d.name,
+      member_count: d.approximate_member_count || 0,
+      icon: d.icon ? `https://cdn.discordapp.com/icons/${d.id}/${d.icon}.png` : null,
+      owner_id: d.owner_id,
+      in_guild: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'guild_id' });
+    await audit(req, 'refresh_guild', { metadata: { guild_id: gid } });
+    res.json({ ok: true, guild: { id: d.id, name: d.name, member_count: d.approximate_member_count || 0 } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/dev/servers/:guildId/nuke', requireDev, async (req, res) => {
+  try {
+    if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'DISCORD_TOKEN não configurado' });
+    const gid = req.params.guildId;
+    const confirmName = String(req.body?.confirm || '').trim();
+    if (confirmName !== 'CONFIRMAR') return res.status(400).json({ error: 'Digite CONFIRMAR para prosseguir' });
+
+    let deletedChannels = 0, deletedRoles = 0, kickedMembers = 0;
+    try {
+      const chRes = await fetch(`https://discord.com/api/v10/guilds/${gid}/channels`, { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } });
+      if (chRes.ok) {
+        const channels = await chRes.json();
+        for (const ch of channels) {
+          const dr = await fetch(`https://discord.com/api/v10/channels/${ch.id}`, { method: 'DELETE', headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } });
+          if (dr.ok) deletedChannels++;
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+    } catch {}
+
+    try {
+      const roleRes = await fetch(`https://discord.com/api/v10/guilds/${gid}/roles`, { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } });
+      if (roleRes.ok) {
+        const roles = await roleRes.json();
+        for (const role of roles) {
+          if (role.name === '@everyone' || role.managed) continue;
+          const dr = await fetch(`https://discord.com/api/v10/guilds/${gid}/roles/${role.id}`, { method: 'DELETE', headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } });
+          if (dr.ok) deletedRoles++;
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+    } catch {}
+
+    await audit(req, 'nuke_guild', { metadata: { guild_id: gid, deletedChannels, deletedRoles, kickedMembers } });
+    res.json({ ok: true, deletedChannels, deletedRoles, kickedMembers });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -590,7 +752,6 @@ app.post('/api/keys/generate', requireStaff, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PACK — sem audit
 app.post('/api/keys/generate-pack', requireDev, async (req, res) => {
   try {
     const { quantidade = 1, motivo } = req.body || {};
@@ -613,7 +774,6 @@ app.post('/api/keys/generate-pack', requireDev, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Redeem pack — sem audit, sem redemption
 app.post('/api/keys/redeem-pack', requireDev, async (req, res) => {
   try {
     const { key_id } = req.body || {};
@@ -645,7 +805,6 @@ app.post('/api/keys/redeem-pack', requireDev, async (req, res) => {
     }
 
     await supaAdmin.from('premium_keys').update({ ativo: false, usos_atuais: 1 }).eq('id', pack.id);
-
     res.json({ ok: true, keys: geradas, total: geradas.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -875,11 +1034,10 @@ app.get('/api/dev/audit', requireDev, async (req, res) => {
   const { limit = 100, offset = 0, action } = req.query;
   let q = supaAdmin.from('site_audit_log').select('*').order('created_at', { ascending: false });
   if (action) q = q.eq('action', action);
-  // Filtra logs de pack
   q = q.not('action', 'in', '("generate_pack","redeem_pack")');
   const { data, error } = await q.range(Number(offset), Number(offset) + Number(limit) - 1);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true, logs: data || [] });
 });
 
-app.listen(PORT, () => console.log(`🌐 [PANEL v3.4] Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 [PANEL v5.0] Rodando na porta ${PORT}`));

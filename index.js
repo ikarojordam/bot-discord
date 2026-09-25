@@ -2904,6 +2904,23 @@ function ffCalcPlayerPay(v, f, extra = 0, extraAtivo = false) {
   return +(n + fee + (extraAtivo ? ex : 0)).toFixed(2);
 }
 
+async function ffPatchMatch(id, p) {
+  try { await supabase.from('ff_matches').update(p).eq('id', id); } catch {}
+  return ffGetMatch(id);
+}
+
+function ffCalcPlayerPay(v, f, extra = 0, extraAtivo = false) {    // ← VOCÊ ACHOU AQUI
+  const n = Number(v) || 0;
+  const fee = Number(f) || 0;
+  const ex = Number(extra) || 0;
+  return +(n + fee + (extraAtivo ? ex : 0)).toFixed(2);
+}                                                                  // ← COLA DEPOIS DAQUI
+
+// ═══════════════════════════════════════════════════════════
+// BLOQUEIO DE MANUTENÇÃO                                       // ← E ANTES DAQUI
+// ═══════════════════════════════════════════════════════════
+async function blockSlashIfMaintenance(i) {
+
 // ═══════════════════════════════════════════════════════════
 // BLOQUEIO DE MANUTENÇÃO
 // ═══════════════════════════════════════════════════════════

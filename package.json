@@ -2,7 +2,13 @@
   "name": "frio-bot",
   "version": "6.6.0",
   "main": "index.js",
-  "engines": { "node": ">=18.0.0" },
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "teste": "node teste.js"
+  },
   "dependencies": {
     "@discordjs/voice": "^0.17.0",
     "@napi-rs/canvas": "^0.1.65",
@@ -15,9 +21,5 @@
     "libsodium-wrappers": "^0.7.13",
     "play-dl": "^1.9.7",
     "qrcode": "^1.5.3"
-    "scripts": {
-  "start": "node index.js",
-  "teste": "node teste.js"
-}
   }
 }

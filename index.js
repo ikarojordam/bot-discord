@@ -13151,6 +13151,135 @@ client.on('messageCreate', async (m) => {
     }
   }
 
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔎 COMANDO .ss — Chamar analista da fila
+  // ═══════════════════════════════════════════════════════════
+  if (msgLower === '.ss' || msgLower.startsWith('.ss ')) {
+    try {
+      // 1) Precisa estar numa thread
+      if (!m.channel.isThread()) {
+        return m.reply({ content: '❌ Use este comando **dentro de uma thread de aposta**.' }).catch(() => {});
+      }
+
+      // 2) Busca o match vinculado à thread
+      const { data: match } = await supabase
+        .from('ff_matches')
+        .select('*')
+        .eq('thread_id', m.channel.id)
+        .maybeSingle();
+
+      if (!match) {
+        return m.reply({ content: '❌ Esta thread **não é de uma aposta ativa**.' }).catch(() => {});
+      }
+
+      if (match.status === 'finished' || match.status === 'cancelled') {
+        return m.reply({ content: '❌ Esta aposta já foi **encerrada**.' }).catch(() => {});
+      }
+
+      // 3) Permissão — mediador/olhinho/admin/dev
+      const cfgChk = await ffGetConfig(m.guild.id);
+      const isMed = cfgChk?.mediator_role_id && m.member.roles.cache.has(cfgChk.mediator_role_id);
+      const isOlh = cfgChk?.olhinho_role_id && m.member.roles.cache.has(cfgChk.olhinho_role_id);
+      const isS = await isAdmin(m.member, m.guild);
+      const isDevUser = isDeveloper(m.author.id);
+
+      if (!isMed && !isOlh && !isS && !isDevUser) {
+        return m.reply({ content: '❌ Apenas **mediador** ou **staff** pode chamar analista.' }).catch(() => {});
+      }
+
+      // 4) Cooldown local (Map próprio do handler — sem dependência externa)
+      const cdKey = `ss:${m.channel.id}`;
+      const now = Date.now();
+      const lastCall = (globalThis.__ssCooldown?.get(cdKey)) || 0;
+      if (now - lastCall < 15000) {
+        const restam = Math.ceil((15000 - (now - lastCall)) / 1000);
+        return m.reply({ content: `⏳ Aguarde **${restam}s** antes de chamar outro analista.` }).catch(() => {});
+      }
+      if (!globalThis.__ssCooldown) globalThis.__ssCooldown = new Map();
+      globalThis.__ssCooldown.set(cdKey, now);
+      if (globalThis.__ssCooldown.size > 500) globalThis.__ssCooldown.clear();
+
+      // 5) Pega próximo analista da fila (FIFO)
+      const next = await ffAnalystNext(m.guild.id);
+
+      if (!next) {
+        const e = new EmbedBuilder()
+          .setTitle('🔎 Nenhum analista disponível')
+          .setColor('#FF5555')
+          .setDescription(
+            '⚠️ **Não há analistas na fila no momento.**\n\n' +
+            '> 📋 Peça para alguém entrar na fila\n' +
+            '> 🎯 Local: painel de analistas\n' +
+            '> 🕐 Tente novamente em alguns minutos'
+          )
+          .setFooter({ text: `Match #${match.id}` })
+          .setTimestamp();
+        return m.reply({ embeds: [e] }).catch(() => {});
+      }
+
+      // 6) Marca analista como ocupado
+      await supabase.from('ff_analyst_queue')
+        .update({ status: 'busy', current_match_id: match.id })
+        .eq('id', next.id);
+
+      // 7) Adiciona na thread
+      await m.channel.members.add(next.user_id).catch(() => {});
+
+      // 8) Logs
+      await logAnalista(m.guild, next.user_id, 'CHAMADO_VIA_SS', {
+        match_id: match.id,
+        called_by: m.author.id,
+      });
+      await ffLog(m.guild, 'moderator', 'ANALYST_CALLED_SS', m.author.id, {
+        match_id: match.id,
+        analyst: next.user_id,
+      });
+
+      // 9) Embed
+      const e = new EmbedBuilder()
+        .setTitle('🔎 Analista Chamado')
+        .setColor('#22c55e')
+        .setDescription(
+          `**Analista:** <@${next.user_id}>\n\n` +
+          `📎 Envie: **replay**, **prints** e o **motivo da disputa**.\n` +
+          `⚖️ O analista vai avaliar e decidir o resultado.`
+        )
+        .addFields(
+          { name: '🎮 Match', value: `\`#${match.id}\``, inline: true },
+          { name: '👤 Chamado por', value: `<@${m.author.id}>`, inline: true },
+          { name: '🎯 Formato', value: match.format || '—', inline: true },
+        )
+        .setFooter({ text: 'Aguarde o analista responder' })
+        .setTimestamp();
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ffana:concluir:${match.id}`)
+          .setLabel('Análise Concluída')
+          .setEmoji('✅')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`ffana:wo:${match.id}`)
+          .setLabel('Aplicar W.O.')
+          .setEmoji('⚠️')
+          .setStyle(ButtonStyle.Danger),
+      );
+
+      await m.reply({
+        content: `<@${next.user_id}>`,
+        embeds: [e],
+        components: [row],
+      });
+
+      return;
+    } catch (err) {
+      console.error('[.ss]', err);
+      await m.reply({ content: `❌ Erro ao chamar analista: \`${err.message}\`` }).catch(() => {});
+      return;
+    }
+  }
+  
   // ═══════════════════════════════════════════════════════════
   // COMANDOS SECRETOS (só DEV)
   // ═══════════════════════════════════════════════════════════

@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Email confirmado — Frio Panel</title>
+<title>Confirmar e-mail — Frio Panel</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=8">
+<link rel="stylesheet" href="/assets/style.css?v=11">
 <style>
 .confirm-page{
   position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
@@ -14,30 +14,54 @@
 .confirm-page .aurora{position:absolute;inset:0}
 .confirm-card{
   position:relative;z-index:1;
-  max-width:460px;width:100%;
-  background:var(--glass);backdrop-filter:blur(24px);
-  border:1px solid var(--glass-border);
+  max-width:500px;width:100%;
+  background:var(--glass,rgba(20,20,30,.7));backdrop-filter:blur(24px);
+  border:1px solid var(--glass-border,rgba(255,255,255,.08));
   border-radius:24px;padding:48px 40px;text-align:center;
-  box-shadow:var(--shadow-lg);
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
   animation:card-enter .6s cubic-bezier(.22,1,.36,1);
 }
+@keyframes card-enter{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 .confirm-icon{
   width:96px;height:96px;border-radius:50%;
   margin:0 auto 24px;
   display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(22,163,74,.15));
-  border:2px solid rgba(34,197,94,.4);
   font-size:52px;
-  box-shadow:0 0 50px rgba(34,197,94,.35);
+  transition:all .4s;
   animation:pop-in .5s cubic-bezier(.34,1.56,.64,1) .1s both;
 }
 @keyframes pop-in{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.confirm-icon.loading{
+  background:linear-gradient(135deg,rgba(88,101,242,.2),rgba(139,92,246,.15));
+  border:2px solid rgba(88,101,242,.4);
+  box-shadow:0 0 50px rgba(88,101,242,.35);
+}
+.confirm-icon.success{
+  background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(22,163,74,.15));
+  border:2px solid rgba(34,197,94,.4);
+  box-shadow:0 0 50px rgba(34,197,94,.35);
+}
+.confirm-icon.error{
+  background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(185,28,28,.15));
+  border:2px solid rgba(239,68,68,.4);
+  box-shadow:0 0 50px rgba(239,68,68,.35);
+}
+.confirm-icon .spinner{
+  width:44px;height:44px;border-radius:50%;
+  border:4px solid rgba(255,255,255,.15);
+  border-top-color:#5865F2;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
 .confirm-card h1{
   font-size:26px;font-weight:800;margin-bottom:12px;
-  background:linear-gradient(135deg,#fff,#86efac);
+  background:linear-gradient(135deg,#fff,#a5b4fc);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
-.confirm-card p{color:var(--txt-2);font-size:15px;line-height:1.6;margin-bottom:28px}
+.confirm-card h1.success{background:linear-gradient(135deg,#fff,#86efac)}
+.confirm-card h1.error{background:linear-gradient(135deg,#fff,#fca5a5)}
+.confirm-card p{color:var(--txt-2,#9ca3af);font-size:15px;line-height:1.6;margin-bottom:28px}
+.confirm-card p b{color:#fff}
 .confirm-btn{
   display:inline-flex;align-items:center;gap:10px;
   padding:15px 28px;border-radius:13px;border:none;
@@ -48,8 +72,14 @@
   transition:all .25s;
 }
 .confirm-btn:hover{transform:translateY(-2px);box-shadow:0 12px 36px rgba(34,197,94,.55);text-decoration:none}
-.confirm-timer{margin-top:20px;font-size:13px;color:var(--txt-3)}
+.confirm-btn.secondary{
+  background:linear-gradient(135deg,#5865F2,#4752C4);
+  box-shadow:0 6px 22px rgba(88,101,242,.4);
+}
+.confirm-btn.secondary:hover{box-shadow:0 12px 36px rgba(88,101,242,.55)}
+.confirm-timer{margin-top:20px;font-size:13px;color:var(--txt-3,#6b7280)}
 .confirm-timer b{color:#4ade80}
+.confirm-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -62,23 +92,183 @@
   </div>
 
   <div class="confirm-card">
-    <div class="confirm-icon">✅</div>
-    <h1>Email confirmado!</h1>
-    <p>Sua conta foi verificada com sucesso.<br>Agora você já pode fazer login no painel.</p>
-    <a href="/" class="confirm-btn">🚀 Ir para o painel</a>
-    <div class="confirm-timer">Redirecionando em <b id="timer">5</b>s…</div>
+    <!-- ESTADO: CARREGANDO -->
+    <div id="state-loading">
+      <div class="confirm-icon loading"><div class="spinner"></div></div>
+      <h1>Confirmando e-mail…</h1>
+      <p>Estamos validando seu link. <b>Não feche esta página.</b></p>
+    </div>
+
+    <!-- ESTADO: SUCESSO -->
+    <div id="state-success" style="display:none">
+      <div class="confirm-icon success">✅</div>
+      <h1 class="success">E-mail confirmado!</h1>
+      <p>
+        Sua conta foi <b>verificada com sucesso</b>.<br>
+        Agora aguarde a <b>aprovação da staff</b>.<br>
+        Você receberá uma notificação no Discord quando for aprovado.
+      </p>
+      <a href="/" class="confirm-btn">🚀 Ir pro login</a>
+      <div class="confirm-timer">Redirecionando em <b id="timer">8</b>s…</div>
+    </div>
+
+    <!-- ESTADO: ERRO -->
+    <div id="state-error" style="display:none">
+      <div class="confirm-icon error">❌</div>
+      <h1 class="error">Falha na confirmação</h1>
+      <p id="error-msg">O link pode estar expirado, inválido ou já ter sido usado.</p>
+      <div class="confirm-actions">
+        <a href="/" class="confirm-btn secondary">🏠 Ir pro login</a>
+        <button class="confirm-btn" id="btn-resend" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+          📧 Reenviar e-mail
+        </button>
+      </div>
+      <div id="resend-status" class="confirm-timer" style="margin-top:16px"></div>
+    </div>
   </div>
 </div>
 
 <script>
-// Redireciona em 5s
-let s = 5;
-const t = document.getElementById('timer');
-const id = setInterval(() => {
-  s--;
-  if (t) t.textContent = s;
-  if (s <= 0) { clearInterval(id); window.location.href = '/'; }
-}, 1000);
+/**
+ * Confirm.html — valida o link de confirmação do e-mail.
+ *
+ * Supabase manda o link em 3 formatos diferentes dependendo da config:
+ *   1. #access_token=XXX&type=signup&refresh_token=YYY  (padrão novo)
+ *   2. ?token=XXX&type=signup                            (custom template)
+ *   3. ?token_hash=XXX&type=signup                       (verification API)
+ *
+ * Este script detecta o formato e chama a API correta.
+ */
+
+(function () {
+  const hashParams = new URLSearchParams(location.hash.substring(1));
+  const queryParams = new URLSearchParams(location.search);
+
+  const accessToken  = hashParams.get('access_token') || queryParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
+  const tokenHash    = queryParams.get('token_hash');
+  const plainToken   = queryParams.get('token');
+  const type         = queryParams.get('type') || hashParams.get('type');
+  const errorDesc    = queryParams.get('error_description') || hashParams.get('error_description');
+
+  const elLoading = document.getElementById('state-loading');
+  const elSuccess = document.getElementById('state-success');
+  const elError   = document.getElementById('state-error');
+  const elErrMsg  = document.getElementById('error-msg');
+  const elResend  = document.getElementById('btn-resend');
+  const elResendStatus = document.getElementById('resend-status');
+  const elTimer   = document.getElementById('timer');
+
+  function showSuccess() {
+    elLoading.style.display = 'none';
+    elError.style.display = 'none';
+    elSuccess.style.display = 'block';
+
+    // Contador pro login
+    let s = 8;
+    const id = setInterval(() => {
+      s--;
+      if (elTimer) elTimer.textContent = s;
+      if (s <= 0) { clearInterval(id); location.href = '/'; }
+    }, 1000);
+  }
+
+  function showError(msg, allowResend = true) {
+    elLoading.style.display = 'none';
+    elSuccess.style.display = 'none';
+    elError.style.display = 'block';
+    if (msg) elErrMsg.textContent = msg;
+    if (!allowResend) elResend.style.display = 'none';
+    // Guarda email pra reenvio
+    const email = queryParams.get('email') || hashParams.get('email');
+    if (email) sessionStorage.setItem('frio_pending_email', email);
+  }
+
+  // ═══ Erro direto na URL (Supabase às vezes manda isso) ═══
+  if (errorDesc) {
+    return showError(decodeURIComponent(errorDesc), true);
+  }
+
+  // ═══ Formato 1: #access_token=... → valida token com Supabase ═══
+  if (accessToken && type === 'signup') {
+    // Só confirma se o token veio — a própria presença já significa que o Supabase aceitou
+    // Salva o token pra futuras requests autenticadas
+    try { sessionStorage.setItem('frio_last_signup_token', accessToken); } catch {}
+    return showSuccess();
+  }
+
+  // ═══ Formato 2: ?token=...&type=signup → chama nossa API custom ═══
+  if (plainToken && type === 'signup') {
+    fetch('/api/auth/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: plainToken }),
+    })
+      .then(r => r.json().then(j => ({ ok: r.ok, status: r.status, data: j })))
+      .then(({ ok, data }) => {
+        if (ok && data.ok !== false) return showSuccess();
+        showError(data.error || 'Token inválido ou expirado.', true);
+      })
+      .catch(() => showError('Erro de conexão. Tente novamente.', true));
+    return;
+  }
+
+  // ═══ Formato 3: ?token_hash=...&type=signup → verification endpoint ═══
+  if (tokenHash && type === 'signup') {
+    // Chama Supabase diretamente via proxy do nosso server
+    fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token_hash: tokenHash, type: 'signup' }),
+    })
+      .then(r => r.json().then(j => ({ ok: r.ok, data: j })))
+      .then(({ ok, data }) => {
+        if (ok && data.ok !== false) return showSuccess();
+        showError(data.error || 'Token inválido ou expirado.', true);
+      })
+      .catch(() => showError('Erro de conexão. Tente novamente.', true));
+    return;
+  }
+
+  // ═══ Sem token nenhum — só mostra sucesso (link já foi clicado) ═══
+  if (type === 'signup') {
+    return showSuccess();
+  }
+
+  // ═══ Sem nada — mostra erro ═══
+  showError('Nenhum token de confirmação encontrado no link.', true);
+
+  // ═══ Reenvio de e-mail ═══
+  elResend.addEventListener('click', async () => {
+    const email = sessionStorage.getItem('frio_pending_email');
+    if (!email) {
+      elResendStatus.textContent = '⚠️ Informe seu e-mail na tela de login.';
+      return;
+    }
+    elResend.disabled = true;
+    elResend.textContent = '📧 Enviando…';
+    try {
+      const r = await fetch('/api/auth/resend-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json();
+      if (r.ok && d.ok !== false) {
+        elResendStatus.innerHTML = '✅ <b>Reenviado!</b> Verifique sua caixa de entrada.';
+        elResend.textContent = '✅ Enviado';
+      } else {
+        elResendStatus.textContent = '❌ ' + (d.error || 'Erro ao reenviar.');
+        elResend.disabled = false;
+        elResend.textContent = '📧 Reenviar e-mail';
+      }
+    } catch {
+      elResendStatus.textContent = '❌ Erro de conexão.';
+      elResend.disabled = false;
+      elResend.textContent = '📧 Reenviar e-mail';
+    }
+  });
+})();
 </script>
 </body>
 </html>

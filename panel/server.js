@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v5.1.0
-// Full audit (sem senha) · Sessions · Notify · Dev Tools
+// 🔑 FRIO PANEL — Backend v5.1.2
+// Auditoria completa · Sessions · Audit → Devs · UUID correto
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 
@@ -30,17 +30,17 @@ function fatal(msg) { console.error(`❌ [BOOT] ${msg}`); process.exit(1); }
 if (!SUPABASE_URL) fatal('SUPABASE_URL ausente');
 if (!SUPABASE_ANON) fatal('SUPABASE_ANON_KEY ausente');
 if (!SUPABASE_SERVICE) fatal('SUPABASE_SERVICE_ROLE_KEY ausente');
-if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN curto ou ausente — auditoria no bot desabilitada');
+if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN curto ou ausente — notificação pros devs desabilitada');
 if (!DISCORD_TOKEN) console.warn('⚠️ DISCORD_TOKEN ausente — ações Discord desabilitadas');
 
 // ═══ SUPABASE CLIENTS ═══
 const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.0' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.2' } },
 });
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.0-admin' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.2-admin' } },
 });
 
 // ═══ CONSTANTES ═══
@@ -126,7 +126,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 // ═══════════════════════════════════════════════════════════
-// RATE LIMIT (in-memory, por IP + rota)
+// RATE LIMIT (por IP + rota)
 // ═══════════════════════════════════════════════════════════
 const _rlBuckets = new Map();
 function rateLimit(max, windowMs) {
@@ -172,7 +172,7 @@ function csrfProtect(req, res, next) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CONTEXT EXTRACTOR (para auditoria)
+// CONTEXT EXTRACTOR (auditoria)
 // ═══════════════════════════════════════════════════════════
 function extractCtx(req) {
   const ua = String(req.headers['user-agent'] || '');
@@ -200,14 +200,14 @@ function extractCtx(req) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUDITORIA COMPLETA (sem senha, sempre)
+// AUDITORIA COMPLETA (sem senha)
 // ═══════════════════════════════════════════════════════════
 const _AUDIT_WHITELIST = new Set([
   'email','username','role','plan','tier','guild_id','guild_name',
   'target_user_id','product_id','product_name','amount','status',
   'panel_id','ticket_id','reason','metadata','action','success',
   'duration_ms','method','path','error','code','device','browser',
-  'os','country','city','ip','user_agent','key_id','key_code','tier_target',
+  'os','country','city','ip','user_agent','key_id','key_code',
 ]);
 
 function sanitizeAuditPayload(payload) {
@@ -371,8 +371,6 @@ async function requireAuth(req, res, next) {
       if (admin.role === 'pending') return res.status(403).json({ ok: false, error: 'Aguarde aprovação', code: 'PENDING' });
       return res.status(403).json({ ok: false, error: 'Conta desativada' });
     }
-
-    // Detecta ban
     if (admin.banned) return res.status(403).json({ ok: false, error: 'Conta banida' });
 
     req.user = user;
@@ -380,7 +378,6 @@ async function requireAuth(req, res, next) {
     req.role = admin.role;
     req.token = token;
 
-    // Touch session (best-effort)
     setImmediate(() => touchSession(crypto.createHash('sha256').update(token).digest('hex')));
 
     next();
@@ -443,7 +440,7 @@ app.get('/api/public-config', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, service: 'frio-panel', version: '5.1.0',
+    ok: true, service: 'frio-panel', version: '5.1.2',
     uptime: Math.floor(process.uptime()),
     env: NODE_ENV,
   });
@@ -610,7 +607,6 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
       metadata: { email: emailNorm },
     });
 
-    // Notifica devs
     const { data: devs } = await supaAdmin.from('panel_admins').select('user_id').eq('role', 'dev').eq('ativo', true);
     for (const d of devs || []) {
       await notify(d.user_id, 'system', '🆕 Novo cadastro pendente', `${emailNorm} solicitou acesso.`, { user_id: signupData.user.id });
@@ -645,7 +641,6 @@ app.post('/api/auth/forgot', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
     const { email } = req.body || {};
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: 'E-mail inválido' });
     const url = baseUrl();
-    // Anti-enumeração: sempre responde ok
     await supaPublic.auth.resetPasswordForEmail(String(email).toLowerCase().trim(), {
       redirectTo: `${url}/reset.html`,
     }).catch(() => {});
@@ -654,26 +649,122 @@ app.post('/api/auth/forgot', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   } catch (e) { return genericError(res); }
 });
 
-// POST /api/auth/update-password
+// ═══════════════════════════════════════════════════════════
+// POST /api/auth/confirm — confirma via token custom do painel
+// ═══════════════════════════════════════════════════════════
+app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
+  try {
+    const token = safeStr(req.body?.token, 128);
+    if (!token) return res.status(400).json({ ok: false, error: 'Token obrigatório' });
+
+    const { data: user } = await supaAdmin
+      .from('panel_admins')
+      .select('user_id, confirm_expires, email_confirmed')
+      .eq('confirm_token', token)
+      .maybeSingle();
+
+    if (!user) return res.status(400).json({ ok: false, error: 'Token inválido' });
+    if (user.email_confirmed) return res.json({ ok: true, message: 'Já confirmado' });
+    if (user.confirm_expires && new Date(user.confirm_expires) < new Date()) {
+      return res.status(400).json({ ok: false, error: 'Token expirado' });
+    }
+
+    await supaAdmin.auth.admin.updateUserById(user.user_id, { email_confirm: true }).catch(() => {});
+
+    await supaAdmin.from('panel_admins').update({
+      email_confirmed: true,
+      confirm_token: null,
+      confirm_expires: null,
+    }).eq('user_id', user.user_id);
+
+    await audit(req, 'email_verified_via_token', {
+      success: true, target_id: user.user_id,
+    });
+
+    return res.json({ ok: true });
+  } catch (e) { return genericError(res); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/auth/verify — verifica token_hash do Supabase
+// ═══════════════════════════════════════════════════════════
+app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
+  try {
+    const { token_hash, type } = req.body || {};
+    if (!token_hash) return res.status(400).json({ ok: false, error: 'token_hash obrigatório' });
+
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type: type || 'signup', token_hash }),
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(400).json({ ok: false, error: data.error_description || data.msg || 'Token inválido' });
+
+    await audit(req, 'email_verified_via_hash', {
+      success: true,
+      metadata: { user_id: data.user?.id || null },
+    });
+
+    return res.json({ ok: true, user_id: data.user?.id || null });
+  } catch (e) {
+    console.error('[verify]', e);
+    return genericError(res);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/auth/update-password — aceita token OU access_token
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/update-password', rateLimit(10, 60 * 60 * 1000), async (req, res) => {
   try {
-    const { token, new_password } = req.body || {};
-    if (!token || !new_password) return res.status(400).json({ ok: false, error: 'Dados incompletos' });
-    if (new_password.length < 8) return res.status(400).json({ ok: false, error: 'Senha muito curta' });
+    const { token, access_token, new_password } = req.body || {};
+    const finalToken = access_token || token;
+    if (!finalToken) return res.status(400).json({ ok: false, error: 'Token obrigatório' });
+    if (!new_password || new_password.length < 8) return res.status(400).json({ ok: false, error: 'Senha deve ter 8+ caracteres' });
 
-    const { data: { user }, error: uErr } = await supaPublic.auth.getUser(token);
-    if (uErr || !user) return res.status(401).json({ ok: false, error: 'Token inválido' });
+    // Tenta validar como token Supabase
+    const { data: { user }, error: uErr } = await supaPublic.auth.getUser(finalToken);
 
+    if (uErr || !user) {
+      // Tenta validar como token custom do painel
+      const { data: customUser } = await supaAdmin
+        .from('panel_admins')
+        .select('user_id, reset_expires')
+        .eq('reset_token', finalToken)
+        .maybeSingle();
+
+      if (!customUser) return res.status(401).json({ ok: false, error: 'Token inválido' });
+      if (customUser.reset_expires && new Date(customUser.reset_expires) < new Date()) {
+        return res.status(400).json({ ok: false, error: 'Token expirado' });
+      }
+
+      const { error: updErr } = await supaAdmin.auth.admin.updateUserById(customUser.user_id, { password: new_password });
+      if (updErr) return res.status(400).json({ ok: false, error: updErr.message });
+
+      await supaAdmin.from('panel_admins').update({ reset_token: null, reset_expires: null }).eq('user_id', customUser.user_id);
+      await supaAdmin.from('active_sessions').delete().eq('user_id', customUser.user_id);
+
+      req.user = { id: customUser.user_id };
+      await audit(req, 'password_reset', { target_id: customUser.user_id });
+      return res.json({ ok: true });
+    }
+
+    // Token Supabase é válido
     const { error: updErr } = await supaAdmin.auth.admin.updateUserById(user.id, { password: new_password });
     if (updErr) return res.status(400).json({ ok: false, error: updErr.message });
 
-    // Revoga todas as sessões ativas
     await supaAdmin.from('active_sessions').delete().eq('user_id', user.id);
-
     req.user = user;
     await audit(req, 'password_reset', { target_id: user.id });
     return res.json({ ok: true });
-  } catch (e) { return genericError(res); }
+  } catch (e) {
+    console.error('[update-password]', e);
+    return genericError(res);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -686,7 +777,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 
     if (role === 'cliente' || role === 'funcionario') {
       const [servers, keys, notifs] = await Promise.all([
-        supaAdmin.from('user_guilds').select('*', { count: 'exact', head: true }).eq('user_id', uid),
+        supaAdmin.from('user_guilds').select('*', { count: 'exact', head: true }).eq('discord_id', req.admin.discord_id || ''),
         supaAdmin.from('premium_keys').select('*', { count: 'exact', head: true }).eq('sent_to', uid),
         supaAdmin.from('site_notifications').select('*', { count: 'exact', head: true }).eq('user_id', uid).eq('read', false),
       ]);
@@ -767,7 +858,7 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// SERVIDORES (cliente)
+// SERVIDORES (cliente) — usa discord_id
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/servers', requireAuth, async (req, res) => {
   try {
@@ -775,11 +866,20 @@ app.get('/api/me/servers', requireAuth, async (req, res) => {
       const { data } = await supaAdmin.from('bot_guilds').select('*').eq('in_guild', true).order('member_count', { ascending: false }).limit(500);
       return res.json({ ok: true, servers: data || [] });
     }
-    const { data: ug } = await supaAdmin.from('user_guilds').select('guild_id').eq('user_id', req.user.id);
-    const guildIds = (ug || []).map(x => x.guild_id);
+
+    // ⚡ FIX: user_guilds usa discord_id (não UUID)
+    const discordId = req.admin.discord_id;
+    let guildIds = [];
+    if (discordId) {
+      const { data: ug } = await supaAdmin.from('user_guilds')
+        .select('guild_id').eq('discord_id', discordId);
+      guildIds = (ug || []).map(x => x.guild_id);
+    }
+
     const assigned = req.admin.assigned_guilds || [];
     const allIds = [...new Set([...guildIds, ...assigned])];
     if (!allIds.length) return res.json({ ok: true, servers: [] });
+
     const { data } = await supaAdmin.from('bot_guilds').select('*').in('guild_id', allIds).eq('in_guild', true).order('member_count', { ascending: false });
     res.json({ ok: true, servers: data || [] });
   } catch (e) { return genericError(res); }
@@ -787,8 +887,18 @@ app.get('/api/me/servers', requireAuth, async (req, res) => {
 
 async function canAccessGuild(req, guildId) {
   if (['dev', 'admin'].includes(req.admin.role)) return true;
-  const { data: ug } = await supaAdmin.from('user_guilds').select('*').eq('user_id', req.user.id).eq('guild_id', guildId).maybeSingle();
-  if (ug) return true;
+
+  // ⚡ FIX: consulta por discord_id
+  const discordId = req.admin.discord_id;
+  if (discordId) {
+    const { data: ug } = await supaAdmin.from('user_guilds')
+      .select('guild_id')
+      .eq('discord_id', discordId)
+      .eq('guild_id', guildId)
+      .maybeSingle();
+    if (ug) return true;
+  }
+
   if ((req.admin.assigned_guilds || []).includes(guildId)) return true;
   return false;
 }
@@ -1192,7 +1302,6 @@ app.delete('/api/dev/usuarios/:userId', requireDev, csrfProtect, async (req, res
     const { error } = await supaAdmin.from('panel_admins').update({ ativo: false, banned: true }).eq('user_id', req.params.userId);
     if (error) return res.status(500).json({ ok: false, error: error.message });
 
-    // Revoga todas as sessões
     await supaAdmin.from('active_sessions').delete().eq('user_id', req.params.userId);
 
     await audit(req, 'deactivate_user', { target_id: req.params.userId });
@@ -1349,7 +1458,7 @@ app.get('/api/redemptions', requireStaff, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// CLIENTE — meus dados
+// CLIENTE
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/keys-sent', requireAuth, async (req, res) => {
   try {
@@ -1544,7 +1653,7 @@ app.get('/api/admin/financial', requireAdmin, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// DEV TOOLS — kill switch / maintenance / force premium / broadcast
+// DEV TOOLS
 // ═══════════════════════════════════════════════════════════
 app.get('/api/dev/kill-switch', requireDev, async (req, res) => {
   const { data } = await supaAdmin.from('kill_switch').select('*').eq('id', 1).maybeSingle();
@@ -1690,7 +1799,7 @@ process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', 
 // BOOT
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, () => {
-  console.log(`🌐 [PANEL v5.1.0] Rodando na porta ${PORT}`);
+  console.log(`🌐 [PANEL v5.1.2] Rodando na porta ${PORT}`);
   console.log(`🔒 NODE_ENV=${NODE_ENV}`);
   console.log(`🤖 Bot: ${BOT_API_URL}`);
   console.log(`🔑 Audit token: ${PANEL_API_TOKEN ? 'OK' : 'AUSENTE'}`);

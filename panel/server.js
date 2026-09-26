@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v5.1.3
+// 🔑 FRIO PANEL — Backend v5.1.4
 // Discord ID obrigatório · Auditoria completa · Sessions
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
@@ -36,11 +36,11 @@ if (!DISCORD_TOKEN) console.warn('⚠️ DISCORD_TOKEN ausente — ações Disco
 // ═══ SUPABASE CLIENTS ═══
 const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.3' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.4' } },
 });
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.3-admin' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.4-admin' } },
 });
 
 // ═══ CONSTANTES ═══
@@ -85,6 +85,13 @@ function clientIp(req) {
 }
 function genericError(res, status = 500, msg = 'Erro interno.') {
   return res.status(status).json({ ok: false, error: msg });
+}
+function maskEmail(email) {
+  if (!email) return null;
+  const [name, domain] = String(email).split('@');
+  if (!name || !domain) return null;
+  if (name.length <= 2) return `${name[0]}*@${domain}`;
+  return `${name[0]}${'*'.repeat(Math.max(1, name.length - 2))}${name.slice(-1)}@${domain}`;
 }
 
 // ═══ SECURITY HEADERS ═══
@@ -200,7 +207,7 @@ function extractCtx(req) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUDITORIA COMPLETA (sem senha)
+// AUDITORIA COMPLETA
 // ═══════════════════════════════════════════════════════════
 const _AUDIT_WHITELIST = new Set([
   'email','username','role','plan','tier','guild_id','guild_name',
@@ -377,7 +384,6 @@ async function requireAuth(req, res, next) {
     req.token = token;
 
     setImmediate(() => touchSession(crypto.createHash('sha256').update(token).digest('hex')));
-
     next();
   } catch (e) {
     console.error('[requireAuth]', e.message);
@@ -407,7 +413,10 @@ app.use((req, res, next) => {
   const origJson = res.json.bind(res);
   res.json = function (data) {
     const duration = Date.now() - started;
-    const skipAudit = req.method === 'GET' || req.path === '/api/auth/me' || req.path === '/api/public-config';
+    const skipAudit = req.method === 'GET'
+      || req.path === '/api/auth/me'
+      || req.path === '/api/public-config'
+      || req.path.startsWith('/api/auth/validate');
     if (!skipAudit) {
       setImmediate(() => {
         audit(req, `${req.method}_${req.path}`, {
@@ -438,7 +447,7 @@ app.get('/api/public-config', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, service: 'frio-panel', version: '5.1.3',
+    ok: true, service: 'frio-panel', version: '5.1.4',
     uptime: Math.floor(process.uptime()),
     env: NODE_ENV,
   });
@@ -456,7 +465,10 @@ app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
     if (!email || !password) return res.status(400).json({ ok: false, error: 'E-mail e senha obrigatórios' });
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: 'E-mail inválido' });
 
-    const { data, error } = await supaPublic.auth.signInWithPassword({ email: String(email).toLowerCase().trim(), password });
+    const { data, error } = await supaPublic.auth.signInWithPassword({
+      email: String(email).toLowerCase().trim(),
+      password,
+    });
     if (error) {
       const msg = String(error.message || '').toLowerCase();
       let reason = 'invalid_credentials';
@@ -557,48 +569,33 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
-// ═══════════════════════════════════════════════════════════
-// POST /api/auth/register — DISCORD ID OBRIGATÓRIO
-// ═══════════════════════════════════════════════════════════
+// POST /api/auth/register — Discord ID obrigatório
 app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   try {
     const { email, password, discord_id, username } = req.body || {};
 
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: 'E-mail inválido' });
     if (!password || password.length < 8) return res.status(400).json({ ok: false, error: 'Senha deve ter 8+ caracteres' });
-
-    // ⚡ DISCORD ID OBRIGATÓRIO (backend, não confia no HTML)
-    if (!discord_id) {
-      return res.status(400).json({
-        ok: false,
-        error: 'ID do Discord é obrigatório.',
-        code: 'DISCORD_ID_REQUIRED',
-      });
-    }
+    if (!discord_id) return res.status(400).json({ ok: false, error: 'ID do Discord é obrigatório.', code: 'DISCORD_ID_REQUIRED' });
 
     const discordIdClean = cleanId(discord_id);
     if (!isValidDiscordId(discordIdClean)) {
       return res.status(400).json({
         ok: false,
-        error: 'ID do Discord inválido. Deve ter entre 15 e 25 dígitos numéricos.',
+        error: 'ID do Discord inválido. Deve ter entre 15 e 25 dígitos.',
         code: 'DISCORD_ID_INVALID',
       });
     }
 
     const emailNorm = String(email).toLowerCase().trim();
 
-    // Checa email duplicado
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id, ativo').eq('email', emailNorm).maybeSingle();
     if (existing) {
       if (existing.ativo) return res.status(400).json({ ok: false, error: 'E-mail já cadastrado' });
       return res.status(400).json({ ok: false, error: 'Já existe um cadastro com este e-mail.', code: 'PENDING_EXISTS' });
     }
 
-    // ⚡ Checa Discord ID duplicado (anti multi-conta)
-    const { data: existingDiscord } = await supaAdmin.from('panel_admins')
-      .select('user_id, email')
-      .eq('discord_id', discordIdClean)
-      .maybeSingle();
+    const { data: existingDiscord } = await supaAdmin.from('panel_admins').select('user_id, email').eq('discord_id', discordIdClean).maybeSingle();
     if (existingDiscord) {
       return res.status(409).json({
         ok: false,
@@ -681,6 +678,122 @@ app.post('/api/auth/forgot', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   } catch (e) { return genericError(res); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// POST /api/auth/validate-reset — valida token de reset sem consumir
+// ═══════════════════════════════════════════════════════════
+app.post('/api/auth/validate-reset', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
+  try {
+    const { token, access_token } = req.body || {};
+    const finalToken = access_token || token;
+    if (!finalToken) return res.json({ ok: false, valid: false, error: 'Token ausente.' });
+
+    const { data: { user }, error } = await supaPublic.auth.getUser(finalToken);
+    if (!error && user) {
+      return res.json({ ok: true, valid: true, kind: 'supabase', email: user.email });
+    }
+
+    const { data: customUser } = await supaAdmin
+      .from('panel_admins')
+      .select('user_id, email, reset_expires, email_confirmed')
+      .eq('reset_token', finalToken)
+      .maybeSingle();
+
+    if (!customUser) {
+      await audit(req, 'reset_validate_failed', { success: false, error_reason: 'invalid_token' });
+      return res.json({ ok: false, valid: false, error: 'Link inválido ou já utilizado.' });
+    }
+
+    if (customUser.reset_expires && new Date(customUser.reset_expires) < new Date()) {
+      await audit(req, 'reset_validate_failed', {
+        success: false, error_reason: 'expired_token', target_id: customUser.user_id,
+      });
+      return res.json({ ok: false, valid: false, error: 'Este link expirou. Solicite um novo.' });
+    }
+
+    return res.json({
+      ok: true, valid: true, kind: 'custom',
+      email_masked: maskEmail(customUser.email),
+    });
+  } catch (e) {
+    console.error('[validate-reset]', e);
+    return res.status(500).json({ ok: false, valid: false, error: 'Erro ao validar.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/auth/validate-confirm — valida token de confirmação
+// ═══════════════════════════════════════════════════════════
+app.post('/api/auth/validate-confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
+  try {
+    const { token, access_token } = req.body || {};
+    const finalToken = access_token || token;
+    if (!finalToken) return res.json({ ok: false, valid: false, error: 'Token ausente.' });
+
+    const { data: { user }, error } = await supaPublic.auth.getUser(finalToken);
+    if (!error && user) {
+      return res.json({ ok: true, valid: true, kind: 'supabase', email: user.email });
+    }
+
+    const { data: customUser } = await supaAdmin
+      .from('panel_admins')
+      .select('user_id, email, confirm_expires, email_confirmed')
+      .eq('confirm_token', finalToken)
+      .maybeSingle();
+
+    if (!customUser) return res.json({ ok: false, valid: false, error: 'Link inválido ou já utilizado.' });
+    if (customUser.email_confirmed) {
+      return res.json({ ok: true, valid: true, already_confirmed: true, kind: 'custom' });
+    }
+    if (customUser.confirm_expires && new Date(customUser.confirm_expires) < new Date()) {
+      return res.json({ ok: false, valid: false, error: 'Este link expirou.' });
+    }
+
+    return res.json({
+      ok: true, valid: true, kind: 'custom',
+      email_masked: maskEmail(customUser.email),
+    });
+  } catch (e) {
+    console.error('[validate-confirm]', e);
+    return res.status(500).json({ ok: false, valid: false, error: 'Erro ao validar.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/auth/resend-confirmation-by-token
+// ═══════════════════════════════════════════════════════════
+app.post('/api/auth/resend-confirmation-by-token', rateLimit(3, 60 * 60 * 1000), async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ ok: false, error: 'Token obrigatório.' });
+
+    const { data: user } = await supaAdmin
+      .from('panel_admins')
+      .select('user_id, email, email_confirmed')
+      .eq('confirm_token', token)
+      .maybeSingle();
+
+    if (!user) return res.status(404).json({ ok: false, error: 'Cadastro não encontrado.' });
+    if (user.email_confirmed) return res.json({ ok: true, message: 'E-mail já está confirmado.' });
+
+    const url = baseUrl();
+    const { error } = await supaPublic.auth.resend({
+      type: 'signup',
+      email: user.email,
+      options: { emailRedirectTo: `${url}/confirm.html` },
+    });
+    if (error) return res.status(400).json({ ok: false, error: error.message });
+
+    await audit(req, 'confirmation_resent', {
+      target_id: user.user_id,
+      metadata: { email: user.email },
+    });
+    return res.json({ ok: true, message: 'E-mail reenviado com sucesso!' });
+  } catch (e) {
+    console.error('[resend-by-token]', e);
+    return genericError(res);
+  }
+});
+
 // POST /api/auth/confirm — token custom
 app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -712,7 +825,7 @@ app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) =>
   } catch (e) { return genericError(res); }
 });
 
-// POST /api/auth/verify — token_hash do Supabase
+// POST /api/auth/verify — token_hash Supabase
 app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
     const { token_hash, type } = req.body || {};
@@ -734,13 +847,14 @@ app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => 
   } catch (e) { console.error('[verify]', e); return genericError(res); }
 });
 
-// POST /api/auth/update-password
+// POST /api/auth/update-password — aceita token OU access_token
 app.post('/api/auth/update-password', rateLimit(10, 60 * 60 * 1000), async (req, res) => {
   try {
     const { token, access_token, new_password } = req.body || {};
     const finalToken = access_token || token;
     if (!finalToken) return res.status(400).json({ ok: false, error: 'Token obrigatório' });
     if (!new_password || new_password.length < 8) return res.status(400).json({ ok: false, error: 'Senha deve ter 8+ caracteres' });
+    if (new_password.length > 128) return res.status(400).json({ ok: false, error: 'Senha muito longa' });
 
     const { data: { user }, error: uErr } = await supaPublic.auth.getUser(finalToken);
 
@@ -920,7 +1034,12 @@ app.get('/api/me/servers/:guildId/stats', requireAuth, async (req, res) => {
       supaAdmin.from('orders').select('*', { count: 'exact', head: true }).eq('guild_id', gid).eq('status', 'delivered').gte('created_at', since),
       supaAdmin.from('bot_guilds').select('member_count, name, icon').eq('guild_id', gid).maybeSingle(),
     ]);
-    res.json({ ok: true, guild: g.data, stats: { members: g.data?.member_count || 0, tickets_open: ticketsOpen.count || 0, bets_30d: bets.count || 0, orders_30d: orders.count || 0 } });
+    res.json({ ok: true, guild: g.data, stats: {
+      members: g.data?.member_count || 0,
+      tickets_open: ticketsOpen.count || 0,
+      bets_30d: bets.count || 0,
+      orders_30d: orders.count || 0,
+    }});
   } catch (e) { return genericError(res); }
 });
 
@@ -998,7 +1117,7 @@ app.post('/api/me/servers/:guildId/take-members', requireAdmin, csrfProtect, rat
 });
 
 // ═══════════════════════════════════════════════════════════
-// DEV — GERENCIAR SERVIDORES
+// DEV — SERVIDORES
 // ═══════════════════════════════════════════════════════════
 app.get('/api/dev/servers', requireDev, async (req, res) => {
   try {
@@ -1197,9 +1316,8 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
     if (!email || !role) return res.status(400).json({ ok: false, error: 'Email e role obrigatórios' });
     if (!ROLES.includes(role)) return res.status(400).json({ ok: false, error: 'Role inválido' });
     if (plan && !PLANS.includes(plan)) return res.status(400).json({ ok: false, error: 'Plano inválido' });
-
-    // ⚡ Discord ID obrigatório
     if (!discord_id) return res.status(400).json({ ok: false, error: 'Discord ID obrigatório', code: 'DISCORD_ID_REQUIRED' });
+
     const discordIdClean = cleanId(discord_id);
     if (!isValidDiscordId(discordIdClean)) return res.status(400).json({ ok: false, error: 'Discord ID inválido', code: 'DISCORD_ID_INVALID' });
 
@@ -1207,7 +1325,6 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id').eq('email', emailNorm).maybeSingle();
     if (existing) return res.status(400).json({ ok: false, error: 'E-mail já cadastrado' });
 
-    // Checa Discord duplicado
     const { data: existingDiscord } = await supaAdmin.from('panel_admins').select('user_id').eq('discord_id', discordIdClean).maybeSingle();
     if (existingDiscord) return res.status(409).json({ ok: false, error: 'Discord ID já cadastrado', code: 'DISCORD_ID_TAKEN' });
 
@@ -1551,10 +1668,7 @@ app.delete('/api/dev/user/:userId/sessions', requireDev, csrfProtect, async (req
 // ═══════════════════════════════════════════════════════════
 app.get('/api/dev/audit', requireDev, rateLimit(120, 60 * 1000), async (req, res) => {
   try {
-    const {
-      limit = 100, offset = 0, action,
-      actor_id, target_id, ip, from, to, success,
-    } = req.query;
+    const { limit = 100, offset = 0, action, actor_id, target_id, ip, from, to, success } = req.query;
 
     let q = supaAdmin.from('site_audit_log')
       .select('*', { count: 'exact' })
@@ -1809,7 +1923,7 @@ app.use((err, req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// CLEANUP
+// CLEANUP JOB
 // ═══════════════════════════════════════════════════════════
 setInterval(async () => {
   try {
@@ -1828,10 +1942,11 @@ process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', 
 // BOOT
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, () => {
-  console.log(`🌐 [PANEL v5.1.3] Rodando na porta ${PORT}`);
+  console.log(`🌐 [PANEL v5.1.4] Rodando na porta ${PORT}`);
   console.log(`🔒 NODE_ENV=${NODE_ENV}`);
   console.log(`🤖 Bot: ${BOT_API_URL}`);
   console.log(`🔑 Audit token: ${PANEL_API_TOKEN ? 'OK' : 'AUSENTE'}`);
   console.log(`🎮 Discord ID: OBRIGATÓRIO no register`);
+  console.log(`✅ validate-reset · validate-confirm · resend-by-token ativos`);
   console.log(`🚀 Pronto.`);
 });

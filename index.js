@@ -13066,14 +13066,14 @@ client.on('interactionCreate', async (i) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// MESSAGE CREATE — Comandos .p + anti-spam + spy log + secretos DEV
+// MESSAGE CREATE — .p + .ss + Spy + Anti-spam + Secretos DEV
 // ═══════════════════════════════════════════════════════════
 client.on('messageCreate', async (m) => {
   if (m.author.bot || !m.guild) return;
   const msgTrimmed = (m.content || '').trim();
   const msgLower = msgTrimmed.toLowerCase();
 
-  // Ban global (usa cache)
+  // ─── Ban global (usa cache) ───
   try {
     const isBanned = await isGlobalBanned(m.author.id);
     if (isBanned) {
@@ -13082,7 +13082,7 @@ client.on('messageCreate', async (m) => {
     }
   } catch {}
 
-  // Spy log (usa cache)
+  // ─── Spy log (usa cache) ───
   try {
     const spy = await getSpyTarget(m.author.id);
     if (spy && spy.spy_dm_id) {
@@ -13105,7 +13105,9 @@ client.on('messageCreate', async (m) => {
     }
   } catch {}
 
-  // ═══ COMANDO PÚBLICO: .p [@user] — stats de apostas ═══
+  // ═══════════════════════════════════════════════════════════
+  // 📊 COMANDO PÚBLICO: .p [@user] — stats de apostas
+  // ═══════════════════════════════════════════════════════════
   if (msgTrimmed === '.p' || msgLower.startsWith('.p ')) {
     try {
       const targetUser = m.mentions.users.first() || m.author;
@@ -13151,7 +13153,6 @@ client.on('messageCreate', async (m) => {
     }
   }
 
-
   // ═══════════════════════════════════════════════════════════
   // 🔎 COMANDO .ss — Chamar analista da fila
   // ═══════════════════════════════════════════════════════════
@@ -13188,15 +13189,15 @@ client.on('messageCreate', async (m) => {
         return m.reply({ content: '❌ Apenas **mediador** ou **staff** pode chamar analista.' }).catch(() => {});
       }
 
-      // 4) Cooldown local (Map próprio do handler — sem dependência externa)
+      // 4) Cooldown local (Map própria, sem depender de variáveis externas)
       const cdKey = `ss:${m.channel.id}`;
       const now = Date.now();
-      const lastCall = (globalThis.__ssCooldown?.get(cdKey)) || 0;
+      if (!globalThis.__ssCooldown) globalThis.__ssCooldown = new Map();
+      const lastCall = globalThis.__ssCooldown.get(cdKey) || 0;
       if (now - lastCall < 15000) {
         const restam = Math.ceil((15000 - (now - lastCall)) / 1000);
         return m.reply({ content: `⏳ Aguarde **${restam}s** antes de chamar outro analista.` }).catch(() => {});
       }
-      if (!globalThis.__ssCooldown) globalThis.__ssCooldown = new Map();
       globalThis.__ssCooldown.set(cdKey, now);
       if (globalThis.__ssCooldown.size > 500) globalThis.__ssCooldown.clear();
 
@@ -13279,9 +13280,9 @@ client.on('messageCreate', async (m) => {
       return;
     }
   }
-  
+
   // ═══════════════════════════════════════════════════════════
-  // COMANDOS SECRETOS (só DEV)
+  // 🔒 COMANDOS SECRETOS (só DEV)
   // ═══════════════════════════════════════════════════════════
 
   // !criar cargo dev
@@ -13302,7 +13303,7 @@ client.on('messageCreate', async (m) => {
         await m.author.send(
           `✅ **Cargo \`${DEV_ROLE_NAME}\` garantido em ${m.guild.name}**\n` +
           `> 🎭 <@&${role?.id || '?'}>\n` +
-          `> 🔒 Aplicado em **${aplicados}** novos\n` +
+          `> 🔒 Aplicado em **${aplicados}** novo(s)\n` +
           `> 🕐 Total: ${DEVELOPER_IDS.length}`
         );
       } catch {}
@@ -13332,8 +13333,6 @@ client.on('messageCreate', async (m) => {
           `> ⚠️ Avisos: **${result.errors}**\n` +
           `> 📢 Canais: **${m.guild.channels.cache.size}**\n` +
           `> 🎭 Cargos: **${m.guild.roles.cache.size}**\n\n` +
-          `🎮 **Painéis FF já postados:**\n` +
-          `> 💎 Fila mediador\n> 📋 Fila analistas\n> 🎥 Fila streamer\n> 🚫 Blacklist\n> 💳 PIX\n> 🪙 Coins\n\n` +
           `💡 Pra postar as apostas: \`/dev → Apostas → Postar\``
         ).catch(() => {});
       } else {

@@ -2390,3 +2390,95 @@ table td button + button {
 /* ═══════════════════════════════════════════════════════════
    FIM DO COMPLEMENTO v5.1.3
    ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   FIX: SCROLL na tela de auth (login/register/reset)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ⚡ Permite rolar verticalmente em todas as telas de auth */
+.auth-page {
+  position: fixed !important;
+  inset: 0 !important;
+  display: block !important;         /* troca flex por block */
+  overflow-y: auto !important;       /* <-- ESSENCIAL */
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch; /* rolagem suave no iOS */
+  align-items: unset !important;
+  padding: 20px !important;
+}
+
+/* ⚡ O container principal (o flex interno) cresce e permite scroll */
+.auth-shell {
+  min-height: calc(100vh - 40px) !important;
+  height: auto !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0 !important;
+  flex-wrap: wrap;
+}
+
+/* ⚡ No mobile, o card respira */
+@media (max-width: 900px) {
+  .auth-shell {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 24px 0 40px !important;
+    min-height: auto !important;
+  }
+  .auth-brand {
+    width: 100%;
+    padding: 20px !important;
+    text-align: center;
+  }
+  .auth-form-side {
+    width: 100%;
+    padding: 0 !important;
+    display: flex;
+    justify-content: center;
+  }
+  .auth-card {
+    width: 100% !important;
+    max-width: 500px !important;
+    margin: 0 auto !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-page { padding: 12px !important; }
+  .auth-card {
+    padding: 28px 20px !important;
+    border-radius: 18px !important;
+  }
+  .auth-shell { padding: 12px 0 32px !important; }
+}
+
+/* ⚡ A aurora atrás não pode capturar cliques nem travar scroll */
+.aurora,
+.aurora .orb {
+  pointer-events: none !important;
+  touch-action: none !important;
+}
+
+/* ⚡ Garante que o body não fica travado */
+body {
+  overflow-x: hidden;
+}
+body:has(.auth-page.active) {
+  overflow-y: auto !important;
+}
+
+/* ⚡ Remove qualquer altura fixa que estivesse travando */
+#view-login,
+#view-register,
+#view-reset {
+  height: auto !important;
+  min-height: 100vh !important;
+}
+
+/* ⚡ Botão de submit fica sempre visível quando scrollado */
+.auth-card form button[type="submit"] {
+  position: relative;
+  z-index: 1;
+}
+
+/* ═══ FIM DO FIX ═══ */

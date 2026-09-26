@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#5865F2">
 <title>Frio Panel — Gerenciamento Premium</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=10">
+<link rel="stylesheet" href="/assets/style.css?v=12">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -23,7 +24,7 @@
 
   <div class="auth-shell">
     <div class="auth-brand">
-      <div class="brand-badge"><span class="dot"></span>FRIO BOT · v5.0</div>
+      <div class="brand-badge"><span class="dot"></span>FRIO BOT · v6.7.0</div>
       <div class="brand-logo-hero">
         <img src="/assets/logo.png" alt="Frio Panel">
       </div>
@@ -121,11 +122,21 @@
             </div>
           </div>
           <div class="field">
-            <label>Discord ID <span class="opt">opcional</span></label>
+            <label>Nome de usuário</label>
+            <div class="input-wrap">
+              <span class="ico">👤</span>
+              <input type="text" id="regUsername" placeholder="Seu nome" maxlength="40">
+            </div>
+          </div>
+          <div class="field">
+            <label>Discord ID <span class="opt">obrigatório</span></label>
             <div class="input-wrap">
               <span class="ico">🎮</span>
-              <input type="text" id="regDiscord" placeholder="123456789012345678" autocomplete="off">
+              <input type="text" id="regDiscord" required pattern="\d{15,25}" placeholder="123456789012345678" autocomplete="off" inputmode="numeric">
             </div>
+            <small class="hint" style="font-size:12px;color:var(--txt-3);margin-top:6px;display:block">
+              Discord → Configurações → Avançado → Modo Desenvolvedor → clique com botão direito no seu nome → Copiar ID
+            </small>
           </div>
           <div class="field">
             <label>Senha <span class="opt">mín. 8 caracteres</span></label>
@@ -233,7 +244,7 @@
       <button class="bell" id="btnBell" title="Notificações">
         🔔<span class="badge hidden" id="bellBadge">0</span>
       </button>
-      <div class="user-chip">
+      <div class="user-chip" id="userChip" title="Ver perfil">
         <span class="dot"></span>
         <span class="email" id="userEmail">—</span>
         <span class="badge" id="userRole">—</span>
@@ -251,6 +262,7 @@
       <a data-nav="packs" data-roles="dev"><span class="icon">📦</span>Packs</a>
       <a data-nav="servers"><span class="icon">🌐</span>Meus Servidores</a>
       <a data-nav="my-keys"><span class="icon">🎁</span>Minhas Keys</a>
+      <a data-nav="sessions"><span class="icon">🖥️</span>Minhas Sessões</a>
       <a data-nav="notifications"><span class="icon">🔔</span>Notificações <span class="badge hidden" id="navNotifBadge" style="margin-left:auto">0</span></a>
 
       <div class="section-title admin-only">ADMIN</div>
@@ -271,7 +283,7 @@
       <div class="section-title dev-only">USUÁRIOS</div>
       <a data-nav="usuarios" data-roles="dev"><span class="icon">👥</span>Usuários</a>
       <a data-nav="pending" data-roles="dev"><span class="icon">⏳</span>Aprovações <span class="badge hidden" id="navPendingBadge" style="margin-left:auto">0</span></a>
-      <a data-nav="logs" data-roles="dev"><span class="icon">📋</span>Logs</a>
+      <a data-nav="logs" data-roles="dev"><span class="icon">📋</span>Auditoria</a>
     </nav>
   </aside>
 
@@ -367,6 +379,17 @@
       <div id="myKeysList"></div>
     </section>
 
+    <!-- ═══ 🆕 MINHAS SESSÕES ═══ -->
+    <section class="page" id="page-sessions">
+      <h2>🖥️ Minhas Sessões</h2>
+      <p class="hint">Dispositivos conectados na sua conta. Você pode revogar qualquer uma delas.</p>
+      <div class="filters">
+        <button id="btnRevokeAllSessions" class="btn btn-danger btn-sm">🚫 Revogar todas (menos esta)</button>
+        <button id="btnRefreshSessions" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+      </div>
+      <div id="sessionsList" class="table-wrap"></div>
+    </section>
+
     <!-- ═══ NOTIFICAÇÕES ═══ -->
     <section class="page" id="page-notifications">
       <h2>🔔 Notificações</h2>
@@ -393,7 +416,7 @@
       </div>
     </section>
 
-    <!-- ═══ 🆕 DEV: GERENCIAR SERVIDORES ═══ -->
+    <!-- ═══ DEV: GERENCIAR SERVIDORES ═══ -->
     <section class="page" id="page-dev-servers">
       <h2>🛰️ Gerenciar Todos os Servidores <span class="badge dev" style="font-size:11px">DEV</span></h2>
       <div class="card card-highlight">
@@ -413,7 +436,7 @@
       <div id="devServersList" class="server-grid"></div>
     </section>
 
-    <!-- ═══ 🆕 DEV: BUSCAR SERVIDOR ═══ -->
+    <!-- ═══ DEV: BUSCAR SERVIDOR ═══ -->
     <section class="page" id="page-dev-server-search">
       <h2>🔎 Buscar Servidor Específico</h2>
       <div class="card card-highlight">
@@ -542,14 +565,68 @@
       <div id="pendingList"></div>
     </section>
 
-    <!-- ═══ LOGS ═══ -->
+    <!-- ═══ 🆕 AUDITORIA COMPLETA ═══ -->
     <section class="page" id="page-logs">
-      <h2>📋 Logs</h2>
-      <div class="filters">
-        <input type="text" id="logFilterAction" placeholder="🔍 Filtrar ação">
-        <button id="btnRefreshLogs" class="btn btn-secondary btn-sm">🔄</button>
+      <h2>📋 Auditoria Completa</h2>
+
+      <!-- Stats rápidas -->
+      <div class="grid-3" id="auditStats" style="margin-bottom:18px"></div>
+
+      <!-- Filtros -->
+      <div class="card card-highlight">
+        <h3 style="margin-top:0">🔍 Filtros</h3>
+        <div class="grid-2">
+          <div class="field"><label>Ação</label><div class="input-wrap">
+            <input type="text" id="auditFilterAction" placeholder="Ex: login, nuke_guild, access_denied">
+          </div></div>
+          <div class="field"><label>Actor ID (UUID)</label><div class="input-wrap">
+            <input type="text" id="auditFilterActor" placeholder="UUID do usuário">
+          </div></div>
+          <div class="field"><label>Target ID</label><div class="input-wrap">
+            <input type="text" id="auditFilterTarget" placeholder="UUID alvo">
+          </div></div>
+          <div class="field"><label>IP</label><div class="input-wrap">
+            <input type="text" id="auditFilterIp" placeholder="Ex: 200.150.10.5">
+          </div></div>
+          <div class="field"><label>De (data)</label><div class="input-wrap">
+            <input type="datetime-local" id="auditFilterFrom">
+          </div></div>
+          <div class="field"><label>Até (data)</label><div class="input-wrap">
+            <input type="datetime-local" id="auditFilterTo">
+          </div></div>
+          <div class="field"><label>Resultado</label><div class="input-wrap">
+            <select id="auditFilterSuccess">
+              <option value="">Todos</option>
+              <option value="true">✅ Sucesso</option>
+              <option value="false">❌ Falha</option>
+            </select>
+          </div></div>
+          <div class="field"><label>Por página</label><div class="input-wrap">
+            <select id="auditFilterLimit">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="200">200</option>
+              <option value="500">500</option>
+            </select>
+          </div></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <button id="btnAuditFilter" class="btn">🔍 Filtrar</button>
+          <button id="btnAuditClear" class="btn btn-secondary">🧹 Limpar filtros</button>
+          <button id="btnAuditExport" class="btn btn-success">📤 Exportar CSV</button>
+          <button id="btnAuditRefresh" class="btn btn-secondary">🔄</button>
+        </div>
       </div>
-      <div id="logsTable" class="table-wrap"></div>
+
+      <div id="auditTable" class="table-wrap"></div>
+
+      <div class="filters" style="justify-content:space-between;margin-top:14px">
+        <span id="auditPaginationInfo" class="hint"></span>
+        <div style="display:flex;gap:8px">
+          <button id="btnAuditPrev" class="btn btn-secondary btn-sm">⬅️ Anterior</button>
+          <button id="btnAuditNext" class="btn btn-secondary btn-sm">Próximo ➡️</button>
+        </div>
+      </div>
     </section>
   </main>
 </div>
@@ -632,7 +709,7 @@
         </div></div>
         <div class="field"><label>Discord ID *</label><div class="input-wrap">
           <span class="ico">🎮</span>
-          <input type="text" id="modalUserDiscord" required>
+          <input type="text" id="modalUserDiscord" required pattern="\d{15,25}">
         </div></div>
       </div>
       <div class="grid-2">
@@ -773,7 +850,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     🆕 MODAL: DEV Server Actions
+     MODAL: DEV Server Actions
      ═══════════════════════════════════════════════════════════ -->
 <div id="modalDevServerActions" class="modal">
   <div class="modal-content" style="max-width:560px;position:relative">
@@ -807,12 +884,41 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════
+     🆕 MODAL: Ver Sessões de um Usuário (DEV)
+     ═══════════════════════════════════════════════════════════ -->
+<div id="modalUserSessions" class="modal">
+  <div class="modal-content" style="max-width:720px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalUserSessions')">✕</button>
+    <h2>🖥️ Sessões do Usuário</h2>
+    <p class="sub" id="userSessionsTarget">—</p>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="btnRefreshUserSessions" class="btn btn-secondary btn-sm">🔄 Atualizar</button>
+      <button id="btnRevokeAllUserSessions" class="btn btn-danger btn-sm">🚫 Revogar todas</button>
+    </div>
+
+    <div id="userSessionsList" class="table-wrap"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     🆕 MODAL: Detalhes da Auditoria (item individual)
+     ═══════════════════════════════════════════════════════════ -->
+<div id="modalAuditDetail" class="modal">
+  <div class="modal-content" style="max-width:680px;position:relative">
+    <button class="modal-close" onclick="closeModal('modalAuditDetail')">✕</button>
+    <h2>🔍 Detalhes do Evento</h2>
+    <div id="auditDetailBody" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
      TOAST
      ═══════════════════════════════════════════════════════════ -->
 <div id="toast" class="toast"></div>
 
 <!-- ═══════════════════════════════════════════════════════════
-     SCRIPT INLINE: Toggle Password
+     SCRIPT INLINE: Toggle Password + CSRF Meta
      ═══════════════════════════════════════════════════════════ -->
 <script>
 function togglePass(id, btn) {
@@ -827,7 +933,7 @@ function togglePass(id, btn) {
 <!-- ═══════════════════════════════════════════════════════════
      APP JS
      ═══════════════════════════════════════════════════════════ -->
-<script src="/assets/app.js?v=10"></script>
+<script src="/assets/app.js?v=12"></script>
 
 </body>
 </html>

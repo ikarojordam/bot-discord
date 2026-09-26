@@ -2,242 +2,404 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
 <title>Nova senha — Frio Panel</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=11">
-<style>
-.reset-page{
-  position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-  padding:20px;background:#05060a;overflow:hidden;
-}
-.reset-page .aurora{position:absolute;inset:0}
-.reset-card{
-  position:relative;z-index:1;
-  max-width:480px;width:100%;
-  background:var(--glass,rgba(20,20,30,.7));backdrop-filter:blur(24px);
-  border:1px solid var(--glass-border,rgba(255,255,255,.08));
-  border-radius:24px;padding:44px 40px;
-  box-shadow:0 20px 60px rgba(0,0,0,.5);
-  animation:card-enter .6s cubic-bezier(.22,1,.36,1);
-}
-@keyframes card-enter{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-.reset-icon{
-  width:80px;height:80px;border-radius:50%;
-  margin:0 auto 20px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:44px;
-  background:linear-gradient(135deg,rgba(88,101,242,.2),rgba(139,92,246,.15));
-  border:2px solid rgba(88,101,242,.4);
-  box-shadow:0 0 40px rgba(88,101,242,.35);
-}
-.reset-icon.success{
-  background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(22,163,74,.15));
-  border-color:rgba(34,197,94,.4);
-  box-shadow:0 0 40px rgba(34,197,94,.35);
-}
-.reset-icon.error{
-  background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(185,28,28,.15));
-  border-color:rgba(239,68,68,.4);
-  box-shadow:0 0 40px rgba(239,68,68,.35);
-}
-.reset-card h1{
-  font-size:24px;font-weight:800;margin-bottom:8px;text-align:center;
-  background:linear-gradient(135deg,#fff,#a5b4fc);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-}
-.reset-card .sub{
-  text-align:center;color:var(--txt-2,#9ca3af);
-  font-size:14px;line-height:1.5;margin-bottom:24px;
-}
-.reset-actions{display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap}
-</style>
+<link rel="stylesheet" href="/assets/style.css?v=1">
 </head>
 <body>
+<div class="auth-page active">
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
 
-<div class="reset-page">
-  <div class="aurora">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
+  <div class="auth-wrapper">
+    <div class="auth-form-card" id="card" style="margin:auto;max-width:460px">
 
-  <div class="reset-card">
-    <!-- ESTADO: CARREGANDO / VALIDANDO -->
-    <div id="state-loading">
-      <div class="reset-icon">🔐</div>
-      <h1>Validando link…</h1>
-      <p class="sub">Verificando se o link de recuperação é válido.</p>
-    </div>
-
-    <!-- ESTADO: FORM -->
-    <div id="state-form" style="display:none">
-      <div class="reset-icon">🔐</div>
-      <h1>Nova senha</h1>
-      <p class="sub">Escolha uma senha forte com pelo menos 8 caracteres.</p>
-
-      <form id="resetForm">
-        <div class="field">
-          <label>Nova senha</label>
-          <div class="input-wrap">
-            <span class="ico">🔒</span>
-            <input type="password" id="resetPassword" required minlength="8" placeholder="••••••••" autocomplete="new-password">
-            <button type="button" class="toggle-eye" onclick="togglePass('resetPassword', this)">👁️</button>
-          </div>
+      <!-- ESTADO: VALIDANDO -->
+      <div id="s-loading" style="text-align:center">
+        <div style="font-size:56px;margin-bottom:16px;animation:pulse 1.4s ease-in-out infinite">🔐</div>
+        <h1>Validando link</h1>
+        <p class="auth-sub">Aguarde enquanto verificamos seu token de recuperação.</p>
+        <div style="margin-top:24px;display:flex;justify-content:center">
+          <div class="spinner"></div>
         </div>
-        <div class="field">
-          <label>Confirmar senha</label>
-          <div class="input-wrap">
-            <span class="ico">🔒</span>
-            <input type="password" id="resetConfirm" required minlength="8" placeholder="••••••••" autocomplete="new-password">
-            <button type="button" class="toggle-eye" onclick="togglePass('resetConfirm', this)">👁️</button>
+      </div>
+
+      <!-- ESTADO: FORM -->
+      <div id="s-form" style="display:none">
+        <img src="/assets/logo.png" alt="" style="height:52px;margin:0 auto 16px">
+        <h1>Definir nova senha</h1>
+        <p class="auth-sub" id="formSubtitle">Escolha uma senha forte.</p>
+
+        <form id="resetForm" autocomplete="off" novalidate>
+          <!-- Honeypot anti-bot -->
+          <input type="text" name="website" id="hp" style="position:absolute;left:-9999px;opacity:0" tabindex="-1" autocomplete="off">
+
+          <div class="field">
+            <label>Nova senha</label>
+            <div class="input-icon">
+              <span>🔒</span>
+              <input type="password" id="p1" required minlength="8" maxlength="128"
+                     autocomplete="new-password" placeholder="Mín. 8 caracteres">
+              <button type="button" class="btn-eye" onclick="togglePass('p1', this)">👁️</button>
+            </div>
+            <div id="strengthBar" class="strength-bar" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <div id="strengthLabel" class="strength-label"></div>
           </div>
+
+          <div class="field">
+            <label>Confirmar senha</label>
+            <div class="input-icon">
+              <span>🔒</span>
+              <input type="password" id="p2" required minlength="8" maxlength="128"
+                     autocomplete="new-password" placeholder="Repita a senha">
+              <button type="button" class="btn-eye" onclick="togglePass('p2', this)">👁️</button>
+            </div>
+            <div id="matchLabel" class="strength-label"></div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;margin-bottom:16px">
+            <span style="font-size:14px">⚠️</span>
+            <p style="font-size:12px;color:var(--txt-3);line-height:1.55;margin:0">
+              Ao redefinir, <strong>todas as sessões ativas serão encerradas</strong>. Você precisará fazer login novamente em todos os dispositivos.
+            </p>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="btnSubmit">
+            <span>✅ Salvar nova senha</span>
+          </button>
+
+          <div id="msg" class="msg"></div>
+        </form>
+
+        <div class="auth-links" style="margin-top:20px;justify-content:center">
+          <a href="/">← Voltar pro login</a>
         </div>
-        <button type="submit" id="btnReset" class="btn btn-block">✅ Salvar nova senha</button>
-      </form>
-
-      <div class="links" style="margin-top:18px;text-align:center">
-        <a href="/">← Voltar pro login</a>
       </div>
-      <div id="msg" class="msg"></div>
-    </div>
 
-    <!-- ESTADO: SUCESSO -->
-    <div id="state-success" style="display:none">
-      <div class="reset-icon success">✅</div>
-      <h1 style="background:linear-gradient(135deg,#fff,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Senha redefinida!</h1>
-      <p class="sub">Sua nova senha está ativa. Você pode fazer login agora.</p>
-      <div class="reset-actions">
-        <a href="/" class="btn">🚀 Ir pro login</a>
+      <!-- ESTADO: SUCESSO -->
+      <div id="s-success" style="display:none;text-align:center">
+        <div style="font-size:56px;margin-bottom:16px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1)">✅</div>
+        <h1 style="background:linear-gradient(135deg,#fff,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Senha alterada!</h1>
+        <p class="auth-sub">Sua nova senha já está ativa.<br>Todas as sessões foram encerradas por segurança.</p>
+        <a href="/" class="btn btn-success btn-block" style="margin-top:20px;text-decoration:none">
+          🚀 Ir pro login
+        </a>
+        <p class="hint" style="margin-top:14px">Redirecionando em <strong id="countdown">5</strong>s...</p>
       </div>
-    </div>
 
-    <!-- ESTADO: ERRO -->
-    <div id="state-error" style="display:none">
-      <div class="reset-icon error">❌</div>
-      <h1 style="background:linear-gradient(135deg,#fff,#fca5a5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Link inválido</h1>
-      <p class="sub" id="error-msg">O link de recuperação expirou ou é inválido.</p>
-      <div class="reset-actions">
-        <a href="/" class="btn btn-secondary">🏠 Voltar pro login</a>
+      <!-- ESTADO: ERRO -->
+      <div id="s-error" style="display:none;text-align:center">
+        <div style="font-size:56px;margin-bottom:16px">❌</div>
+        <h1 style="background:linear-gradient(135deg,#fff,#fca5a5);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Link inválido</h1>
+        <p class="auth-sub" id="errMsg">O link de recuperação expirou ou já foi usado.</p>
+
+        <div class="btn-row" style="margin-top:20px;justify-content:center">
+          <a href="/" class="btn btn-ghost" style="text-decoration:none">🏠 Ir pro login</a>
+          <button class="btn btn-primary" id="btnResendFromError">📧 Pedir novo link</button>
+        </div>
+
+        <div id="errResendMsg" class="msg"></div>
       </div>
+
     </div>
   </div>
 </div>
 
 <div id="toast" class="toast"></div>
 
+<style>
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(.94)} }
+@keyframes popIn { from{opacity:0;transform:scale(0)} to{opacity:1;transform:scale(1)} }
+.strength-bar { display:flex;gap:4px;margin-top:8px;height:5px; }
+.strength-bar span { flex:1; background:rgba(255,255,255,.08); border-radius:3px; transition:background .25s; }
+.strength-bar.s1 span:nth-child(1) { background:#ef4444; }
+.strength-bar.s2 span:nth-child(-n+2) { background:#f59e0b; }
+.strength-bar.s3 span:nth-child(-n+3) { background:#3b82f6; }
+.strength-bar.s4 span { background:#22c55e; }
+.strength-label { font-size:11px; margin-top:6px; font-weight:600; min-height:14px; }
+</style>
+
 <script>
 (function () {
-  const hashParams = new URLSearchParams(location.hash.substring(1));
-  const queryParams = new URLSearchParams(location.search);
+  'use strict';
 
-  // Token pode vir de 2 lugares
-  const hashToken = hashParams.get('access_token');
-  const queryToken = queryParams.get('token');
-  const errorDesc = queryParams.get('error_description') || hashParams.get('error_description');
+  // ═══ EXTRAI TOKEN E LIMPA URL IMEDIATAMENTE ═══
+  const hash = new URLSearchParams(location.hash.substring(1));
+  const query = new URLSearchParams(location.search);
 
-  const elLoading = document.getElementById('state-loading');
-  const elForm = document.getElementById('state-form');
-  const elSuccess = document.getElementById('state-success');
-  const elError = document.getElementById('state-error');
-  const elErrMsg = document.getElementById('error-msg');
-  const elMsg = document.getElementById('msg');
+  const accessToken = hash.get('access_token') || query.get('access_token');
+  const customToken = query.get('token');
+  const errDesc = query.get('error_description') || hash.get('error_description');
+  const token = accessToken || customToken;
 
-  function show(id) {
-    [elLoading, elForm, elSuccess, elError].forEach(x => x && (x.style.display = 'none'));
-    document.getElementById(id).style.display = 'block';
+  // ⚡ Limpa URL para não vazar token em histórico/referer/logs
+  try { history.replaceState(null, '', location.pathname); } catch {}
+
+  // ═══ ESTADO ═══
+  let attempts = 0;
+  const MAX_ATTEMPTS = 5;
+  let submitting = false;
+  let submittedOk = false;
+
+  // ═══ REFS ═══
+  const $ = (id) => document.getElementById(id);
+  const card = $('card');
+  const sLoad = $('s-loading'), sForm = $('s-form'), sOk = $('s-success'), sErr = $('s-error');
+  const form = $('resetForm'), msg = $('msg');
+  const btn = $('btnSubmit');
+
+  function show(state) {
+    [sLoad, sForm, sOk, sErr].forEach(el => el && (el.style.display = 'none'));
+    state && (state.style.display = 'block');
   }
 
-  function showMsg(text, type = 'error') {
-    if (!elMsg) return;
-    elMsg.textContent = text;
-    elMsg.className = 'msg ' + type;
-    elMsg.style.display = 'block';
+  function setMsg(text, type = 'error') {
+    if (!msg) return;
+    if (!text) { msg.style.display = 'none'; msg.textContent = ''; return; }
+    msg.textContent = text;
+    msg.className = `msg ${type}`;
+    msg.style.display = 'block';
   }
 
   function toast(text, type = 'ok') {
-    const t = document.getElementById('toast');
-    if (!t) return;
-    t.textContent = text;
-    t.className = `toast ${type} active`;
-    clearTimeout(t._t);
-    t._t = setTimeout(() => t.classList.remove('active'), 3500);
+    const el = $('toast');
+    if (!el) return;
+    el.textContent = text;
+    el.className = `toast ${type} active`;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('active'), 3200);
   }
 
-  // ═══ Decide o token ═══
-  let token = null;
-  let tokenKind = null;
+  window.togglePass = function (id, btnEl) {
+    const el = $(id);
+    if (!el) return;
+    const p = el.type === 'password';
+    el.type = p ? 'text' : 'password';
+    btnEl.textContent = p ? '🙈' : '👁️';
+  };
 
-  if (errorDesc) {
-    elErrMsg.textContent = decodeURIComponent(errorDesc);
-    return show('state-error');
+  // ═══ ERROS DA URL ═══
+  if (errDesc) {
+    $('errMsg').textContent = decodeURIComponent(errDesc);
+    show(sErr);
+    return;
   }
-  if (hashToken) { token = hashToken; tokenKind = 'supabase'; }
-  else if (queryToken) { token = queryToken; tokenKind = 'custom'; }
 
   if (!token) {
-    elErrMsg.textContent = 'Nenhum token de recuperação foi encontrado no link.';
-    return show('state-error');
+    $('errMsg').textContent = 'Nenhum token foi encontrado no link. Solicite um novo.';
+    show(sErr);
+    return;
   }
 
-  // ═══ Mostra o form ═══
-  show('state-form');
+  // ═══ VALIDA TOKEN SERVER-SIDE ANTES DE MOSTRAR FORM ═══
+  (async () => {
+    try {
+      const r = await fetch('/api/auth/validate-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(accessToken ? { access_token: accessToken } : { token: customToken }),
+      });
+      const d = await r.json();
 
-  // ═══ Submit ═══
-  document.getElementById('resetForm').addEventListener('submit', async (e) => {
+      if (!d.ok || !d.valid) {
+        $('errMsg').textContent = d.error || 'Link inválido ou expirado.';
+        show(sErr);
+        return;
+      }
+
+      // Se tiver email mascarado, mostra
+      if (d.email_masked) {
+        $('formSubtitle').innerHTML = `Redefinindo senha de <strong>${escapeHtml(d.email_masked)}</strong>.`;
+      }
+
+      show(sForm);
+      setTimeout(() => $('p1')?.focus(), 100);
+    } catch (e) {
+      $('errMsg').textContent = 'Erro de conexão. Tente novamente.';
+      show(sErr);
+    }
+  })();
+
+  // ═══ FORÇA DA SENHA ═══
+  $('p1')?.addEventListener('input', () => {
+    const v = $('p1').value;
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (v.length >= 12) score++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+    if (/\d/.test(v) && /[^A-Za-z0-9]/.test(v)) score++;
+
+    const bar = $('strengthBar');
+    bar.className = 'strength-bar';
+    if (score) bar.classList.add('s' + score);
+
+    const labels = ['', 'Fraca', 'Média', 'Boa', 'Forte'];
+    const colors = ['', '#ef4444', '#f59e0b', '#3b82f6', '#22c55e'];
+    const lab = $('strengthLabel');
+    if (lab) {
+      lab.textContent = v ? labels[score] || '' : '';
+      lab.style.color = colors[score] || '';
+    }
+    checkMatch();
+  });
+
+  $('p2')?.addEventListener('input', checkMatch);
+
+  function checkMatch() {
+    const p1 = $('p1').value, p2 = $('p2').value;
+    const lab = $('matchLabel');
+    if (!lab) return;
+    if (!p2) { lab.textContent = ''; return; }
+    if (p1 === p2 && p2.length >= 8) {
+      lab.textContent = '✓ Senhas coincidem';
+      lab.style.color = '#22c55e';
+    } else if (p1 !== p2) {
+      lab.textContent = '✗ Senhas diferentes';
+      lab.style.color = '#ef4444';
+    } else {
+      lab.textContent = '';
+    }
+  }
+
+  // ═══ SUBMIT ═══
+  form?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const p1 = document.getElementById('resetPassword').value;
-    const p2 = document.getElementById('resetConfirm').value;
 
-    if (p1 !== p2) return showMsg('As senhas não coincidem.');
-    if (p1.length < 8) return showMsg('Senha muito curta (mín. 8 caracteres).');
+    if (submittedOk) return;
+    if (submitting) return;
 
-    const btn = document.getElementById('btnReset');
+    // Honeypot
+    if ($('hp').value) return;
+
+    // Cooldown
+    if (attempts >= MAX_ATTEMPTS) {
+      setMsg('Muitas tentativas. Aguarde 15 minutos antes de tentar novamente.');
+      return;
+    }
+
+    const p1 = $('p1').value;
+    const p2 = $('p2').value;
+
+    if (p1 !== p2) return setMsg('As senhas não coincidem.');
+    if (p1.length < 8) return setMsg('A senha deve ter pelo menos 8 caracteres.');
+    if (p1.length > 128) return setMsg('A senha é muito longa (máx 128).');
+
+    submitting = true;
+    attempts++;
     btn.disabled = true;
-    btn.textContent = 'Salvando…';
+    btn.querySelector('span').textContent = '⏳ Salvando...';
+    setMsg('');
 
     try {
-      const body = tokenKind === 'supabase'
-        ? { access_token: token, new_password: p1 }
-        : { token, new_password: p1 };
+      const body = accessToken
+        ? { access_token: accessToken, new_password: p1 }
+        : { token: customToken, new_password: p1 };
 
       const r = await fetch('/api/auth/update-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(body),
       });
+
       const d = await r.json();
 
       if (!r.ok || d.ok === false) {
-        showMsg(d.error || 'Erro ao redefinir a senha.');
+        setMsg(d.error || 'Erro ao redefinir a senha.');
         btn.disabled = false;
-        btn.textContent = '✅ Salvar nova senha';
+        btn.querySelector('span').textContent = '✅ Salvar nova senha';
+        submitting = false;
         return;
       }
 
-      toast('Senha alterada com sucesso!');
-      show('state-success');
+      // SUCESSO
+      submittedOk = true;
+      toast('Senha alterada!');
+      show(sOk);
 
-      // Limpa a URL (evita refresh acidental reusando o token)
-      history.replaceState(null, '', '/reset.html');
-
-      // Redireciona em 4s
-      setTimeout(() => { location.href = '/'; }, 4000);
-    } catch (err) {
-      showMsg('Erro de conexão. Tente novamente.');
+      // Contador pro login
+      let s = 5;
+      const cd = $('countdown');
+      const id = setInterval(() => {
+        s--;
+        if (cd) cd.textContent = s;
+        if (s <= 0) { clearInterval(id); location.href = '/'; }
+      }, 1000);
+    } catch {
+      setMsg('Erro de conexão. Tente novamente.');
       btn.disabled = false;
-      btn.textContent = '✅ Salvar nova senha';
+      btn.querySelector('span').textContent = '✅ Salvar nova senha';
+      submitting = false;
     }
   });
 
-  // Toggle password
-  window.togglePass = function (id, btn) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const p = el.type === 'password';
-    el.type = p ? 'text' : 'password';
-    btn.textContent = p ? '🙈' : '👁️';
-  };
+  // ═══ REENVIAR NO ERRO ═══
+  $('btnResendFromError')?.addEventListener('click', async () => {
+    const btnR = $('btnResendFromError');
+    const em = $('errResendMsg');
+    btnR.disabled = true;
+    btnR.textContent = '⏳ Enviando...';
+
+    if (!customToken) {
+      em.textContent = '⚠️ Não é possível reenviar. Volte ao login e use "Esqueci minha senha".';
+      em.className = 'msg error';
+      em.style.display = 'block';
+      btnR.disabled = false;
+      btnR.textContent = '📧 Pedir novo link';
+      return;
+    }
+
+    try {
+      const r = await fetch('/api/auth/resend-confirmation-by-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token: customToken }),
+      });
+      const d = await r.json();
+
+      if (r.ok && d.ok !== false) {
+        em.textContent = '✅ Verifique sua caixa de entrada.';
+        em.className = 'msg ok';
+      } else {
+        em.textContent = '❌ ' + (d.error || 'Erro ao reenviar.');
+        em.className = 'msg error';
+      }
+      em.style.display = 'block';
+    } catch {
+      em.textContent = '❌ Erro de conexão.';
+      em.className = 'msg error';
+      em.style.display = 'block';
+    }
+    btnR.disabled = false;
+    btnR.textContent = '📧 Pedir novo link';
+  });
+
+  // ═══ UTIL ═══
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ═══ ANTI-CLICKJACK ═══
+  if (window.top !== window.self) {
+    try { window.top.location = window.self.location; } catch {}
+  }
+
+  // ═══ BLOQUEIA COLAR NO CAMPO DE SENHA? NÃO. ═══
+  // Deixa colar (gestor de senha) — não restringimos
+
+  // ═══ ANTI-DEVTOOLS SIMPLE (aviso apenas) ═══
+  // Não bloqueia devtools, mas evita ações automáticas ao perder foco
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && submitting) {
+      // Se esconder durante submit, ignora (não é ação do usuário)
+    }
+  });
 })();
 </script>
 </body>

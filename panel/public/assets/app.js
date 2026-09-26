@@ -1,1397 +1,1763 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL v5.0 — Frontend + Charts + Command Palette + Dev Servers
+// FRIO PANEL — app.js v5.1.3
+// Auth + SPA Router + Pages + Modals + Command Palette
 // ═══════════════════════════════════════════════════════════
+'use strict';
 
-const $  = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const APP = {
+  user: null,
+  admin: null,
+  csrf: null,
+  currentPage: 'dashboard',
+  notifications: [],
+  unread: 0,
+  charts: {},
+  auditPage: 0,
+  auditFilters: {},
+  currentServerActions: null,
+  currentUserSessions: null,
+  cache: {},
+};
 
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+const ROLES_LABEL = { dev: '👑 DEV', admin: '🛡️ ADMIN', funcionario: '🔧 FUNCIONÁRIO', cliente: '👤 CLIENTE', pending: '⏳ PENDING' };
+const PLANS_LABEL = { basic: '🥉 Basic', premium: '🥈 Premium', ultra: '🥇 Ultra', unlimited: '💎 Unlimited', none: '— Sem plano' };
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS — DOM
+// ═══════════════════════════════════════════════════════════
+const $ = (id) => document.getElementById(id);
+const $$ = (sel) => document.querySelectorAll(sel);
+const createEl = (tag, attrs = {}, ...children) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') el.className = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (v !== null && v !== undefined) el.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined) continue;
+    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return el;
+};
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS — FORMAT
+// ═══════════════════════════════════════════════════════════
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  return d.toLocaleString('pt-BR');
 }
-function fmtDate(d)      { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
-function fmtDateShort(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
-function brl(v)          { return `R$ ${Number(v || 0).toFixed(2)}`; }
-function timeAgo(d) {
-  if (!d) return '—';
-  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
-  if (s < 60) return 'agora';
-  if (s < 3600) return `${Math.floor(s/60)}min`;
-  if (s < 86400) return `${Math.floor(s/3600)}h`;
-  if (s < 2592000) return `${Math.floor(s/86400)}d`;
-  return fmtDateShort(d);
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  return d.toLocaleDateString('pt-BR');
+}
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return `${Math.floor(diff)}s atrás`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d atrás`;
+  return fmtDateShort(iso);
+}
+function fmtBRL(v) {
+  return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+function fmtNumber(v) {
+  return Number(v || 0).toLocaleString('pt-BR');
 }
 
-const api = async (url, opts = {}) => {
-  const token = localStorage.getItem('sb_token');
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+let _toastTimer = null;
+function toast(msg, type = 'ok') {
+  const t = $('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = `toast ${type} active`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('active'), 3500);
+}
+
+// ═══════════════════════════════════════════════════════════
+// MSG (inline em forms)
+// ═══════════════════════════════════════════════════════════
+function setMsg(id, text, type = 'error') {
+  const el = $(id);
+  if (!el) return;
+  if (!text) { el.style.display = 'none'; return; }
+  el.textContent = text;
+  el.className = `msg ${type}`;
+  el.style.display = 'block';
+}
+function clearMsg(...ids) { ids.forEach(id => setMsg(id, '')); }
+
+// ═══════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════
+function openModal(id) {
+  const m = $(id);
+  if (!m) return;
+  m.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  const m = $(id);
+  if (!m) return;
+  m.classList.remove('active');
+  document.body.style.overflow = '';
+}
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.togglePass = (id, btn) => {
+  const el = $(id);
+  if (!el) return;
+  const p = el.type === 'password';
+  el.type = p ? 'text' : 'password';
+  btn.textContent = p ? '🙈' : '👁️';
+};
+
+// ═══════════════════════════════════════════════════════════
+// FETCH com CSRF + credentials
+// ═══════════════════════════════════════════════════════════
+async function api(path, opts = {}) {
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...(opts.headers || {}),
   };
-  const r = await fetch(url, { credentials: 'include', ...opts, headers });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    if (r.status === 401) localStorage.removeItem('sb_token');
-    const err = new Error(j.error || `HTTP ${r.status}`);
-    err.code = j.code; err.status = r.status;
-    throw err;
+  // CSRF
+  if (APP.csrf && ['POST', 'PATCH', 'PUT', 'DELETE'].includes((opts.method || 'GET').toUpperCase())) {
+    headers['x-csrf-token'] = APP.csrf;
   }
-  return j;
-};
-
-const state = {
-  user: null, admin: null, role: null, plan: 'basic',
-  pollTimer: null, currentPage: 'dashboard',
-  notifications: [], unread: 0,
-  currentServer: null,
-  cachedUsers: [], cachedKeys: [],
-  charts: {},
-};
-
-const PLAN_LABEL = { basic: '🥉 Basic', premium: '🥈 Premium', ultra: '🥇 Ultra', unlimited: '💎 Unlimited', none: '—' };
-
-function applyTheme(plan) {
-  const p = ['basic', 'premium', 'ultra', 'unlimited'].includes(plan) ? plan : 'basic';
-  document.body.classList.remove('theme-basic', 'theme-premium', 'theme-ultra', 'theme-unlimited');
-  document.body.classList.add(`theme-${p}`);
-  state.plan = p;
-}
-
-function toast(text, type = 'ok', ms = 3200) {
-  const t = $('#toast'); if (!t) return;
-  t.textContent = text; t.className = `toast ${type} active`;
-  clearTimeout(t._t);
-  t._t = setTimeout(() => t.classList.remove('active'), ms);
-}
-window.closeModal = (id) => $('#' + id)?.classList.remove('active');
-function openModal(id) { $('#' + id)?.classList.add('active'); }
-function showMsg(el, text, type = 'error') {
-  const e = typeof el === 'string' ? $(el) : el; if (!e) return;
-  e.textContent = text; e.className = `msg ${type}`; e.style.display = 'block';
-  if (type === 'ok') setTimeout(() => { e.style.display = 'none'; }, 4500);
-}
-function showView(name) {
-  ['login', 'register', 'reset'].forEach(v => { const el = $(`#view-${v}`); if (el) el.style.display = v === name ? 'flex' : 'none'; });
-  const app = $('#view-app'); if (app) app.classList.toggle('active', name === 'app');
-}
-function buildSidebar() {
-  const role = state.role;
-  $$('#sidebar a[data-nav]').forEach(a => {
-    const roles = (a.dataset.roles || '').split(',').filter(Boolean);
-    const allowed = !roles.length || roles.includes(role);
-    a.classList.toggle('hidden', !allowed);
+  const res = await fetch(path, {
+    credentials: 'include',
+    ...opts,
+    headers,
   });
-  $$('#sidebar .section-title').forEach(st => {
-    if (st.classList.contains('dev-only')) st.classList.toggle('hidden', role !== 'dev');
-    if (st.classList.contains('admin-only')) st.classList.toggle('hidden', !['dev','admin'].includes(role));
-  });
-}
-function openSidebar()  { $('#sidebar')?.classList.add('open'); $('#sidebarOverlay')?.classList.add('active'); }
-function closeSidebar() { $('#sidebar')?.classList.remove('open'); $('#sidebarOverlay')?.classList.remove('active'); }
-
-function goToPage(name) {
-  state.currentPage = name;
-  $$('#sidebar a[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === name));
-  $$('.app-main .page').forEach(p => p.classList.toggle('active', p.id === `page-${name}`));
-  closeSidebar();
-  if (name === 'dashboard')            renderDashboard();
-  if (name === 'keys')                 { loadKeys(); loadRedemptions(); }
-  if (name === 'packs')                loadPacks();
-  if (name === 'servers')              loadServers();
-  if (name === 'my-keys')              loadMyKeys();
-  if (name === 'notifications')        { renderNotifPage(); loadNotifications(); }
-  if (name === 'tickets-global')       loadTicketsGlobal();
-  if (name === 'financial')            loadFinancial();
-  if (name === 'usuarios')             loadUsers();
-  if (name === 'pending')              loadPending();
-  if (name === 'logs')                 loadLogs();
-  if (name === 'kill-switch')          loadKillSwitch();
-  if (name === 'maintenance')          loadMaintenance();
-  if (name === 'force-premium')        loadForcePremium();
-  if (name === 'dev-servers')          loadDevServers();
-  if (name === 'dev-server-search')    { const el = $('#devServerLookupId'); if (el) { el.value = ''; el.focus(); } }
-}
-
-async function boot() {
-  const hash = new URLSearchParams(window.location.hash.substring(1));
-  const resetToken = hash.get('access_token');
-  if (resetToken) { window.__RESET_TOKEN__ = resetToken; showView('reset'); return; }
-  const token = localStorage.getItem('sb_token');
-  if (!token) { showView('login'); return; }
-  try { const me = await api('/api/auth/me'); hydrateApp(me); }
-  catch (err) { if (err.status === 401) localStorage.removeItem('sb_token'); showView('login'); }
-}
-
-function hydrateApp({ user, admin }) {
-  state.user = user; state.admin = admin; state.role = admin.role;
-  applyTheme(admin.plan || 'basic');
-  $('#userEmail').textContent = user.email;
-  const rl = $('#userRole'); if (rl) { rl.textContent = admin.role.toUpperCase(); rl.className = `badge ${admin.role}`; }
-  const up = $('#userPlan'); if (up) { up.textContent = PLAN_LABEL[admin.plan] || '—'; }
-  const dr = $('#dashRole'); if (dr) { dr.textContent = admin.role.toUpperCase(); dr.className = `badge ${admin.role}`; }
-  const dp = $('#dashPlan'); if (dp) { dp.textContent = PLAN_LABEL[admin.plan] || '—'; }
-  const btnSync = $('#btnSyncServers');
-  if (btnSync && admin.role === 'dev') btnSync.style.display = 'inline-flex';
-  buildSidebar(); showView('app'); renderDashboard(); loadNotifications(); startPolling();
+  let data = null;
+  try { data = await res.json(); } catch { data = { ok: false, error: 'Resposta inválida' }; }
+  if (!res.ok && data && !data.ok) data._status = res.status;
+  return data;
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMMAND PALETTE (Ctrl+K)
+// VIEWS (login / register / reset / app)
 // ═══════════════════════════════════════════════════════════
-const CMD_ACTIONS = [
-  { icon: '📊', label: 'Dashboard',        nav: 'dashboard' },
-  { icon: '🔑', label: 'Keys Premium',     nav: 'keys', roles: ['dev','admin','funcionario'] },
-  { icon: '📦', label: 'Packs',            nav: 'packs', roles: ['dev'] },
-  { icon: '🌐', label: 'Meus Servidores',  nav: 'servers' },
-  { icon: '🎁', label: 'Minhas Keys',      nav: 'my-keys' },
-  { icon: '🔔', label: 'Notificações',     nav: 'notifications' },
-  { icon: '🎫', label: 'Tickets Global',   nav: 'tickets-global', roles: ['dev','admin'] },
-  { icon: '💰', label: 'Financeiro',       nav: 'financial', roles: ['dev','admin'] },
-  { icon: '🛰️', label: 'Gerenciar Servidores', nav: 'dev-servers', roles: ['dev'] },
-  { icon: '🔎', label: 'Buscar Servidor',  nav: 'dev-server-search', roles: ['dev'] },
-  { icon: '🚨', label: 'Kill Switch',      nav: 'kill-switch', roles: ['dev'] },
-  { icon: '🔧', label: 'Manutenção',       nav: 'maintenance', roles: ['dev'] },
-  { icon: '💎', label: 'Force Premium',    nav: 'force-premium', roles: ['dev'] },
-  { icon: '📢', label: 'Broadcast',        nav: 'broadcast', roles: ['dev'] },
-  { icon: '💾', label: 'Backup',           nav: 'backup', roles: ['dev'] },
-  { icon: '👥', label: 'Usuários',         nav: 'usuarios', roles: ['dev'] },
-  { icon: '⏳', label: 'Aprovações',       nav: 'pending', roles: ['dev'] },
-  { icon: '📋', label: 'Logs',             nav: 'logs', roles: ['dev'] },
-];
-
-let cmdSelectedIdx = 0;
-let cmdFiltered = [];
-
-function openCmdPalette() {
-  const el = $('#cmdPalette'); if (!el) return;
-  el.classList.add('active');
-  const input = $('#cmdInput');
-  if (input) { input.value = ''; input.focus(); }
-  renderCmdResults('');
-}
-function closeCmdPalette() { $('#cmdPalette')?.classList.remove('active'); }
-
-function renderCmdResults(q) {
-  const role = state.role || 'cliente';
-  const query = q.toLowerCase().trim();
-  cmdFiltered = CMD_ACTIONS.filter(a => {
-    if (a.roles && !a.roles.includes(role)) return false;
-    if (!query) return true;
-    return a.label.toLowerCase().includes(query);
+function showAuthView(id) {
+  ['view-login', 'view-register', 'view-reset'].forEach(x => {
+    const el = $(x);
+    if (el) el.classList.toggle('active', x === id);
   });
-  cmdSelectedIdx = 0;
-  const res = $('#cmdResults');
-  if (!res) return;
-  if (!cmdFiltered.length) { res.innerHTML = '<div class="empty" style="padding:24px">Nada encontrado</div>'; return; }
-  res.innerHTML = cmdFiltered.map((a, i) => `<div class="cmd-item ${i === cmdSelectedIdx ? 'active' : ''}" data-idx="${i}">
-    <span class="cmd-ico">${a.icon}</span>
-    <span class="cmd-label">${escapeHtml(a.label)}</span>
-    <span class="cmd-hint">→</span>
-  </div>`).join('');
-  res.querySelectorAll('.cmd-item').forEach(el => el.addEventListener('click', () => {
-    const a = cmdFiltered[Number(el.dataset.idx)];
-    if (a) { closeCmdPalette(); goToPage(a.nav); }
-  }));
+  $('view-app').classList.remove('active');
 }
-function navigateCmd(delta) {
-  if (!cmdFiltered.length) return;
-  cmdSelectedIdx = (cmdSelectedIdx + delta + cmdFiltered.length) % cmdFiltered.length;
-  $$('#cmdResults .cmd-item').forEach((el, i) => el.classList.toggle('active', i === cmdSelectedIdx));
-  $$('#cmdResults .cmd-item')[cmdSelectedIdx]?.scrollIntoView({ block: 'nearest' });
+function showApp() {
+  ['view-login', 'view-register', 'view-reset'].forEach(x => $(x)?.classList.remove('active'));
+  $('view-app').classList.add('active');
 }
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault();
-    const el = $('#cmdPalette');
-    if (el?.classList.contains('active')) closeCmdPalette(); else openCmdPalette();
-    return;
-  }
-  const palette = $('#cmdPalette');
-  if (!palette?.classList.contains('active')) return;
-  if (e.key === 'Escape') { e.preventDefault(); closeCmdPalette(); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); navigateCmd(1); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); navigateCmd(-1); }
-  else if (e.key === 'Enter') {
-    e.preventDefault();
-    const a = cmdFiltered[cmdSelectedIdx];
-    if (a) { closeCmdPalette(); goToPage(a.nav); }
+
+// ═══════════════════════════════════════════════════════════
+// AUTH — LOGIN
+// ═══════════════════════════════════════════════════════════
+$('loginForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearMsg('loginMsg');
+  const btn = $('btnLogin');
+  const label = btn.querySelector('span');
+  const orig = label.textContent;
+  btn.disabled = true; label.textContent = '⏳ Entrando...';
+
+  try {
+    const r = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: $('loginEmail').value.trim(),
+        password: $('loginPassword').value,
+      }),
+    });
+
+    if (!r.ok) {
+      if (r.code === 'EMAIL_NOT_CONFIRMED') {
+        setMsg('loginMsg', '⚠️ Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.');
+      } else if (r.code === 'PENDING') {
+        setMsg('loginMsg', '⏳ Aguarde aprovação do DEV.');
+      } else {
+        setMsg('loginMsg', r.error || 'Erro ao entrar.');
+      }
+      btn.disabled = false; label.textContent = orig;
+      return;
+    }
+
+    APP.user = r.user;
+    APP.admin = r.admin;
+    APP.csrf = r.csrf;
+    sessionStorage.setItem('frio_admin', JSON.stringify(r.admin));
+
+    await bootApp();
+  } catch (err) {
+    setMsg('loginMsg', 'Erro de conexão.');
+    btn.disabled = false; label.textContent = orig;
   }
 });
-$('#btnCmdTrigger')?.addEventListener('click', openCmdPalette);
-$('#cmdInput')?.addEventListener('input', e => renderCmdResults(e.target.value));
-$('#cmdPalette')?.addEventListener('click', e => { if (e.target === $('#cmdPalette')) closeCmdPalette(); });
+
+// ═══════════════════════════════════════════════════════════
+// AUTH — REGISTER
+// ═══════════════════════════════════════════════════════════
+$('btnShowRegister')?.addEventListener('click', () => showAuthView('view-register'));
+$('linkBackLogin')?.addEventListener('click', () => showAuthView('view-login'));
+
+$('registerForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearMsg('registerMsg');
+
+  const p1 = $('regPassword').value;
+  const p2 = $('regConfirm').value;
+  const discord = ($('regDiscord').value || '').trim();
+
+  if (!discord) return setMsg('registerMsg', '⚠️ ID do Discord é obrigatório.');
+  if (!/^\d{15,25}$/.test(discord)) return setMsg('registerMsg', '⚠️ ID do Discord inválido (15-25 dígitos).');
+  if (p1 !== p2) return setMsg('registerMsg', '⚠️ As senhas não coincidem.');
+  if (p1.length < 8) return setMsg('registerMsg', '⚠️ Senha deve ter pelo menos 8 caracteres.');
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const label = btn.querySelector('span');
+  const orig = label.textContent;
+  btn.disabled = true; label.textContent = '⏳ Criando...';
+
+  try {
+    const r = await api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: $('regEmail').value.trim(),
+        password: p1,
+        discord_id: discord,
+        username: $('regUsername')?.value.trim() || undefined,
+      }),
+    });
+
+    if (!r.ok) {
+      setMsg('registerMsg', r.error || 'Erro ao criar conta.');
+      btn.disabled = false; label.textContent = orig;
+      return;
+    }
+
+    setMsg('registerMsg', '✅ Conta criada! Verifique seu e-mail para confirmar.', 'ok');
+    toast('Conta criada! Verifique o e-mail.', 'ok');
+    e.target.reset();
+    setTimeout(() => showAuthView('view-login'), 2500);
+  } catch {
+    setMsg('registerMsg', 'Erro de conexão.');
+    btn.disabled = false; label.textContent = orig;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// AUTH — FORGOT
+// ═══════════════════════════════════════════════════════════
+$('linkForgot')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  $('forgotEmail').value = $('loginEmail').value;
+  openModal('modalForgot');
+});
+$('btnSendForgot')?.addEventListener('click', async () => {
+  const email = $('forgotEmail').value.trim();
+  if (!email) return toast('Informe o e-mail', 'error');
+  try {
+    const r = await api('/api/auth/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    toast(r.message || 'Se o e-mail existir, enviaremos instruções.', 'ok');
+    closeModal('modalForgot');
+  } catch { toast('Erro de conexão', 'error'); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// AUTH — LOGOUT
+// ═══════════════════════════════════════════════════════════
+$('btnLogout')?.addEventListener('click', async () => {
+  if (!confirm('Sair da conta?')) return;
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear();
+  location.reload();
+});
+
+// ═══════════════════════════════════════════════════════════
+// BOOT DO APP
+// ═══════════════════════════════════════════════════════════
+async function bootApp() {
+  showApp();
+
+  // Preenche header
+  $('userEmail').textContent = APP.user.email;
+  $('userRole').textContent = ROLES_LABEL[APP.admin.role] || APP.admin.role;
+  $('userPlan').textContent = PLANS_LABEL[APP.admin.plan] || APP.admin.plan || '—';
+
+  // Marca role no body
+  document.body.dataset.role = APP.admin.role;
+  document.body.dataset.plan = APP.admin.plan || 'none';
+
+  // Esconde itens proibidos
+  $$('[data-roles]').forEach(el => {
+    const roles = el.dataset.roles.split(',').map(r => r.trim());
+    if (!roles.includes(APP.admin.role)) el.style.display = 'none';
+  });
+
+  // Setup navegação
+  bindNav();
+  bindCommandPalette();
+  bindNotifications();
+
+  // Carrega dashboard
+  await navigate('dashboard');
+
+  // Polling de notificações a cada 30s
+  loadNotifications();
+  setInterval(loadNotifications, 30000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// NAVEGAÇÃO (SPA)
+// ═══════════════════════════════════════════════════════════
+function bindNav() {
+  $$('aside.sidebar nav a[data-nav]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = a.dataset.nav;
+      navigate(page);
+    });
+  });
+
+  // Hamburger mobile
+  $('btnHamburger')?.addEventListener('click', () => {
+    $('sidebar')?.classList.add('open');
+    $('sidebarOverlay')?.classList.add('active');
+  });
+  $('sidebarOverlay')?.addEventListener('click', () => {
+    $('sidebar')?.classList.remove('open');
+    $('sidebarOverlay')?.classList.remove('active');
+  });
+}
+
+async function navigate(page) {
+  APP.currentPage = page;
+
+  // Esconde todas as páginas
+  $$('section.page').forEach(s => s.classList.remove('active'));
+  const target = $(`page-${page}`);
+  if (!target) return;
+  target.classList.add('active');
+
+  // Marca link ativo
+  $$('aside.sidebar nav a[data-nav]').forEach(a => {
+    a.classList.toggle('active', a.dataset.nav === page);
+  });
+
+  // Fecha sidebar mobile
+  $('sidebar')?.classList.remove('open');
+  $('sidebarOverlay')?.classList.remove('active');
+
+  // Scrolla pro topo
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Executa loader da página
+  try {
+    switch (page) {
+      case 'dashboard': await loadDashboard(); break;
+      case 'keys': await loadKeys(); break;
+      case 'packs': await loadPacks(); break;
+      case 'servers': await loadServers(); break;
+      case 'my-keys': await loadMyKeys(); break;
+      case 'sessions': await loadSessions(); break;
+      case 'notifications': await loadNotificationsPage(); break;
+      case 'tickets-global': await loadTicketsGlobal(); break;
+      case 'financial': await loadFinancial(); break;
+      case 'dev-servers': await loadDevServers(); break;
+      case 'dev-server-search': break;
+      case 'kill-switch': await loadKillSwitch(); break;
+      case 'maintenance': await loadMaintenance(); break;
+      case 'force-premium': await loadForcePremium(); break;
+      case 'broadcast': break;
+      case 'backup': break;
+      case 'usuarios': await loadUsuarios(); break;
+      case 'pending': await loadPending(); break;
+      case 'logs': await loadAudit(); break;
+    }
+  } catch (e) { console.error('[navigate]', page, e); }
+}
+window.navigate = navigate;
 
 // ═══════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════
-async function renderDashboard() {
-  const grid = $('#dashStats');
-  const charts = $('#dashCharts');
-  if (!grid) return;
-  grid.innerHTML = '<div class="loading">Carregando…</div>';
-  charts.innerHTML = '';
+async function loadDashboard() {
+  const wrap = $('dashStats');
+  wrap.innerHTML = '<div class="card">⏳ Carregando...</div>';
 
   try {
-    const stats = await api('/api/dashboard/stats');
+    const r = await api('/api/dashboard/stats');
+    if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+    const s = r.stats;
 
-    if (state.role === 'cliente' || state.role === 'funcionario') {
-      grid.innerHTML = `
-        <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${stats.stats.servers || 0}</div><div class="lbl">Servidores</div></div></div>
-        <div class="stat-mini"><div class="ico-box">🎁</div><div class="info"><div class="num">${stats.stats.keys || 0}</div><div class="lbl">Keys Recebidas</div></div></div>
-        <div class="stat-mini"><div class="ico-box">🔔</div><div class="info"><div class="num">${stats.stats.notifs || 0}</div><div class="lbl">Não Lidas</div></div></div>
-      `;
-      return;
+    const cards = [
+      { icon: '🌐', label: 'Servidores', value: fmtNumber(s.guilds || s.servers || 0), color: 'blue' },
+      { icon: '👥', label: 'Usuários', value: fmtNumber(s.users || 0), color: 'green' },
+      { icon: '🔑', label: 'Keys ativas', value: fmtNumber(s.active_keys || 0), color: 'amber' },
+      { icon: '🎁', label: 'Redenções', value: fmtNumber(s.redemptions || 0), color: 'blue' },
+      { icon: '⏳', label: 'Pendentes', value: fmtNumber(s.pending || 0), color: 'red' },
+      { icon: '👥', label: 'Membros totais', value: fmtNumber(s.total_members || 0), color: 'green' },
+    ];
+    wrap.innerHTML = cards.map(c => `
+      <div class="stat-card">
+        <div class="stat-icon ${c.color}">${c.icon}</div>
+        <div class="stat-body">
+          <div class="stat-value">${escapeHtml(c.value)}</div>
+          <div class="stat-label">${escapeHtml(c.label)}</div>
+        </div>
+      </div>
+    `).join('');
+
+    // Charts (só se staff)
+    if (['dev', 'admin', 'funcionario'].includes(APP.admin.role)) {
+      const rc = await api('/api/dashboard/charts');
+      if (rc.ok) renderDashboardCharts(rc.charts);
     }
-
-    const s = stats.stats;
-    grid.innerHTML = `
-      <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${s.guilds || 0}</div><div class="lbl">Servidores</div></div></div>
-      <div class="stat-mini"><div class="ico-box">👥</div><div class="info"><div class="num">${s.users || 0}</div><div class="lbl">Usuários</div></div></div>
-      <div class="stat-mini"><div class="ico-box">🔑</div><div class="info"><div class="num">${s.keys || 0}</div><div class="lbl">Keys Totais</div></div></div>
-      <div class="stat-mini"><div class="ico-box">✅</div><div class="info"><div class="num">${s.active_keys || 0}</div><div class="lbl">Keys Ativas</div></div></div>
-      <div class="stat-mini"><div class="ico-box">🎁</div><div class="info"><div class="num">${s.redemptions || 0}</div><div class="lbl">Resgates</div></div></div>
-      <div class="stat-mini"><div class="ico-box">📊</div><div class="info"><div class="num">${Number(s.total_members || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros Totais</div></div></div>
-      <div class="stat-mini"><div class="ico-box">⏳</div><div class="info"><div class="num">${s.pending || 0}</div><div class="lbl">Pendentes</div></div></div>
-      <div class="stat-mini"><div class="ico-box">🔔</div><div class="info"><div class="num">${s.notifications || 0}</div><div class="lbl">Notificações</div></div></div>
-    `;
-
-    const chartData = await api('/api/dashboard/charts');
-    const c = chartData.charts;
-    charts.innerHTML = `
-      <div class="chart-card"><h4>🔑 Keys geradas (30 dias)</h4><canvas id="chartKeysByDay"></canvas></div>
-      <div class="chart-card"><h4>🥉 Keys por tier</h4><canvas id="chartKeysByTier"></canvas></div>
-      <div class="chart-card"><h4>👥 Usuários por role</h4><canvas id="chartUsersByRole"></canvas></div>
-      <div class="chart-card"><h4>💎 Distribuição de planos</h4><canvas id="chartUsersByPlan"></canvas></div>
-      <div class="chart-card" style="grid-column:1/-1"><h4>🏆 Top 10 servidores (membros)</h4><canvas id="chartTopServers"></canvas></div>
-    `;
-    drawCharts(c);
   } catch (e) {
-    grid.innerHTML = `<div class="empty">❌ ${escapeHtml(e.message)}</div>`;
-    charts.innerHTML = '';
+    wrap.innerHTML = '<div class="card">❌ Erro</div>';
   }
 }
 
-function destroyChart(key) {
-  if (state.charts[key]) { try { state.charts[key].destroy(); } catch {} state.charts[key] = null; }
-}
+function renderDashboardCharts(charts) {
+  const wrap = $('dashCharts');
+  wrap.innerHTML = `
+    <div class="chart-card"><h4>📈 Keys por dia (30d)</h4><canvas id="chartKeysByDay"></canvas></div>
+    <div class="chart-card"><h4>🍩 Keys por tier</h4><canvas id="chartKeysByTier"></canvas></div>
+    <div class="chart-card"><h4>👥 Usuários por role</h4><canvas id="chartUsersByRole"></canvas></div>
+    <div class="chart-card"><h4>📊 Distribuição de planos</h4><canvas id="chartUsersByPlan"></canvas></div>
+    <div class="chart-card" style="grid-column:1/-1"><h4>🏆 Top 10 servidores</h4><canvas id="chartTopServers"></canvas></div>
+  `;
 
-function drawCharts(c) {
-  const gridColor = 'rgba(255,255,255,.06)';
-  Chart.defaults.color = '#9ba0aa';
-  Chart.defaults.font.family = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-  Chart.defaults.font.size = 12;
+  const destroy = (id) => { if (APP.charts[id]) { APP.charts[id].destroy(); delete APP.charts[id]; } };
 
-  destroyChart('keysByDay');
-  const ctx1 = $('#chartKeysByDay');
-  if (ctx1) {
-    state.charts.keysByDay = new Chart(ctx1, {
-      type: 'line',
-      data: {
-        labels: c.keys_by_day.map(x => x.date.substring(5)),
-        datasets: [{
-          label: 'Keys', data: c.keys_by_day.map(x => x.count),
-          borderColor: '#5865F2', backgroundColor: 'rgba(88,101,242,.15)',
-          fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5,
-        }],
-      },
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
-          y: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
-        } },
-    });
-  }
-
-  destroyChart('keysByTier');
-  const ctx2 = $('#chartKeysByTier');
-  if (ctx2) {
-    state.charts.keysByTier = new Chart(ctx2, {
-      type: 'doughnut',
-      data: {
-        labels: ['🥉 Basic', '🥈 Premium', '🥇 Ultra', '💎 Unlimited'],
-        datasets: [{
-          data: [c.keys_by_tier.basic, c.keys_by_tier.premium, c.keys_by_tier.ultra, c.keys_by_tier.unlimited],
-          backgroundColor: ['#92400e', '#8a90a0', '#fbbf24', '#8B5CF6'],
-          borderColor: 'rgba(20,22,27,1)', borderWidth: 4, hoverOffset: 8,
-        }],
-      },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '65%',
-        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } } },
-    });
-  }
-
-  destroyChart('usersByRole');
-  const ctx3 = $('#chartUsersByRole');
-  if (ctx3) {
-    state.charts.usersByRole = new Chart(ctx3, {
-      type: 'doughnut',
-      data: {
-        labels: ['👑 DEV', '🛡️ ADMIN', '🔧 FUNC', '👤 CLIENTE', '⏳ PENDENTE'],
-        datasets: [{
-          data: [c.users_by_role.dev, c.users_by_role.admin, c.users_by_role.funcionario, c.users_by_role.cliente, c.users_by_role.pending],
-          backgroundColor: ['#8B5CF6', '#ED4245', '#5865F2', '#22c55e', '#fbbf24'],
-          borderColor: 'rgba(20,22,27,1)', borderWidth: 4, hoverOffset: 8,
-        }],
-      },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '65%',
-        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } } },
-    });
-  }
-
-  destroyChart('usersByPlan');
-  const ctx4 = $('#chartUsersByPlan');
-  if (ctx4) {
-    state.charts.usersByPlan = new Chart(ctx4, {
-      type: 'bar',
-      data: {
-        labels: ['Nenhum', 'Basic', 'Premium', 'Ultra', 'Unlimited'],
-        datasets: [{
-          label: 'Usuários',
-          data: [c.users_by_plan.none, c.users_by_plan.basic, c.users_by_plan.premium, c.users_by_plan.ultra, c.users_by_plan.unlimited],
-          backgroundColor: ['rgba(107,113,128,.6)', 'rgba(251,191,122,.75)', 'rgba(200,210,225,.75)', 'rgba(255,215,80,.75)', 'rgba(167,139,250,.8)'],
-          borderRadius: 8, borderSkipped: false,
-        }],
-      },
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false } },
-          y: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
-        } },
-    });
-  }
-
-  destroyChart('topServers');
-  const ctx5 = $('#chartTopServers');
-  if (ctx5) {
-    state.charts.topServers = new Chart(ctx5, {
-      type: 'bar',
-      data: {
-        labels: c.top_servers.map(x => x.name?.length > 22 ? x.name.substring(0, 22) + '…' : (x.name || '?')),
-        datasets: [{
-          label: 'Membros', data: c.top_servers.map(x => x.member_count),
-          backgroundColor: 'rgba(139,92,246,.7)', hoverBackgroundColor: 'rgba(167,139,250,.95)',
-          borderRadius: 8, borderSkipped: false,
-        }],
-      },
-      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { color: gridColor }, ticks: { precision: 0 }, beginAtZero: true },
-          y: { grid: { display: false }, ticks: { font: { size: 11 } } },
-        } },
-    });
-  }
+  try {
+    // Keys por dia
+    if (charts.keys_by_day?.length) {
+      destroy('chartKeysByDay');
+      APP.charts.chartKeysByDay = new Chart($('chartKeysByDay'), {
+        type: 'line',
+        data: {
+          labels: charts.keys_by_day.map(d => d.date),
+          datasets: [{
+            label: 'Keys', data: charts.keys_by_day.map(d => d.count),
+            borderColor: '#5865F2', backgroundColor: 'rgba(88,101,242,.15)',
+            fill: true, tension: .35, pointRadius: 3,
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      });
+    }
+    // Keys por tier
+    if (charts.keys_by_tier) {
+      destroy('chartKeysByTier');
+      APP.charts.chartKeysByTier = new Chart($('chartKeysByTier'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Basic', 'Premium', 'Ultra', 'Unlimited'],
+          datasets: [{
+            data: [charts.keys_by_tier.basic, charts.keys_by_tier.premium, charts.keys_by_tier.ultra, charts.keys_by_tier.unlimited],
+            backgroundColor: ['#CD7F32', '#C0C0C0', '#FFD700', '#8B5CF6'],
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+      });
+    }
+    // Users por role
+    if (charts.users_by_role) {
+      destroy('chartUsersByRole');
+      APP.charts.chartUsersByRole = new Chart($('chartUsersByRole'), {
+        type: 'doughnut',
+        data: {
+          labels: ['DEV', 'Admin', 'Funcionário', 'Cliente', 'Pending'],
+          datasets: [{
+            data: [charts.users_by_role.dev, charts.users_by_role.admin, charts.users_by_role.funcionario, charts.users_by_role.cliente, charts.users_by_role.pending],
+            backgroundColor: ['#FFD700', '#ED4245', '#9B59B6', '#57F287', '#808080'],
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+      });
+    }
+    // Users por plano
+    if (charts.users_by_plan) {
+      destroy('chartUsersByPlan');
+      APP.charts.chartUsersByPlan = new Chart($('chartUsersByPlan'), {
+        type: 'bar',
+        data: {
+          labels: ['Basic', 'Premium', 'Ultra', 'Unlimited', 'Sem plano'],
+          datasets: [{
+            data: [charts.users_by_plan.basic, charts.users_by_plan.premium, charts.users_by_plan.ultra, charts.users_by_plan.unlimited, charts.users_by_plan.none],
+            backgroundColor: ['#CD7F32', '#C0C0C0', '#FFD700', '#8B5CF6', '#6b7280'],
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      });
+    }
+    // Top servers
+    if (charts.top_servers?.length) {
+      destroy('chartTopServers');
+      APP.charts.chartTopServers = new Chart($('chartTopServers'), {
+        type: 'bar',
+        data: {
+          labels: charts.top_servers.map(s => s.name),
+          datasets: [{
+            label: 'Membros', data: charts.top_servers.map(s => s.member_count),
+            backgroundColor: 'rgba(88,101,242,.7)',
+          }],
+        },
+        options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } },
+      });
+    }
+  } catch (e) { console.error('[charts]', e); }
 }
 
 // ═══════════════════════════════════════════════════════════
 // KEYS
 // ═══════════════════════════════════════════════════════════
-$('#genForm')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]'); if (btn) btn.disabled = true;
-  const box = $('#genResult'); box.innerHTML = '<div class="loading">Gerando…</div>';
-  try {
-    const r = await api('/api/keys/generate', { method: 'POST', body: JSON.stringify({
-      tier: $('#genTier').value, duracao_dias: Number($('#genDuracao').value),
-      quantidade: Number($('#genQtd').value), max_usos: Number($('#genMaxUsos').value),
-      validade_key_dias: Number($('#genValidade').value), motivo: $('#genMotivo').value.trim() || null,
-    })});
-    box.innerHTML = `<p style="margin-bottom:12px;color:#4ade80;font-size:14px">✅ <b>${r.keys.length}</b> gerada(s)</p>` +
-      r.keys.map(k => `<div class="key-row"><div><span class="code">${escapeHtml(k.key_code)}</span><span class="meta">· ${escapeHtml(k.tier)} · ${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</span></div><button type="button" onclick="copyText(this,'${escapeHtml(k.key_code)}')">📋</button></div>`).join('');
-    toast(`${r.keys.length} gerada(s)!`); loadKeys();
-  } catch (err) { box.innerHTML = `<p style="color:#f87171">❌ ${escapeHtml(err.message)}</p>`; }
-  finally { if (btn) btn.disabled = false; }
-});
-
-window.copyText = function (btn, text) {
-  navigator.clipboard.writeText(text).then(() => { const o = btn.textContent; btn.textContent = '✅'; setTimeout(() => { btn.textContent = o; }, 1500); });
-};
-
 async function loadKeys() {
-  const t = $('#keysTable'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const params = new URLSearchParams();
-    if ($('#filterStatus')?.value) params.set('status', $('#filterStatus').value);
-    if ($('#filterTier')?.value)   params.set('tier', $('#filterTier').value);
-    const r = await api('/api/keys?' + params);
-    state.cachedKeys = r.keys;
-    if (!r.keys.length) { t.innerHTML = '<div class="empty"><span class="icon">📭</span>Nenhuma key</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Key</th><th>Tier</th><th>Duração</th><th>Usos</th><th>Enviada</th><th>Status</th><th></th></tr></thead>
-      <tbody>${r.keys.map(k => `<tr>
-        <td><code>${escapeHtml(k.key_code)}</code></td>
-        <td><span class="badge ${escapeHtml(k.tier)}">${escapeHtml(k.tier)}</span></td>
-        <td>${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</td>
-        <td>${k.usos_atuais}/${k.max_usos}</td>
-        <td>${k.sent_to ? `<code>${escapeHtml(String(k.sent_to).substring(0, 8))}…</code>` : '—'}</td>
-        <td><span class="badge ${k.ativo ? 'active' : 'used'}">${k.ativo ? 'Ativa' : 'Esgotada'}</span></td>
-        <td>
-          <button type="button" class="btn btn-sm btn-success" onclick="sendKeyQuick('${escapeHtml(String(k.id))}')" title="Enviar">📤</button>
-          <button type="button" class="btn btn-sm" onclick="copyText(this,'${escapeHtml(k.key_code)}')" title="Copiar">📋</button>
-        </td>
-      </tr>`).join('')}</tbody></table>`;
-  } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
+  await Promise.all([loadKeysTable(), loadRedemptions()]);
+
+  // Form de gerar
+  $('genForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearMsg('genResult');
+    const body = {
+      tier: $('genTier').value,
+      duracao_dias: Number($('genDuracao').value),
+      quantidade: Number($('genQtd').value),
+      max_usos: Number($('genMaxUsos').value),
+      validade_key_dias: Number($('genValidade').value),
+      motivo: $('genMotivo').value.trim() || null,
+    };
+    const r = await api('/api/keys/generate', { method: 'POST', body: JSON.stringify(body) });
+    if (!r.ok) return setMsg('genResult', r.error, 'error');
+    setMsg('genResult', `✅ ${r.keys.length} keys geradas!`, 'ok');
+    toast(`${r.keys.length} keys geradas`, 'ok');
+    loadKeysTable();
+  }, { once: false });
+
+  $('btnRefreshKeys')?.addEventListener('click', loadKeysTable);
+  $('btnEnviarKey')?.addEventListener('click', openSendKeyModal);
+}
+
+async function loadKeysTable() {
+  const wrap = $('keysTable');
+  wrap.innerHTML = '<div class="card">⏳ Carregando...</div>';
+  const params = new URLSearchParams();
+  if ($('filterStatus')?.value) params.set('status', $('filterStatus').value);
+  if ($('filterTier')?.value) params.set('tier', $('filterTier').value);
+
+  const r = await api('/api/keys?' + params);
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const keys = r.keys || [];
+  if (!keys.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🔑</div><p>Nenhuma key encontrada</p></div>'; return; }
+
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr>
+        <th>Key</th><th>Tier</th><th>Duração</th><th>Usos</th><th>Status</th><th>Criada</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${keys.map(k => `
+          <tr>
+            <td><code>${escapeHtml(k.key_code)}</code></td>
+            <td>${PLANS_LABEL[k.tier] || k.tier}</td>
+            <td>${k.duracao_dias === 0 ? '♾️ Perm' : k.duracao_dias + 'd'}</td>
+            <td>${k.usos_atuais}/${k.max_usos}</td>
+            <td>${k.ativo ? '<span class="badge badge-ok">ATIVA</span>' : '<span class="badge badge-fail">ESGOTADA</span>'}</td>
+            <td class="audit-time">${timeAgo(k.created_at)}</td>
+            <td>${APP.admin.role === 'dev' ? `<button class="btn btn-sm btn-danger" data-del-key="${k.id}">🗑️</button>` : ''}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  wrap.querySelectorAll('[data-del-key]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Excluir esta key?')) return;
+      const r = await api(`/api/keys/${b.dataset.delKey}`, { method: 'DELETE' });
+      if (r.ok) { toast('Key excluída', 'ok'); loadKeysTable(); }
+      else toast(r.error || 'Erro', 'error');
+    });
+  });
 }
 
 async function loadRedemptions() {
-  const t = $('#redemptionsTable'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api('/api/redemptions');
-    if (!r.redemptions.length) { t.innerHTML = '<div class="empty"><span class="icon">🎁</span>Sem resgates</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Key</th><th>Tier</th><th>Servidor</th><th>Por</th><th>Expira</th></tr></thead>
-      <tbody>${r.redemptions.map(x => `<tr>
-        <td><code>${escapeHtml(x.key_code)}</code></td>
-        <td><span class="badge ${escapeHtml(x.tier)}">${escapeHtml(x.tier)}</span></td>
-        <td class="wrap">${escapeHtml(x.guild_name || x.guild_id || '—')}</td>
-        <td class="wrap">${escapeHtml(x.resgatado_por_tag || x.resgatado_por || '—')}</td>
-        <td>${x.premium_expires_at ? fmtDateShort(x.premium_expires_at) : '♾️'}</td>
-      </tr>`).join('')}</tbody></table>`;
-  } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
+  const wrap = $('redemptionsTable');
+  wrap.innerHTML = '';
+  const r = await api('/api/redemptions?limit=30');
+  if (!r.ok) return;
+  const list = r.redemptions || [];
+  if (!list.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🎁</div><p>Nenhum resgate ainda</p></div>'; return; }
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr><th>Key</th><th>Servidor</th><th>Por</th><th>Tier</th><th>Quando</th></tr></thead>
+      <tbody>
+        ${list.map(r2 => `
+          <tr>
+            <td><code>${escapeHtml(r2.key_code)}</code></td>
+            <td>${escapeHtml(r2.guild_name || r2.guild_id || '—')}</td>
+            <td>${escapeHtml(r2.resgatado_por_tag || r2.resgatado_por || '—')}</td>
+            <td>${PLANS_LABEL[r2.tier] || r2.tier}</td>
+            <td class="audit-time">${timeAgo(r2.created_at)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
-async function loadClientesOptions() {
-  try { const r = await api('/api/dev/usuarios/clientes'); return r.clientes || []; }
-  catch { return []; }
-}
-window.sendKeyQuick = function (keyId) {
-  $('#sendKeyId').innerHTML = state.cachedKeys.map(k => `<option value="${escapeHtml(String(k.id))}" ${String(k.id) === String(keyId) ? 'selected' : ''}>${escapeHtml(k.key_code)} · ${escapeHtml(k.tier)} ${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</option>`).join('');
-  openSendKey();
-};
-$('#btnEnviarKey')?.addEventListener('click', async () => {
-  if (!state.cachedKeys.length) await loadKeys();
-  $('#sendKeyId').innerHTML = state.cachedKeys.map(k => `<option value="${escapeHtml(String(k.id))}">${escapeHtml(k.key_code)} · ${escapeHtml(k.tier)} ${k.duracao_dias === 0 ? '♾️' : k.duracao_dias + 'd'}</option>`).join('');
-  openSendKey();
-});
-async function openSendKey() {
-  const clientes = await loadClientesOptions();
-  if (!clientes.length) { toast('Nenhum cliente cadastrado', 'error'); return; }
-  $('#sendKeyUser').innerHTML = clientes.map(c => `<option value="${escapeHtml(c.user_id)}">${escapeHtml(c.nome || c.email)} · ${escapeHtml(c.email)}</option>`).join('');
-  $('#sendKeyMsg').style.display = 'none';
+async function openSendKeyModal() {
+  const [keysR, usersR] = await Promise.all([
+    api('/api/keys?status=active&limit=200'),
+    api('/api/dev/usuarios/clientes'),
+  ]);
+  const keys = keysR.keys || [];
+  const users = usersR.clientes || [];
+  if (!keys.length) return toast('Nenhuma key ativa', 'error');
+  if (!users.length) return toast('Nenhum cliente cadastrado', 'error');
+
+  $('sendKeyId').innerHTML = keys.map(k => `<option value="${k.id}">${escapeHtml(k.key_code)} — ${k.tier}</option>`).join('');
+  $('sendKeyUser').innerHTML = users.map(u => `<option value="${u.user_id}">${escapeHtml(u.email)} (${escapeHtml(u.nome || '?')})</option>`).join('');
+  clearMsg('sendKeyMsg');
   openModal('modalSendKey');
 }
-$('#btnConfirmSendKey')?.addEventListener('click', async () => {
-  const key_id = $('#sendKeyId').value;
-  const user_id = $('#sendKeyUser').value;
-  const btn = $('#btnConfirmSendKey'); btn.disabled = true;
-  try {
-    const r = await api('/api/keys/send', { method: 'POST', body: JSON.stringify({ key_id, user_id }) });
-    showMsg('#sendKeyMsg', `✅ Enviada para ${r.sent_to}`, 'ok');
-    toast('Key enviada!');
-    setTimeout(() => { closeModal('modalSendKey'); loadKeys(); }, 2000);
-  } catch (e) { showMsg('#sendKeyMsg', e.message); }
-  finally { btn.disabled = false; }
+
+$('btnConfirmSendKey')?.addEventListener('click', async () => {
+  const key_id = $('sendKeyId').value;
+  const user_id = $('sendKeyUser').value;
+  if (!key_id || !user_id) return;
+  const r = await api('/api/keys/send', { method: 'POST', body: JSON.stringify({ key_id, user_id }) });
+  if (!r.ok) return setMsg('sendKeyMsg', r.error, 'error');
+  setMsg('sendKeyMsg', `✅ Enviada para ${r.sent_to}`, 'ok');
+  toast('Key enviada', 'ok');
+  setTimeout(() => closeModal('modalSendKey'), 1500);
 });
 
 // ═══════════════════════════════════════════════════════════
 // PACKS
 // ═══════════════════════════════════════════════════════════
-$('#btnGerarPack')?.addEventListener('click', async () => {
-  const btn = $('#btnGerarPack'); btn.disabled = true;
-  const box = $('#packResult'); box.innerHTML = '<div class="loading">Gerando packs…</div>';
-  try {
-    const r = await api('/api/keys/generate-pack', { method: 'POST', body: JSON.stringify({
-      quantidade: Number($('#packQtd').value),
-      motivo: $('#packMotivo').value.trim() || null,
-    })});
-    box.innerHTML = `<p style="margin-bottom:12px;color:#4ade80;font-size:14px">✅ <b>${r.packs.length}</b> pack(s) gerado(s)</p>` +
-      r.packs.map(p => `<div class="key-row"><div><span class="code">${escapeHtml(p.key_code)}</span><span class="meta">· 📦 Pack (60 keys)</span></div><button type="button" onclick="copyText(this,'${escapeHtml(p.key_code)}')">📋</button></div>`).join('');
-    toast(`${r.packs.length} pack(s) criado(s)!`); loadPacks();
-  } catch (err) { box.innerHTML = `<p style="color:#f87171">❌ ${escapeHtml(err.message)}</p>`; }
-  finally { btn.disabled = false; }
-});
-
 async function loadPacks() {
-  const t = $('#packsTable'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api('/api/keys/packs');
-    if (!r.packs.length) { t.innerHTML = '<div class="empty"><span class="icon">📦</span>Nenhum pack</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Pack</th><th>Conteúdo</th><th>Enviado</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>${r.packs.map(p => `<tr>
-        <td><code>${escapeHtml(p.key_code)}</code></td>
-        <td><span class="badge pack">60 keys</span></td>
-        <td>${p.sent_to ? `<code>${escapeHtml(String(p.sent_to).substring(0, 8))}…</code>` : '—'}</td>
-        <td><span class="badge ${p.ativo ? 'active' : 'used'}">${p.ativo ? 'Disponível' : 'Resgatado'}</span></td>
-        <td>
-          <button type="button" class="btn btn-sm btn-success" onclick="sendPackQuick('${escapeHtml(String(p.id))}')">📤</button>
-          <button type="button" class="btn btn-sm" onclick="copyText(this,'${escapeHtml(p.key_code)}')">📋</button>
-          ${p.ativo ? `<button type="button" class="btn btn-sm" onclick="redeemPack('${escapeHtml(String(p.id))}')">✨ Redeem</button>` : ''}
-        </td>
-      </tr>`).join('')}</tbody></table>`;
-  } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
+  $('btnGerarPack')?.addEventListener('click', async () => {
+    const qtd = Number($('packQtd').value) || 1;
+    const r = await api('/api/keys/generate-pack', {
+      method: 'POST',
+      body: JSON.stringify({ quantidade: qtd, motivo: $('packMotivo').value.trim() || null }),
+    });
+    if (!r.ok) return setMsg('packResult', r.error, 'error');
+    setMsg('packResult', `✅ ${r.packs.length} pack(s) gerado(s)`, 'ok');
+    toast('Packs gerados', 'ok');
+    loadPacksTable();
+  });
+  $('btnRefreshPacks')?.addEventListener('click', loadPacksTable);
+  await loadPacksTable();
 }
-window.sendPackQuick = function (id) {
-  $('#sendKeyId').innerHTML = `<option value="${escapeHtml(String(id))}" selected>📦 Pack</option>`;
-  openSendKey();
-};
-window.redeemPack = async function (id) {
-  if (!confirm('Gerar 60 keys deste pack? Essa ação é irreversível.')) return;
-  try {
-    const r = await api('/api/keys/redeem-pack', { method: 'POST', body: JSON.stringify({ key_id: id }) });
-    toast(`✅ ${r.total} keys geradas!`);
-    loadPacks(); loadKeys();
-  } catch (e) { toast(e.message, 'error'); }
-};
-$('#btnRefreshPacks')?.addEventListener('click', loadPacks);
+
+async function loadPacksTable() {
+  const wrap = $('packsTable');
+  wrap.innerHTML = '';
+  const r = await api('/api/keys/packs');
+  if (!r.ok) return;
+  const packs = r.packs || [];
+  if (!packs.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><p>Nenhum pack gerado</p></div>'; return; }
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr><th>Pack</th><th>Status</th><th>Motivo</th><th>Criado</th><th></th></tr></thead>
+      <tbody>
+        ${packs.map(p => `
+          <tr>
+            <td><code>${escapeHtml(p.key_code)}</code></td>
+            <td>${p.ativo ? '<span class="badge badge-ok">DISPONÍVEL</span>' : '<span class="badge badge-fail">USADO</span>'}</td>
+            <td>${escapeHtml(p.motivo || '—')}</td>
+            <td class="audit-time">${timeAgo(p.created_at)}</td>
+            <td>${p.ativo ? `<button class="btn btn-sm" data-redeem="${p.id}">🎁 Resgatar</button>` : ''}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  wrap.querySelectorAll('[data-redeem]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Resgatar este pack? Ele vai gerar 60 keys.')) return;
+      b.disabled = true;
+      const r = await api('/api/keys/redeem-pack', { method: 'POST', body: JSON.stringify({ key_id: Number(b.dataset.redeem) }) });
+      if (r.ok) { toast(`${r.total} keys geradas`, 'ok'); loadPacksTable(); }
+      else { toast(r.error, 'error'); b.disabled = false; }
+    });
+  });
+}
 
 // ═══════════════════════════════════════════════════════════
-// SERVIDORES (user)
+// SERVIDORES (cliente)
 // ═══════════════════════════════════════════════════════════
 async function loadServers() {
-  const g = $('#serversGrid'); if (!g) return;
-  g.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const { servers } = await api('/api/me/servers');
-    if (!servers.length) { g.innerHTML = '<div class="empty"><span class="icon">🌐</span>Nenhum servidor</div>'; return; }
-    g.innerHTML = servers.map(s => {
-      const gid = s.guild_id || s.id;
-      return `<div class="server-card" data-guild="${escapeHtml(gid)}">
-        <div class="head">
-          <div class="ico">${s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🌐'}</div>
-          <div style="min-width:0">
-            <div class="name">${escapeHtml(s.name || '—')}</div>
-            <div class="meta">${escapeHtml(String(gid))}</div>
-          </div>
+  const wrap = $('serversGrid');
+  wrap.innerHTML = '<div class="card">⏳ Carregando...</div>';
+  const r = await api('/api/me/servers');
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const servers = r.servers || [];
+  if (!servers.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🌐</div><p>Nenhum servidor vinculado</p><p class="empty-hint">Você só vê servidores onde é dono ou admin.</p></div>';
+    return;
+  }
+  wrap.innerHTML = servers.map(s => serverCard(s)).join('');
+  bindServerClicks(servers);
+}
+
+function serverCard(s) {
+  const icon = s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🛰️';
+  return `
+    <div class="server-card" data-guild="${s.guild_id}">
+      <div class="server-icon">${icon}</div>
+      <div class="server-info">
+        <div class="server-name">${escapeHtml(s.name || 'Sem nome')}</div>
+        <div class="server-id mono">${escapeHtml(s.guild_id)}</div>
+        <div class="server-meta">
+          <span>👥 ${fmtNumber(s.member_count || 0)}</span>
+          ${s.is_premium ? '<span class="badge badge-ok">💎 PREMIUM</span>' : ''}
         </div>
-        <div class="stats"><span>👥 ${Number(s.member_count || 0).toLocaleString('pt-BR')}</span></div>
-      </div>`;
-    }).join('');
-    g.querySelectorAll('[data-guild]').forEach(el => el.addEventListener('click', () => openServerDetail(el.dataset.guild)));
-  } catch (err) { g.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
+      </div>
+    </div>
+  `;
 }
 
-async function openServerDetail(guildId) {
-  state.currentServer = guildId;
-  $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
+function bindServerClicks(servers) {
+  $$('[data-guild]').forEach(el => {
+    el.addEventListener('click', () => openServerDetail(el.dataset.guild));
+  });
+}
+
+async function openServerDetail(gid) {
+  const r = await api(`/api/dev/servers/${gid}/full`);
+  if (!r.ok) {
+    const r2 = await api(`/api/me/servers/${gid}/stats`);
+    if (!r2.ok) return toast(r2.error || 'Erro', 'error');
+    return openModal('modalServer') || renderSimpleServerDetail(gid, r2);
+  }
+  const g = r.guild || {};
+  const cfg = r.config || {};
+  const ff = r.ff || {};
+  const fp = r.force_premium || null;
+  const c = r.counts || {};
+
+  $('serverDetail').innerHTML = `
+    <h2>🛰️ ${escapeHtml(g.name || 'Servidor')}</h2>
+    <p class="sub mono">${escapeHtml(g.guild_id || gid)}</p>
+    <div class="grid-3" style="margin-top:16px">
+      <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-body"><div class="stat-value">${fmtNumber(g.member_count||0)}</div><div class="stat-label">Membros</div></div></div>
+      <div class="stat-card"><div class="stat-icon green">🎫</div><div class="stat-body"><div class="stat-value">${c.tickets_open||0}</div><div class="stat-label">Tickets abertos</div></div></div>
+      <div class="stat-card"><div class="stat-icon amber">🎮</div><div class="stat-body"><div class="stat-value">${c.bets_total||0}</div><div class="stat-label">Apostas</div></div></div>
+    </div>
+    <div class="detail-row" style="margin-top:16px"><div class="detail-label">Premium</div><div class="detail-value">${fp ? (fp.permanent ? '💎 Permanente' : `💎 Até ${fmtDate(fp.expires_at)}`) : (cfg.is_premium ? '✅ Ativo' : '❌ Não')}</div></div>
+    <div class="detail-row"><div class="detail-label">Tipo</div><div class="detail-value">${escapeHtml(cfg.server_type || '—')}</div></div>
+    <div class="detail-row"><div class="detail-label">Produtos</div><div class="detail-value">${c.products||0}</div></div>
+    <div class="detail-row"><div class="detail-label">Pedidos entregues</div><div class="detail-value">${c.orders_delivered||0}</div></div>
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+      ${APP.admin.role === 'dev' ? `<button class="btn" onclick="closeModal('modalServer');openDevServerActions('${gid}')">⚡ Ações DEV</button>` : ''}
+    </div>
+  `;
   openModal('modalServer');
-  try {
-    const stats = await api(`/api/me/servers/${guildId}/stats`).catch(() => ({}));
-    const g = stats.guild || {};
-    const s = stats.stats || {};
-    const canManage = ['dev', 'admin'].includes(state.role);
-    const actionsTabBtn = canManage ? `<button class="detail-tab" data-tab="actions">⚡ Ações</button>` : '';
-    const actionsPanel = canManage ? `<div class="detail-panel" id="dt-actions">
-      <div class="card"><h3>🚀 Levar membros</h3>
-      <p class="hint">Adiciona usuários verificados. Rate limit: ~1 por segundo.</p>
-      <div class="field"><label>Quantidade (máx 50)</label><div class="input-wrap"><input type="number" id="tmLimit" value="20" min="1" max="50"></div></div>
-      <button id="btnTakeMembers" class="btn">🚀 Levar membros</button>
-      <div id="tmResult" class="msg"></div></div>
-    </div>` : '';
-    $('#serverDetail').innerHTML = `
-      <div class="server-detail-head">
-        <div class="icon">${g.icon ? `<img src="${escapeHtml(g.icon)}">` : '🌐'}</div>
-        <div><h2>${escapeHtml(g.name || 'Servidor')}</h2><p>${escapeHtml(guildId)}</p></div>
-      </div>
-      <div class="mini-stats">
-        <div class="mini-stat"><div class="num">${Number(s.members || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
-        <div class="mini-stat"><div class="num">${s.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
-        <div class="mini-stat"><div class="num">${s.bets_30d || 0}</div><div class="lbl">Apostas 30d</div></div>
-        <div class="mini-stat"><div class="num">${s.orders_30d || 0}</div><div class="lbl">Vendas 30d</div></div>
-      </div>
-      <div class="detail-tabs">
-        <button class="detail-tab active" data-tab="tickets">🎫 Tickets</button>
-        <button class="detail-tab" data-tab="products">🛒 Produtos</button>
-        <button class="detail-tab" data-tab="orders">🧾 Pedidos</button>
-        ${actionsTabBtn}
-      </div>
-      <div class="detail-panel active" id="dt-tickets"></div>
-      <div class="detail-panel" id="dt-products"></div>
-      <div class="detail-panel" id="dt-orders"></div>
-      ${actionsPanel}`;
-    $('#serverDetail').querySelectorAll('.detail-tab').forEach(t => t.addEventListener('click', () => {
-      $('#serverDetail').querySelectorAll('.detail-tab').forEach(x => x.classList.remove('active'));
-      $('#serverDetail').querySelectorAll('.detail-panel').forEach(x => x.classList.remove('active'));
-      t.classList.add('active');
-      $(`#dt-${t.dataset.tab}`).classList.add('active');
-      if (t.dataset.tab === 'tickets')  loadServerTickets(guildId);
-      if (t.dataset.tab === 'products') loadServerProducts(guildId);
-      if (t.dataset.tab === 'orders')   loadServerOrders(guildId);
-    }));
-    loadServerTickets(guildId);
-    if (canManage) $('#btnTakeMembers')?.addEventListener('click', takeMembers);
-  } catch (e) { $('#serverDetail').innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
-async function loadServerTickets(gid) {
-  const el = $('#dt-tickets'); if (!el) return;
-  el.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const { tickets } = await api(`/api/me/servers/${gid}/tickets`);
-    if (!tickets.length) { el.innerHTML = '<div class="empty">Sem tickets</div>'; return; }
-    el.innerHTML = `<table><thead><tr><th>Autor</th><th>Status</th><th>Aberto em</th></tr></thead>
-      <tbody>${tickets.map(t => `<tr><td class="wrap">${escapeHtml(t.user_id || '—')}</td><td>${t.closed_at ? '🔴 Fechado' : '🟢 Aberto'}</td><td>${fmtDate(t.opened_at || t.created_at)}</td></tr>`).join('')}</tbody></table>`;
-  } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+function renderSimpleServerDetail(gid, r) {
+  $('serverDetail').innerHTML = `
+    <h2>🛰️ ${escapeHtml(r.guild?.name || 'Servidor')}</h2>
+    <p class="sub mono">${escapeHtml(gid)}</p>
+    <div class="grid-3" style="margin-top:16px">
+      <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-body"><div class="stat-value">${r.stats?.members||0}</div><div class="stat-label">Membros</div></div></div>
+      <div class="stat-card"><div class="stat-icon green">🎫</div><div class="stat-body"><div class="stat-value">${r.stats?.tickets_open||0}</div><div class="stat-label">Tickets</div></div></div>
+      <div class="stat-card"><div class="stat-icon amber">🎮</div><div class="stat-body"><div class="stat-value">${r.stats?.bets_30d||0}</div><div class="stat-label">Apostas 30d</div></div></div>
+    </div>
+  `;
+  openModal('modalServer');
 }
-async function loadServerProducts(gid) {
-  const el = $('#dt-products'); if (!el) return;
-  el.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const { products } = await api(`/api/me/servers/${gid}/products`);
-    if (!products.length) { el.innerHTML = '<div class="empty">Sem produtos</div>'; return; }
-    el.innerHTML = `<table><thead><tr><th>Nome</th><th>Preço</th><th>Ativo</th></tr></thead>
-      <tbody>${products.map(p => `<tr><td class="wrap">${escapeHtml(p.name)}</td><td>${brl(p.price)}</td><td>${p.active ? '✅' : '❌'}</td></tr>`).join('')}</tbody></table>`;
-  } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
-}
-async function loadServerOrders(gid) {
-  const el = $('#dt-orders'); if (!el) return;
-  el.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const { orders } = await api(`/api/me/servers/${gid}/orders`);
-    if (!orders.length) { el.innerHTML = '<div class="empty">Sem pedidos</div>'; return; }
-    el.innerHTML = `<table><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Status</th></tr></thead>
-      <tbody>${orders.map(o => `<tr><td>${o.id}</td><td class="wrap">${escapeHtml(o.user_id || '—')}</td><td>${brl(o.total)}</td><td>${escapeHtml(o.status || '—')}</td></tr>`).join('')}</tbody></table>`;
-  } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
-}
-async function takeMembers() {
-  if (!['dev', 'admin'].includes(state.role)) return toast('Apenas DEV/ADMIN', 'error');
-  const gid = state.currentServer;
-  if (!gid) return toast('Nenhum servidor', 'error');
-  const limit = Number($('#tmLimit').value) || 20;
-  const btn = $('#btnTakeMembers'); const res = $('#tmResult');
-  btn.disabled = true; btn.textContent = '⏳ Levando...';
-  res.className = 'msg info'; res.textContent = `Processando até ${limit}...`; res.style.display = 'block';
-  try {
-    const r = await api(`/api/me/servers/${gid}/take-members`, { method: 'POST', body: JSON.stringify({ limit }) });
-    res.className = 'msg ok'; res.textContent = `✅ Add: ${r.added} | ❌ Falhas: ${r.failed} | Total: ${r.total}`;
-  } catch (e) { res.className = 'msg error'; res.textContent = `❌ ${e.message}`; }
-  finally { btn.disabled = false; btn.textContent = '🚀 Levar membros'; }
-}
+window.openDevServerActions = openDevServerActions;
 
 // ═══════════════════════════════════════════════════════════
 // MINHAS KEYS
 // ═══════════════════════════════════════════════════════════
 async function loadMyKeys() {
-  const el = $('#myKeysList'); if (!el) return;
-  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const wrap = $('myKeysList');
+  wrap.innerHTML = '';
+  const r = await api('/api/me/keys-sent');
+  if (!r.ok) return;
+  const keys = r.keys || [];
+  if (!keys.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🎁</div><p>Nenhuma key recebida</p></div>';
+    return;
+  }
+  wrap.innerHTML = keys.map(k => `
+    <div class="session-card">
+      <div class="session-icon">🔑</div>
+      <div class="session-info">
+        <div class="session-title">
+          <code>${escapeHtml(k.key_code)}</code>
+          <span class="badge ${k.is_pack ? 'badge-info' : 'badge-ok'}">${k.is_pack ? '📦 PACK' : PLANS_LABEL[k.tier] || k.tier}</span>
+        </div>
+        <div class="session-detail">
+          <span>📅 ${fmtDate(k.sent_at)}</span>
+          <span>${k.duracao_dias === 0 ? '♾️ Permanente' : `⏱️ ${k.duracao_dias} dias`}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SESSÕES
+// ═══════════════════════════════════════════════════════════
+async function loadSessions() {
+  const wrap = $('sessionsList');
+  wrap.innerHTML = '<div class="card">⏳ Carregando...</div>';
+
+  $('btnRefreshSessions')?.addEventListener('click', () => loadSessions(), { once: true });
+  $('btnRevokeAllSessions')?.addEventListener('click', async () => {
+    if (!confirm('Revogar todas as outras sessões?')) return;
+    const r = await api('/api/me/sessions', { method: 'DELETE' });
+    if (r.ok) { toast('Sessões revogadas', 'ok'); loadSessions(); }
+    else toast(r.error, 'error');
+  }, { once: true });
+
+  const r = await api('/api/me/sessions');
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const sessions = r.sessions || [];
+  if (!sessions.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🖥️</div><p>Nenhuma sessão ativa</p></div>'; return; }
+  wrap.innerHTML = sessions.map(s => sessionCardHTML(s)).join('');
+  wrap.querySelectorAll('[data-revoke]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Revogar esta sessão?')) return;
+      const r = await api(`/api/me/sessions/${b.dataset.revoke}`, { method: 'DELETE' });
+      if (r.ok) { toast('Sessão revogada', 'ok'); loadSessions(); }
+      else toast(r.error, 'error');
+    });
+  });
+}
+
+function sessionCardHTML(s, current) {
+  const icon = s.device_type === 'mobile' ? '📱' : '🖥️';
+  return `
+    <div class="session-card ${current ? 'current' : ''}">
+      <div class="session-icon ${s.device_type}">${icon}</div>
+      <div class="session-info">
+        <div class="session-title">
+          <span class="badge-device ${s.device_type || 'desktop'}">${escapeHtml(s.device_type || 'desktop')}</span>
+          <span class="badge-browser badge-device">${escapeHtml(s.browser || '—')}</span>
+          <span class="badge-os badge-device">${escapeHtml(s.os || '—')}</span>
+        </div>
+        <div class="session-detail">
+          <span>🌐 <code>${escapeHtml(s.ip || '—')}</code></span>
+          ${s.country ? `<span>📍 ${escapeHtml(s.country)}${s.city ? ' / ' + escapeHtml(s.city) : ''}</span>` : ''}
+          <span>🕐 ${timeAgo(s.last_seen || s.created_at)}</span>
+        </div>
+      </div>
+      <div class="session-actions">
+        <button class="btn btn-danger btn-sm" data-revoke="${s.id}">🚫 Revogar</button>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICAÇÕES
+// ═══════════════════════════════════════════════════════════
+function bindNotifications() {
+  $('btnBell')?.addEventListener('click', () => {
+    $('notifDrawer')?.classList.add('active');
+    renderNotifications();
+  });
+  $('btnCloseDrawer')?.addEventListener('click', () => $('notifDrawer')?.classList.remove('active'));
+  $('btnMarkAllReadDrawer')?.addEventListener('click', markAllRead);
+  $('btnMarkAllRead')?.addEventListener('click', markAllRead);
+}
+
+async function loadNotifications() {
   try {
-    const r = await api('/api/me/keys-sent');
-    if (!r.keys.length) { el.innerHTML = '<div class="empty"><span class="icon">📭</span>Nenhuma key recebida</div>'; return; }
-    el.innerHTML = `<div class="my-key-grid">${r.keys.map(k => `
-      <div class="my-key-card">
-        <div class="head">
-          <span class="badge ${k.is_pack ? 'pack' : escapeHtml(k.tier)}">${k.is_pack ? '📦 Pack' : escapeHtml(k.tier.toUpperCase())}</span>
-          <span class="badge ${k.ativo ? 'active' : 'used'}">${k.ativo ? 'Ativa' : 'Usada'}</span>
-        </div>
-        <div class="code">${escapeHtml(k.key_code)}</div>
-        <div class="meta">
-          <span>⏱️ ${k.duracao_dias === 0 ? 'Permanente' : k.duracao_dias + ' dias'}</span>
-          <span>📅 ${timeAgo(k.sent_at)}</span>
-        </div>
-        <button class="copy-btn" onclick="copyText(this,'${escapeHtml(k.key_code)}')">📋 Copiar código</button>
-      </div>`).join('')}</div>`;
-  } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+    const r = await api('/api/notifications?limit=30');
+    if (!r.ok) return;
+    APP.notifications = r.notifications || [];
+    APP.unread = r.unread || 0;
+
+    const badge = $('bellBadge');
+    const navBadge = $('navNotifBadge');
+    [badge, navBadge].forEach(b => {
+      if (!b) return;
+      if (APP.unread > 0) {
+        b.textContent = APP.unread > 99 ? '99+' : APP.unread;
+        b.classList.remove('hidden');
+      } else b.classList.add('hidden');
+    });
+  } catch {}
+}
+
+function renderNotifications() {
+  const body = $('drawerBody');
+  if (!body) return;
+  const list = APP.notifications || [];
+  if (!list.length) {
+    body.innerHTML = '<div class="empty-state"><div class="empty-icon">🔕</div><p>Sem notificações</p></div>';
+    return;
+  }
+  body.innerHTML = list.map(n => `
+    <div class="notif-item ${n.read ? '' : 'unread'}" data-id="${n.id}" style="padding:12px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">
+      <div style="font-weight:700;font-size:13px">${escapeHtml(n.title)}</div>
+      <div style="font-size:12px;opacity:.8;margin-top:4px">${escapeHtml(n.content || '')}</div>
+      <div style="font-size:11px;opacity:.6;margin-top:4px">${timeAgo(n.created_at)}</div>
+    </div>
+  `).join('');
+
+  body.querySelectorAll('[data-id]').forEach(el => {
+    el.addEventListener('click', async () => {
+      await api(`/api/notifications/${el.dataset.id}/read`, { method: 'PATCH' });
+      loadNotifications();
+      renderNotifications();
+    });
+  });
+}
+
+async function loadNotificationsPage() {
+  await loadNotifications();
+  const wrap = $('notifList');
+  const list = APP.notifications || [];
+  if (!list.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🔕</div><p>Sem notificações</p></div>';
+    return;
+  }
+  wrap.innerHTML = list.map(n => `
+    <div class="session-card ${n.read ? '' : 'current'}">
+      <div class="session-icon">${n.type === 'key_received' ? '🔑' : n.type === 'alert' ? '⚠️' : '📢'}</div>
+      <div class="session-info">
+        <div class="session-title">${escapeHtml(n.title)}</div>
+        <div class="session-detail"><span>${escapeHtml(n.content || '')}</span></div>
+        <div class="session-detail"><span>🕐 ${timeAgo(n.created_at)}</span></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function markAllRead() {
+  await api('/api/notifications/read-all', { method: 'POST' });
+  loadNotifications();
+  renderNotifications();
+  if (APP.currentPage === 'notifications') loadNotificationsPage();
 }
 
 // ═══════════════════════════════════════════════════════════
 // TICKETS GLOBAL
 // ═══════════════════════════════════════════════════════════
 async function loadTicketsGlobal() {
-  const t = $('#ticketsGlobalTable'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api('/api/admin/tickets-global');
-    if (!r.tickets.length) { t.innerHTML = '<div class="empty"><span class="icon">✅</span>Nenhum ticket aberto</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Servidor</th><th>Autor</th><th>Aberto em</th><th>Status</th></tr></thead>
-      <tbody>${r.tickets.map(x => `<tr>
-        <td class="wrap"><code>${escapeHtml(x.guild_id)}</code></td>
-        <td class="wrap">${escapeHtml(x.user_id || '—')}</td>
-        <td>${fmtDate(x.opened_at || x.created_at)}</td>
-        <td><span class="badge active">Aberto</span></td>
-      </tr>`).join('')}</tbody></table>`;
-  } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+  const wrap = $('ticketsGlobalTable');
+  wrap.innerHTML = '';
+  const r = await api('/api/admin/tickets-global');
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const tickets = r.tickets || [];
+  if (!tickets.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🎫</div><p>Nenhum ticket aberto</p></div>'; return; }
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr><th>Thread</th><th>Servidor</th><th>User</th><th>Tipo</th><th>Aberto</th></tr></thead>
+      <tbody>
+        ${tickets.map(t => `
+          <tr>
+            <td class="mono">${escapeHtml(t.thread_id?.slice(0,10) || '—')}...</td>
+            <td class="mono">${escapeHtml(t.guild_id)}</td>
+            <td class="mono">${escapeHtml(t.user_id)}</td>
+            <td>${escapeHtml(t.type_id || '—')}</td>
+            <td class="audit-time">${timeAgo(t.opened_at)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 // ═══════════════════════════════════════════════════════════
 // FINANCEIRO
 // ═══════════════════════════════════════════════════════════
 async function loadFinancial() {
-  const stats = $('#financialStats');
-  stats.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api('/api/admin/financial');
-    stats.innerHTML = `
-      <div class="stat-mini"><div class="ico-box">💰</div><div class="info"><div class="num">${brl(r.total)}</div><div class="lbl">Total 30d</div></div></div>
-      <div class="stat-mini"><div class="ico-box">🛒</div><div class="info"><div class="num">${r.count}</div><div class="lbl">Vendas</div></div></div>
-      <div class="stat-mini"><div class="ico-box">📊</div><div class="info"><div class="num">${brl(r.avg)}</div><div class="lbl">Ticket Médio</div></div></div>
-    `;
-    destroyChart('financial');
-    const ctx = $('#chartFinancial');
-    if (ctx && r.daily.length) {
-      state.charts.financial = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: r.daily.map(x => x.date.substring(5)),
-          datasets: [{
-            label: 'Vendas (R$)', data: r.daily.map(x => x.value),
-            borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.15)',
-            fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 0,
-          }],
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { grid: { display: false } },
-            y: { grid: { color: 'rgba(255,255,255,.06)' }, beginAtZero: true, ticks: { callback: v => 'R$ ' + v } },
-          },
-        },
-      });
-    }
-  } catch (e) { stats.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
-}
+  const stats = $('financialStats');
+  stats.innerHTML = '<div class="card">⏳</div>';
+  const r = await api('/api/admin/financial');
+  if (!r.ok) { stats.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  stats.innerHTML = `
+    <div class="stat-card"><div class="stat-icon green">💰</div><div class="stat-body"><div class="stat-value">${fmtBRL(r.total)}</div><div class="stat-label">Total 30d</div></div></div>
+    <div class="stat-card"><div class="stat-icon blue">🧾</div><div class="stat-body"><div class="stat-value">${fmtNumber(r.count)}</div><div class="stat-label">Pedidos</div></div></div>
+    <div class="stat-card"><div class="stat-icon amber">📊</div><div class="stat-body"><div class="stat-value">${fmtBRL(r.avg)}</div><div class="stat-label">Ticket médio</div></div></div>
+  `;
 
-// ═══════════════════════════════════════════════════════════
-// 🆕 DEV — GERENCIAR SERVIDORES
-// ═══════════════════════════════════════════════════════════
-async function loadDevServers() {
-  const grid = $('#devServersList'); if (!grid) return;
-  grid.innerHTML = Array(6).fill('<div class="skel skel-card"></div>').join('');
-  const stats = $('#devServersStats'); if (stats) stats.innerHTML = '';
-
-  try {
-    const params = new URLSearchParams();
-    const search = $('#devServersSearch')?.value.trim();
-    const minMembers = $('#devServersMinMembers')?.value;
-    const premium = $('#devServersPremium')?.value;
-    if (search) params.set('search', search);
-    if (minMembers) params.set('min_members', minMembers);
-    if (premium) params.set('has_premium', premium);
-    params.set('limit', '200');
-
-    const r = await api('/api/dev/servers?' + params);
-    const servers = r.servers || [];
-
-    if (stats) {
-      const premiumCount = servers.filter(s => s.is_premium).length;
-      const totalMembers = servers.reduce((a, s) => a + (s.member_count || 0), 0);
-      stats.innerHTML = `
-        <div class="stat-mini"><div class="ico-box">🌐</div><div class="info"><div class="num">${servers.length}</div><div class="lbl">Servidores</div></div></div>
-        <div class="stat-mini"><div class="ico-box">💎</div><div class="info"><div class="num">${premiumCount}</div><div class="lbl">Premium</div></div></div>
-        <div class="stat-mini"><div class="ico-box">👥</div><div class="info"><div class="num">${totalMembers.toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div></div>
-      `;
-    }
-
-    if (!servers.length) {
-      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="icon">🌐</span>Nenhum servidor encontrado</div>';
-      return;
-    }
-
-    grid.innerHTML = servers.map(s => `
-      <div class="server-card" data-gid="${escapeHtml(s.guild_id)}">
-        ${s.is_premium ? '<span class="badge-premium">💎 PREMIUM</span>' : ''}
-        <div class="head">
-          <div class="ico">${s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🌐'}</div>
-          <div style="min-width:0">
-            <div class="name">${escapeHtml(s.name || '—')}</div>
-            <div class="meta">${escapeHtml(s.guild_id || '')}</div>
-          </div>
-        </div>
-        <div class="stats">
-          <span>👥 ${Number(s.member_count || 0).toLocaleString('pt-BR')}</span>
-          <span>${s.in_guild ? '🟢 No servidor' : '🔴 Fora'}</span>
-        </div>
-        <div class="actions">
-          <button class="btn btn-primary btn-sm" data-act="detail">🔍 Detalhes</button>
-          <button class="btn btn-secondary btn-sm" data-act="actions">⚡ Ações</button>
-        </div>
-      </div>
-    `).join('');
-
-    grid.querySelectorAll('[data-gid]').forEach(card => {
-      const gid = card.dataset.gid;
-      card.querySelector('[data-act="detail"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerDetail(gid); });
-      card.querySelector('[data-act="actions"]')?.addEventListener('click', (e) => { e.stopPropagation(); openDevServerActions(gid); });
+  if (APP.charts.chartFinancial) APP.charts.chartFinancial.destroy();
+  if (r.daily?.length) {
+    APP.charts.chartFinancial = new Chart($('chartFinancial'), {
+      type: 'line',
+      data: {
+        labels: r.daily.map(d => d.date),
+        datasets: [{
+          label: 'R$', data: r.daily.map(d => d.value),
+          borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,.15)',
+          fill: true, tension: .35,
+        }],
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } },
     });
-  } catch (e) {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1;color:#f87171">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
-async function openDevServerDetail(guildId) {
-  openModal('modalServer');
-  $('#serverDetail').innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api(`/api/dev/servers/${guildId}/full`);
-    const g = r.guild || {};
-    const c = r.config || {};
-    const ff = r.ff || {};
-    const fp = r.force_premium;
-    const counts = r.counts || {};
+// ═══════════════════════════════════════════════════════════
+// DEV — GERENCIAR SERVIDORES
+// ═══════════════════════════════════════════════════════════
+async function loadDevServers() {
+  const wrap = $('devServersList');
+  const stats = $('devServersStats');
+  wrap.innerHTML = '<div class="card">⏳ Carregando...</div>';
 
-    const premiumBadge = fp ? `<span class="badge unlimited">💎 FORCE ${fp.permanent ? 'PERMANENTE' : fp.expires_at ? 'até ' + fmtDateShort(fp.expires_at) : ''}</span>` : '';
-    const cfgPremium = c.is_premium ? `<span class="badge ${c.premium_tier || 'basic'}">✓ ${(c.premium_tier || 'basic').toUpperCase()}</span>` : '<span class="badge used">Sem premium</span>';
+  const params = new URLSearchParams();
+  if ($('devServersSearch')?.value) params.set('search', $('devServersSearch').value);
+  if ($('devServersMinMembers')?.value) params.set('min_members', $('devServersMinMembers').value);
+  if ($('devServersPremium')?.value) params.set('has_premium', $('devServersPremium').value);
 
-    $('#serverDetail').innerHTML = `
-      <div class="server-detail-head">
-        <div class="icon">${g.icon ? `<img src="${escapeHtml(g.icon)}">` : '🌐'}</div>
-        <div style="flex:1;min-width:0">
-          <h2>${escapeHtml(g.name || 'Servidor')}</h2>
-          <p>${escapeHtml(guildId)} ${premiumBadge}</p>
+  const r = await api('/api/dev/servers?' + params);
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const servers = r.servers || [];
+  const premiumCount = servers.filter(s => s.is_premium).length;
+
+  stats.innerHTML = `
+    <div class="stat-card"><div class="stat-icon blue">🌐</div><div class="stat-body"><div class="stat-value">${r.total || servers.length}</div><div class="stat-label">Servidores</div></div></div>
+    <div class="stat-card"><div class="stat-icon green">💎</div><div class="stat-body"><div class="stat-value">${premiumCount}</div><div class="stat-label">Premium</div></div></div>
+    <div class="stat-card"><div class="stat-icon amber">👥</div><div class="stat-body"><div class="stat-value">${fmtNumber(servers.reduce((a,s)=>a+(s.member_count||0),0))}</div><div class="stat-label">Membros totais</div></div></div>
+  `;
+
+  if (!servers.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">🛰️</div><p>Nenhum servidor encontrado</p></div>'; return; }
+  wrap.innerHTML = servers.map(s => `
+    <div class="server-card" data-dev-server="${escapeHtml(s.guild_id)}">
+      <div class="server-icon">${s.icon ? `<img src="${escapeHtml(s.icon)}" alt="">` : '🛰️'}</div>
+      <div class="server-info">
+        <div class="server-name">${escapeHtml(s.name || 'Sem nome')}</div>
+        <div class="server-id mono">${escapeHtml(s.guild_id)}</div>
+        <div class="server-meta">
+          <span>👥 ${fmtNumber(s.member_count || 0)}</span>
+          ${s.is_premium ? '<span class="badge badge-ok">💎</span>' : ''}
         </div>
       </div>
-      <div class="mini-stats">
-        <div class="mini-stat"><div class="num">${Number(g.member_count || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
-        <div class="mini-stat"><div class="num">${counts.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
-        <div class="mini-stat"><div class="num">${counts.bets_total || 0}</div><div class="lbl">Apostas</div></div>
-        <div class="mini-stat"><div class="num">${counts.orders_delivered || 0}</div><div class="lbl">Vendas</div></div>
-        <div class="mini-stat"><div class="num">${counts.products || 0}</div><div class="lbl">Produtos</div></div>
+      <div class="server-actions">
+        <button class="btn btn-sm" data-action-btn="${escapeHtml(s.guild_id)}">⚡</button>
       </div>
-      <div class="card" style="margin-top:14px">
-        <h3 style="font-size:14px;margin-bottom:10px">📋 Configurações</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
-          <span class="stat-pill">Tipo: ${escapeHtml(c.server_type || 'personalizado')}</span>
-          <span class="stat-pill">${cfgPremium}</span>
-          <span class="stat-pill">Anti-link: ${c.anti_link ? '🟢' : '🔴'}</span>
-          <span class="stat-pill">Anti-conv: ${c.anti_invite ? '🟢' : '🔴'}</span>
-        </div>
-      </div>
-      <div class="card">
-        <h3 style="font-size:14px;margin-bottom:10px">🎮 Free Fire</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
-          <span class="stat-pill">PIX: ${escapeHtml(ff?.mp_access_token ? 'Mercado Pago' : ff?.pix_key ? 'Estático' : 'Nenhum')}</span>
-          <span class="stat-pill">Manutenção: ${ff?.maintenance ? '🔴' : '🟢'}</span>
-          <span class="stat-pill">Mediador: ${ff?.mediator_role_id ? '✅' : '❌'}</span>
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeModal('modalServer')">Fechar</button>
-        <button class="btn" onclick="closeModal('modalServer'); openDevServerActions('${escapeHtml(guildId)}')">⚡ Ações</button>
-      </div>
-    `;
-  } catch (e) { $('#serverDetail').innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('[data-dev-server]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-action-btn]')) return;
+      openServerDetail(el.dataset.devServer);
+    });
+  });
+  wrap.querySelectorAll('[data-action-btn]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDevServerActions(btn.dataset.actionBtn);
+    });
+  });
+
+  $('btnRefreshDevServers')?.addEventListener('click', loadDevServers, { once: true });
+  $('devServersSearch')?.addEventListener('input', debounce(loadDevServers, 400), { once: true });
+  $('devServersMinMembers')?.addEventListener('input', debounce(loadDevServers, 400), { once: true });
+  $('devServersPremium')?.addEventListener('change', loadDevServers, { once: true });
+  $('btnForceSyncAll')?.addEventListener('click', async () => {
+    const r = await api('/api/dev/sync-servers', { method: 'POST' });
+    if (r.ok) toast(r.message, 'ok'); else toast(r.error, 'error');
+  }, { once: true });
 }
 
-let _devActionsGid = null;
-function openDevServerActions(guildId) {
-  _devActionsGid = guildId;
-  $('#devServerActionsTitle').textContent = '⚡ Ações';
-  $('#devServerActionsId').textContent = guildId;
-  $('#devServerActionsMsg').style.display = 'none';
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEV — BUSCAR SERVIDOR
+// ═══════════════════════════════════════════════════════════
+$('btnDevServerLookup')?.addEventListener('click', async () => {
+  const gid = $('devServerLookupId').value.trim();
+  if (!/^\d{15,25}$/.test(gid)) return toast('ID inválido', 'error');
+  const wrap = $('devServerLookupResult');
+  wrap.innerHTML = '<div class="card">⏳ Buscando...</div>';
+  const r = await api(`/api/dev/servers/${gid}/full`);
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const g = r.guild || {};
+  const cfg = r.config || {};
+  const c = r.counts || {};
+  wrap.innerHTML = `
+    <div class="card card-highlight">
+      <h3>🛰️ ${escapeHtml(g.name || 'Servidor')}</h3>
+      <p class="hint mono">${escapeHtml(g.guild_id || gid)}</p>
+      <div class="grid-3" style="margin-top:14px">
+        <div class="stat-card"><div class="stat-icon blue">👥</div><div class="stat-body"><div class="stat-value">${fmtNumber(g.member_count||0)}</div><div class="stat-label">Membros</div></div></div>
+        <div class="stat-card"><div class="stat-icon green">🎫</div><div class="stat-body"><div class="stat-value">${c.tickets_open||0}</div><div class="stat-label">Tickets</div></div></div>
+        <div class="stat-card"><div class="stat-icon amber">🎮</div><div class="stat-body"><div class="stat-value">${c.bets_total||0}</div><div class="stat-label">Apostas</div></div></div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn" onclick="openDevServerActions('${gid}')">⚡ Ações</button>
+        <button class="btn btn-secondary" onclick="navigate('dev-servers')">Voltar</button>
+      </div>
+    </div>
+  `;
+});
+
+// ═══════════════════════════════════════════════════════════
+// DEV — AÇÕES DO SERVIDOR
+// ═══════════════════════════════════════════════════════════
+function openDevServerActions(gid) {
+  APP.currentServerActions = gid;
+  $('devServerActionsTitle').textContent = '🛰️ Ações do Servidor';
+  $('devServerActionsId').textContent = gid;
+  clearMsg('devServerActionsMsg');
   openModal('modalDevServerActions');
 }
-$('#actRename')?.addEventListener('click', async () => {
-  if (!_devActionsGid) return;
-  const name = prompt('Novo nome do servidor:');
-  if (!name || name.length < 2) return;
-  try {
-    await api(`/api/dev/servers/${_devActionsGid}/rename`, { method: 'POST', body: JSON.stringify({ name }) });
-    toast('Renomeado!');
-    showMsg('#devServerActionsMsg', '✅ Renomeado', 'ok');
-    loadDevServers();
-  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+
+$('actRename')?.addEventListener('click', async () => {
+  const name = prompt('Novo nome do servidor (máx 100):');
+  if (!name) return;
+  const r = await api(`/api/dev/servers/${APP.currentServerActions}/rename`, {
+    method: 'POST', body: JSON.stringify({ name }),
+  });
+  if (r.ok) { setMsg('devServerActionsMsg', '✅ Renomeado!', 'ok'); toast('Renomeado', 'ok'); }
+  else setMsg('devServerActionsMsg', r.error, 'error');
 });
-$('#actRefresh')?.addEventListener('click', async () => {
-  if (!_devActionsGid) return;
-  try {
-    await api(`/api/dev/servers/${_devActionsGid}/refresh`, { method: 'POST' });
-    toast('Dados atualizados!');
-    showMsg('#devServerActionsMsg', '✅ Dados atualizados', 'ok');
-    loadDevServers();
-  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+
+$('actRefresh')?.addEventListener('click', async () => {
+  const r = await api(`/api/dev/servers/${APP.currentServerActions}/refresh`, { method: 'POST' });
+  if (r.ok) { setMsg('devServerActionsMsg', '✅ Atualizado!', 'ok'); toast('Dados atualizados', 'ok'); }
+  else setMsg('devServerActionsMsg', r.error, 'error');
 });
-$('#actForcePremium')?.addEventListener('click', async () => {
-  if (!_devActionsGid) return;
-  if (!confirm('Ativar Force Premium por 30 dias neste servidor?')) return;
-  try {
-    await api('/api/dev/force-premium', { method: 'POST', body: JSON.stringify({ scope: 'guild', target_id: _devActionsGid, days: 30, reason: 'Via painel DEV' }) });
-    toast('💎 Force Premium ativado!');
-    showMsg('#devServerActionsMsg', '✅ Premium ativado por 30 dias', 'ok');
-    loadDevServers();
-  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+
+$('actForcePremium')?.addEventListener('click', async () => {
+  const days = Number(prompt('Dias (0 = permanente):', '30'));
+  const r = await api('/api/dev/force-premium', {
+    method: 'POST',
+    body: JSON.stringify({ scope: 'guild', target_id: APP.currentServerActions, days, reason: 'Ação DEV painel' }),
+  });
+  if (r.ok) { setMsg('devServerActionsMsg', '✅ Premium aplicado!', 'ok'); toast('Premium aplicado', 'ok'); }
+  else setMsg('devServerActionsMsg', r.error, 'error');
 });
-$('#actSyncMembers')?.addEventListener('click', async () => {
-  if (!_devActionsGid) return;
-  if (!confirm('Levar membros via OAuth (máx 50)?')) return;
-  try {
-    await api(`/api/me/servers/${_devActionsGid}/take-members`, { method: 'POST', body: JSON.stringify({ limit: 50 }) });
-    showMsg('#devServerActionsMsg', '✅ Membros sendo levados em background', 'ok');
-  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+
+$('actSyncMembers')?.addEventListener('click', async () => {
+  if (!confirm('Levar membros via OAuth? Máx 50 por vez.')) return;
+  const r = await api(`/api/me/servers/${APP.currentServerActions}/take-members`, {
+    method: 'POST', body: JSON.stringify({ limit: 50 }),
+  });
+  if (r.ok) { setMsg('devServerActionsMsg', `✅ ${r.added} sucesso, ${r.failed} falha`, 'ok'); toast('Membros sincronizados', 'ok'); }
+  else setMsg('devServerActionsMsg', r.error, 'error');
 });
-$('#actLeave')?.addEventListener('click', async () => {
-  if (!_devActionsGid) return;
-  if (!confirm('⚠️ Fazer o bot SAIR deste servidor?')) return;
-  try {
-    await api(`/api/dev/servers/${_devActionsGid}/leave`, { method: 'POST' });
-    toast('Bot saiu do servidor');
-    closeModal('modalDevServerActions');
-    loadDevServers();
-  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+
+$('actLeave')?.addEventListener('click', async () => {
+  if (!confirm('Fazer o bot sair deste servidor? Isso é irreversível.')) return;
+  const r = await api(`/api/dev/servers/${APP.currentServerActions}/leave`, { method: 'POST' });
+  if (r.ok) { toast('Bot saiu', 'ok'); closeModal('modalDevServerActions'); }
+  else setMsg('devServerActionsMsg', r.error, 'error');
 });
-$('#actNuke')?.addEventListener('click', async () => {
-  if (!_devActionsGid) return;
-  const conf = prompt('⚠️ ISSO VAI APAGAR TODOS OS CANAIS E CARGOS DO SERVIDOR!\nDigite CONFIRMAR para prosseguir:');
-  if (conf !== 'CONFIRMAR') return;
-  try {
-    const r = await api(`/api/dev/servers/${_devActionsGid}/nuke`, { method: 'POST', body: JSON.stringify({ confirm: conf }) });
-    toast(`💥 ${r.deletedChannels} canais + ${r.deletedRoles} cargos apagados`);
-    closeModal('modalDevServerActions');
-    loadDevServers();
-  } catch (e) { showMsg('#devServerActionsMsg', e.message); }
+
+$('actNuke')?.addEventListener('click', async () => {
+  const c = prompt('Digite CONFIRMAR para apagar TODOS os canais e cargos:');
+  if (c !== 'CONFIRMAR') return;
+  const r = await api(`/api/dev/servers/${APP.currentServerActions}/nuke`, {
+    method: 'POST', body: JSON.stringify({ confirm: 'CONFIRMAR' }),
+  });
+  if (r.ok) { setMsg('devServerActionsMsg', `💥 ${r.deletedChannels} canais, ${r.deletedRoles} cargos apagados`, 'ok'); toast('Nuke completo', 'ok'); }
+  else setMsg('devServerActionsMsg', r.error, 'error');
 });
 
 // ═══════════════════════════════════════════════════════════
-// 🆕 DEV — BUSCAR SERVIDOR
+// KILL SWITCH
 // ═══════════════════════════════════════════════════════════
-$('#btnDevServerLookup')?.addEventListener('click', async () => {
-  const gid = $('#devServerLookupId').value.trim();
-  if (!gid) return toast('Digite o ID', 'error');
-  const box = $('#devServerLookupResult');
-  box.innerHTML = '<div class="loading">Buscando…</div>';
-  try {
-    const r = await api(`/api/dev/servers/${gid}/full`);
-    const g = r.guild, c = r.config || {}, ff = r.ff || {}, counts = r.counts || {};
-    box.innerHTML = `
-      <div class="card">
-        <h3>${escapeHtml(g?.name || 'Servidor')}</h3>
-        <p class="hint">${escapeHtml(gid)}</p>
-        <div class="mini-stats" style="margin-top:12px">
-          <div class="mini-stat"><div class="num">${Number(g?.member_count || 0).toLocaleString('pt-BR')}</div><div class="lbl">Membros</div></div>
-          <div class="mini-stat"><div class="num">${counts.tickets_open || 0}</div><div class="lbl">Tickets</div></div>
-          <div class="mini-stat"><div class="num">${counts.bets_total || 0}</div><div class="lbl">Apostas</div></div>
-          <div class="mini-stat"><div class="num">${counts.orders_delivered || 0}</div><div class="lbl">Vendas</div></div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
-          <button class="btn btn-sm" onclick="openDevServerDetail('${escapeHtml(gid)}')">📊 Ver completo</button>
-          <button class="btn btn-sm btn-secondary" onclick="openDevServerActions('${escapeHtml(gid)}')">⚡ Ações</button>
-        </div>
-      </div>
-    `;
-  } catch (e) { box.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+async function loadKillSwitch() {
+  const r = await api('/api/dev/kill-switch');
+  if (!r.ok) return;
+  $('ksStatus').innerHTML = r.active
+    ? `<div style="padding:12px;background:rgba(239,68,68,.15);border-radius:10px;color:#fca5a5">🔴 ATIVO — ${escapeHtml(r.reason || 'sem motivo')}</div>`
+    : '<div style="padding:12px;background:rgba(34,197,94,.15);border-radius:10px;color:#86efac">🟢 Normal</div>';
+
+  $('btnKillOn')?.addEventListener('click', async () => {
+    const reason = $('ksReason').value.trim();
+    if (!reason) return toast('Informe o motivo', 'error');
+    const r = await api('/api/dev/kill-switch', { method: 'POST', body: JSON.stringify({ active: true, reason }) });
+    if (r.ok) { toast('Kill switch ATIVADO', 'ok'); loadKillSwitch(); }
+  }, { once: true });
+  $('btnKillOff')?.addEventListener('click', async () => {
+    const r = await api('/api/dev/kill-switch', { method: 'POST', body: JSON.stringify({ active: false }) });
+    if (r.ok) { toast('Kill switch desativado', 'ok'); loadKillSwitch(); }
+  }, { once: true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// MANUTENÇÃO
+// ═══════════════════════════════════════════════════════════
+async function loadMaintenance() {
+  const r = await api('/api/dev/maintenance');
+  if (!r.ok) return;
+  $('mtStatus').innerHTML = r.active
+    ? `<div style="padding:12px;background:rgba(239,68,68,.15);border-radius:10px;color:#fca5a5">🔴 ATIVA — ${escapeHtml(r.reason || 'sem motivo')}</div>`
+    : '<div style="padding:12px;background:rgba(34,197,94,.15);border-radius:10px;color:#86efac">🟢 Normal</div>';
+
+  $('btnMtOn')?.addEventListener('click', async () => {
+    const reason = $('mtReason').value.trim();
+    const r = await api('/api/dev/maintenance', { method: 'POST', body: JSON.stringify({ active: true, reason }) });
+    if (r.ok) { toast('Manutenção ativada', 'ok'); loadMaintenance(); }
+  }, { once: true });
+  $('btnMtOff')?.addEventListener('click', async () => {
+    const r = await api('/api/dev/maintenance', { method: 'POST', body: JSON.stringify({ active: false }) });
+    if (r.ok) { toast('Manutenção desativada', 'ok'); loadMaintenance(); }
+  }, { once: true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// FORCE PREMIUM
+// ═══════════════════════════════════════════════════════════
+async function loadForcePremium() {
+  const wrap = $('fpList');
+  wrap.innerHTML = '';
+  const r = await api('/api/dev/force-premium');
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌</div>`; return; }
+  const list = r.items || [];
+  if (!list.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">💎</div><p>Nenhum ativo</p></div>'; return; }
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr><th>Scope</th><th>Target</th><th>Expira</th><th>Motivo</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(f => `
+          <tr>
+            <td><span class="badge badge-info">${escapeHtml(f.scope)}</span></td>
+            <td class="mono">${escapeHtml(f.target_id)}</td>
+            <td>${f.permanent ? '♾️' : (f.expires_at ? timeAgo(f.expires_at) : '—')}</td>
+            <td>${escapeHtml(f.reason || '—')}</td>
+            <td><button class="btn btn-sm btn-danger" data-del-fp="${f.id}">🗑️</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  wrap.querySelectorAll('[data-del-fp]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Remover?')) return;
+      const r = await api(`/api/dev/force-premium/${b.dataset.delFp}`, { method: 'DELETE' });
+      if (r.ok) loadForcePremium();
+    });
+  });
+
+  $('btnFpAdd')?.addEventListener('click', async () => {
+    const body = {
+      scope: $('fpScope').value,
+      target_id: $('fpTarget').value.trim(),
+      days: Number($('fpDays').value) || 0,
+      reason: $('fpReason').value.trim() || null,
+    };
+    if (!body.target_id) return toast('Informe o ID', 'error');
+    const r = await api('/api/dev/force-premium', { method: 'POST', body: JSON.stringify(body) });
+    if (r.ok) { toast('Adicionado', 'ok'); loadForcePremium(); }
+    else toast(r.error, 'error');
+  }, { once: true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// BROADCAST
+// ═══════════════════════════════════════════════════════════
+$('btnBcSend')?.addEventListener('click', async () => {
+  const title = $('bcTitle').value.trim();
+  const content = $('bcContent').value.trim();
+  const role = $('bcRole').value;
+  if (!title || !content) return toast('Preencha título e conteúdo', 'error');
+  const r = await api('/api/dev/broadcast', {
+    method: 'POST', body: JSON.stringify({ title, content, role: role || undefined }),
+  });
+  if (r.ok) { toast(`${r.sent} notificações enviadas`, 'ok'); $('bcTitle').value = ''; $('bcContent').value = ''; }
+  else toast(r.error, 'error');
+});
+
+$('btnForceUpdate')?.addEventListener('click', async () => {
+  const r = await api('/api/dev/force-update', { method: 'POST' });
+  if (r.ok) toast('Resetado', 'ok'); else toast(r.error, 'error');
 });
 
 // ═══════════════════════════════════════════════════════════
-// NOTIFICAÇÕES
+// BACKUP
 // ═══════════════════════════════════════════════════════════
-async function loadNotifications() {
-  try {
-    const { notifications, unread } = await api('/api/notifications');
-    state.notifications = notifications;
-    updateBell(unread);
-    renderNotifDrawer(notifications);
-    if (state.currentPage === 'notifications') renderNotifPage();
-  } catch {}
-}
-function updateBell(n) {
-  const b = $('#bellBadge'); if (!b) return;
-  const nav = $('#navNotifBadge');
-  if (n > 0) {
-    b.textContent = n > 99 ? '99+' : n; b.classList.remove('hidden');
-    if (nav) { nav.textContent = n > 99 ? '99+' : n; nav.classList.remove('hidden'); }
-  } else { b.classList.add('hidden'); if (nav) nav.classList.add('hidden'); }
-}
-function notifIcon(t) { return { key_received: '🔑', system: '📢', alert: '⚠️' }[t] || '🔔'; }
-function renderNotifDrawer(list) {
-  const b = $('#drawerBody'); if (!b) return;
-  if (!list?.length) { b.innerHTML = '<div class="empty"><span class="icon">📭</span>Sem notificações</div>'; return; }
-  b.innerHTML = list.map(n => `<div class="notif-item ${n.read ? '' : 'unread'}" onclick="markNotifRead(${n.id})">
-    <div class="tt">${!n.read ? '<span class="unread-dot"></span>' : ''}${notifIcon(n.type)} ${escapeHtml(n.title || '')}</div>
-    <div class="ct">${escapeHtml(n.content || '').replace(/\n/g, '<br>')}</div>
-    <div class="time">${timeAgo(n.created_at)}</div></div>`).join('');
-}
-function renderNotifPage() {
-  const el = $('#notifList'); if (!el) return;
-  const list = state.notifications;
-  if (!list?.length) { el.innerHTML = '<div class="empty"><span class="icon">📭</span>Nada por aqui</div>'; return; }
-  el.innerHTML = list.map(n => `<div class="card notif-item ${n.read ? '' : 'unread'}" style="margin-bottom:8px;padding:14px" onclick="markNotifRead(${n.id})">
-    <div class="tt">${!n.read ? '<span class="unread-dot"></span>' : ''}${notifIcon(n.type)} ${escapeHtml(n.title || '')}</div>
-    <div class="ct">${escapeHtml(n.content || '').replace(/\n/g, '<br>')}</div>
-    <div class="time">${timeAgo(n.created_at)}</div></div>`).join('');
-}
-window.markNotifRead = async function (id) {
-  try { await api(`/api/notifications/${id}/read`, { method: 'PATCH' }); loadNotifications(); } catch {}
-};
-async function markAllRead() {
-  try { await api('/api/notifications/read-all', { method: 'POST' }); loadNotifications(); toast('Todas lidas'); }
-  catch (e) { toast(e.message, 'error'); }
-}
-function startPolling() {
-  if (state.pollTimer) clearInterval(state.pollTimer);
-  state.pollTimer = setInterval(loadNotifications, 30000);
-  loadPendingBadge(); setInterval(loadPendingBadge, 60000);
-}
+$('btnDownloadBackup')?.addEventListener('click', () => {
+  window.open('/api/dev/backup', '_blank');
+});
+$('btnForceSync')?.addEventListener('click', async () => {
+  const r = await api('/api/dev/sync-servers', { method: 'POST' });
+  if (r.ok) toast(r.message, 'ok'); else toast(r.error, 'error');
+});
 
 // ═══════════════════════════════════════════════════════════
 // USUÁRIOS
 // ═══════════════════════════════════════════════════════════
-async function loadUsers() {
-  const t = $('#usersTable'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const params = new URLSearchParams();
-    if ($('#userSearch')?.value)      params.set('search', $('#userSearch').value.trim());
-    if ($('#userFilterRole')?.value)  params.set('role', $('#userFilterRole').value);
-    if ($('#userFilterPlan')?.value)  params.set('plan', $('#userFilterPlan').value);
-    if ($('#userFilterAtivo')?.value) params.set('ativo', $('#userFilterAtivo').value);
-    const r = await api('/api/dev/usuarios?' + params);
-    state.cachedUsers = r.usuarios;
-    if (!r.usuarios.length) { t.innerHTML = '<div class="empty"><span class="icon">👤</span>Nenhum</div>'; return; }
-    t.innerHTML = `<table><thead><tr>
-      <th>Email</th><th>Nome</th><th>Role</th><th>Plano</th><th>Discord</th><th>Ativo</th><th>Ações</th>
-    </tr></thead><tbody>${r.usuarios.map(u => `<tr>
-      <td class="wrap">${escapeHtml(u.email)}</td>
-      <td class="wrap">${escapeHtml(u.nome || '—')}</td>
-      <td><span class="badge ${escapeHtml(u.role)}">${escapeHtml((u.role || '').toUpperCase())}</span></td>
-      <td><span class="badge ${escapeHtml(u.plan || 'basic')}">${escapeHtml((u.plan || 'basic').toUpperCase())}</span></td>
-      <td>${u.discord_id ? `<code>${escapeHtml(u.discord_id)}</code>` : '—'}</td>
-      <td>${u.ativo ? '🟢' : '🔴'}</td>
-      <td>
-        <button type="button" class="btn btn-sm btn-secondary" data-edit="${escapeHtml(u.user_id)}" title="Editar">✏️</button>
-        <button type="button" class="btn btn-sm" data-notify="${escapeHtml(u.user_id)}" data-email="${escapeHtml(u.email)}" title="Notificar">🔔</button>
-        <button type="button" class="btn btn-sm" data-plan="${escapeHtml(u.user_id)}" title="Mudar plano">💎</button>
-        ${u.role !== 'dev' && u.ativo ? `<button type="button" class="btn btn-sm btn-danger" data-deact="${escapeHtml(u.user_id)}" title="Desativar">🚫</button>` : ''}
-      </td>
-    </tr>`).join('')}</tbody></table>`;
-    t.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => { const u = r.usuarios.find(x => x.user_id === b.dataset.edit); if (u) editUser(u); }));
-    t.querySelectorAll('[data-deact]').forEach(b => b.addEventListener('click', () => deactivateUser(b.dataset.deact)));
-    t.querySelectorAll('[data-notify]').forEach(b => b.addEventListener('click', () => openSendNotif(b.dataset.notify, b.dataset.email)));
-    t.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => changePlan(b.dataset.plan)));
-  } catch (err) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(err.message)}</div>`; }
-}
-async function changePlan(uid) {
-  const plan = prompt('Novo plano (none/basic/premium/ultra/unlimited):', 'basic');
-  if (!plan) return;
-  if (!['none', 'basic', 'premium', 'ultra', 'unlimited'].includes(plan)) return toast('Plano inválido', 'error');
-  try {
-    await api(`/api/dev/usuarios/${uid}/plan`, { method: 'PATCH', body: JSON.stringify({ plan }) });
-    toast('Plano atualizado'); loadUsers();
-  } catch (e) { toast(e.message, 'error'); }
-}
-async function deactivateUser(uid) {
-  if (!confirm('Desativar?')) return;
-  try { await api('/api/dev/usuarios/' + uid, { method: 'DELETE' }); toast('Desativado'); loadUsers(); }
-  catch (e) { toast(e.message, 'error'); }
-}
-function editUser(u) {
-  $('#modalUserTitle').textContent = '✏️ Editar';
-  $('#modalUserId').value = u.user_id;
-  $('#modalUserEmail').value = u.email; $('#modalUserEmail').disabled = true;
-  $('#modalUserDiscord').value = u.discord_id || '';
-  $('#modalUserNome').value = u.nome || '';
-  $('#modalUserRole').value = u.role;
-  $('#modalUserPlan').value = u.plan || 'basic';
-  $('#fieldPassword').style.display = 'none';
-  $('#modalUserGuilds').value = (u.assigned_guilds || []).join(', ');
-  $('#modalUserNotes').value = u.notes || '';
-  $('#btnSaveUser').textContent = 'Salvar'; $('#userForm').dataset.mode = 'edit'; openModal('modalUser');
-}
-$('#btnNovoUsuario')?.addEventListener('click', () => {
-  $('#modalUserTitle').textContent = '➕ Novo';
-  $('#userForm').reset(); $('#modalUserId').value = ''; $('#modalUserEmail').disabled = false;
-  $('#modalUserRole').value = 'cliente'; $('#modalUserPlan').value = 'basic';
-  $('#fieldPassword').style.display = ''; $('#btnSaveUser').textContent = 'Criar';
-  $('#userForm').dataset.mode = 'create'; openModal('modalUser');
-});
-$('#userForm')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const mode = e.target.dataset.mode || 'create';
-  const btn = $('#btnSaveUser'); btn.disabled = true;
-  try {
-    const payload = {
-      email: $('#modalUserEmail').value.trim(),
-      discord_id: $('#modalUserDiscord').value.trim(),
-      nome: $('#modalUserNome').value.trim() || null,
-      role: $('#modalUserRole').value,
-      plan: $('#modalUserPlan').value,
-      assigned_guilds: $('#modalUserGuilds').value.split(',').map(s => s.trim()).filter(Boolean),
-      notes: $('#modalUserNotes').value.trim() || null,
-    };
-    if (mode === 'create') {
-      payload.password = $('#modalUserPassword').value.trim() || null;
-      const r = await api('/api/dev/usuarios', { method: 'POST', body: JSON.stringify(payload) });
-      showMsg('#modalUserMsg', `✅ Criado! Senha: ${r.temp_password}`, 'ok');
-      setTimeout(() => { closeModal('modalUser'); loadUsers(); }, 4000);
-    } else {
-      await api('/api/dev/usuarios/' + $('#modalUserId').value, { method: 'PATCH', body: JSON.stringify(payload) });
-      toast('Atualizado'); closeModal('modalUser'); loadUsers();
-    }
-  } catch (err) { showMsg('#modalUserMsg', err.message); }
-  finally { btn.disabled = false; }
-});
+async function loadUsuarios() {
+  const wrap = $('usersTable');
+  wrap.innerHTML = '⏳';
+  const params = new URLSearchParams();
+  if ($('userSearch')?.value) params.set('search', $('userSearch').value);
+  if ($('userFilterRole')?.value) params.set('role', $('userFilterRole').value);
+  if ($('userFilterPlan')?.value) params.set('plan', $('userFilterPlan').value);
+  if ($('userFilterAtivo')?.value) params.set('ativo', $('userFilterAtivo').value);
 
-function openSendNotif(userId, email) {
-  $('#sendNotifUserId').value = userId;
-  $('#sendNotifTarget').textContent = email;
-  $('#sendNotifType').value = 'system';
-  $('#sendNotifTitle').value = '';
-  $('#sendNotifContent').value = '';
-  $('#sendNotifMsg').style.display = 'none';
-  openModal('modalSendNotif');
+  const r = await api('/api/dev/usuarios?' + params);
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const users = r.usuarios || [];
+  if (!users.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Nenhum usuário</p></div>'; return; }
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr><th>E-mail</th><th>Discord</th><th>Role</th><th>Plano</th><th>Status</th><th>Criado</th><th></th></tr></thead>
+      <tbody>
+        ${users.map(u => `
+          <tr>
+            <td>${escapeHtml(u.email)}</td>
+            <td class="mono">${escapeHtml(u.discord_id || '—')}</td>
+            <td>${ROLES_LABEL[u.role] || u.role}</td>
+            <td>${PLANS_LABEL[u.plan] || u.plan || '—'}</td>
+            <td>${u.ativo ? '<span class="badge badge-ok">ATIVO</span>' : '<span class="badge badge-fail">INATIVO</span>'}</td>
+            <td class="audit-time">${timeAgo(u.created_at)}</td>
+            <td>
+              <button class="btn btn-sm" data-sessions="${u.user_id}" data-email="${escapeHtml(u.email)}">🖥️</button>
+              <button class="btn btn-sm btn-danger" data-del-user="${u.user_id}">🚫</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  wrap.querySelectorAll('[data-sessions]').forEach(b => {
+    b.addEventListener('click', () => openUserSessions(b.dataset.sessions, b.dataset.email));
+  });
+  wrap.querySelectorAll('[data-del-user]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('Desativar este usuário?')) return;
+      const r = await api(`/api/dev/usuarios/${b.dataset.delUser}`, { method: 'DELETE' });
+      if (r.ok) { toast('Desativado', 'ok'); loadUsuarios(); }
+      else toast(r.error, 'error');
+    });
+  });
+
+  $('btnNovoUsuario')?.addEventListener('click', () => {
+    $('modalUserId').value = '';
+    $('modalUserEmail').value = '';
+    $('modalUserDiscord').value = '';
+    $('modalUserNome').value = '';
+    $('modalUserRole').value = 'cliente';
+    $('modalUserPlan').value = 'basic';
+    $('modalUserPassword').value = '';
+    $('modalUserGuilds').value = '';
+    $('modalUserNotes').value = '';
+    $('modalUserTitle').textContent = '➕ Novo Usuário';
+    $('btnSaveUser').textContent = 'Criar';
+    clearMsg('modalUserMsg');
+    openModal('modalUser');
+  }, { once: true });
+
+  $('btnRefreshUsers')?.addEventListener('click', loadUsuarios, { once: true });
+  $('userSearch')?.addEventListener('input', debounce(loadUsuarios, 400), { once: true });
+  $('userFilterRole')?.addEventListener('change', loadUsuarios, { once: true });
+  $('userFilterPlan')?.addEventListener('change', loadUsuarios, { once: true });
+  $('userFilterAtivo')?.addEventListener('change', loadUsuarios, { once: true });
 }
-$('#btnConfirmSendNotif')?.addEventListener('click', async () => {
-  const user_id = $('#sendNotifUserId').value;
-  const type = $('#sendNotifType').value;
-  const title = $('#sendNotifTitle').value.trim();
-  const content = $('#sendNotifContent').value.trim();
-  if (!title || !content) return showMsg('#sendNotifMsg', 'Preencha título e conteúdo');
-  const btn = $('#btnConfirmSendNotif'); btn.disabled = true;
-  try {
-    await api('/api/dev/notifications', { method: 'POST', body: JSON.stringify({ user_id, type, title, content }) });
-    showMsg('#sendNotifMsg', '✅ Enviada!', 'ok');
-    toast('Notificação enviada');
-    setTimeout(() => closeModal('modalSendNotif'), 1500);
-  } catch (e) { showMsg('#sendNotifMsg', e.message); }
-  finally { btn.disabled = false; }
+
+$('userForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearMsg('modalUserMsg');
+  const id = $('modalUserId').value;
+  const body = {
+    email: $('modalUserEmail').value.trim(),
+    discord_id: $('modalUserDiscord').value.trim(),
+    nome: $('modalUserNome').value.trim() || undefined,
+    role: $('modalUserRole').value,
+    plan: $('modalUserPlan').value,
+    assigned_guilds: $('modalUserGuilds').value.split(',').map(x => x.trim()).filter(Boolean),
+    notes: $('modalUserNotes').value.trim() || null,
+  };
+  if (!body.discord_id) return setMsg('modalUserMsg', 'Discord ID obrigatório', 'error');
+  if (!/^\d{15,25}$/.test(body.discord_id)) return setMsg('modalUserMsg', 'Discord ID inválido', 'error');
+  if (!id) body.password = $('modalUserPassword').value.trim() || undefined;
+
+  const r = id
+    ? await api(`/api/dev/usuarios/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+    : await api('/api/dev/usuarios', { method: 'POST', body: JSON.stringify(body) });
+
+  if (!r.ok) return setMsg('modalUserMsg', r.error, 'error');
+  if (r.temp_password) setMsg('modalUserMsg', `✅ Criado! Senha: ${r.temp_password}`, 'ok');
+  else setMsg('modalUserMsg', '✅ Salvo!', 'ok');
+  toast('Usuário salvo', 'ok');
+  loadUsuarios();
+  if (!r.temp_password) setTimeout(() => closeModal('modalUser'), 1200);
 });
 
 // ═══════════════════════════════════════════════════════════
 // APROVAÇÕES
 // ═══════════════════════════════════════════════════════════
 async function loadPending() {
-  const el = $('#pendingList'); if (!el) return;
-  el.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api('/api/dev/usuarios/pending');
-    if (!r.pendentes.length) { el.innerHTML = '<div class="empty"><span class="icon">✅</span>Nenhum pendente</div>'; return; }
-    el.innerHTML = r.pendentes.map(u => `<div class="card" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:200px">
-        <div style="font-weight:600">${escapeHtml(u.email)}</div>
-        <div style="font-size:12px;color:var(--txt-2)">${u.discord_id ? `Discord: ${escapeHtml(u.discord_id)} · ` : ''}${timeAgo(u.created_at)}</div>
+  const wrap = $('pendingList');
+  wrap.innerHTML = '';
+  const r = await api('/api/dev/usuarios/pending');
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌</div>`; return; }
+  const pend = r.pendentes || [];
+  if (!pend.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nenhum pendente</p></div>'; return; }
+  wrap.innerHTML = pend.map(u => `
+    <div class="session-card">
+      <div class="session-icon">⏳</div>
+      <div class="session-info">
+        <div class="session-title">${escapeHtml(u.email)}</div>
+        <div class="session-detail">
+          <span>🎮 <code>${escapeHtml(u.discord_id || '—')}</code></span>
+          <span>🕐 ${timeAgo(u.created_at)}</span>
+        </div>
       </div>
-      <button type="button" class="btn btn-success btn-sm" data-approve="${escapeHtml(u.user_id)}" data-email="${escapeHtml(u.email)}">✅ Aprovar</button>
-    </div>`).join('');
-    el.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => openApprove({ user_id: b.dataset.approve, email: b.dataset.email })));
-  } catch (e) { el.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+      <div class="session-actions">
+        <button class="btn btn-success btn-sm" data-approve="${u.user_id}" data-email="${escapeHtml(u.email)}">✅ Aprovar</button>
+      </div>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('[data-approve]').forEach(b => {
+    b.addEventListener('click', () => {
+      $('approveUserId').value = b.dataset.approve;
+      $('approveEmail').textContent = b.dataset.email;
+      $('approveRole').value = 'cliente';
+      $('approvePlan').value = 'basic';
+      $('approveGuilds').value = '';
+      $('approveNotes').value = '';
+      clearMsg('approveMsg');
+      openModal('modalApprove');
+    });
+  });
 }
-async function loadPendingBadge() {
-  if (state.role !== 'dev') return;
-  try { const r = await api('/api/dev/usuarios/pending'); const n = r.pendentes.length; const b = $('#navPendingBadge');
-    if (!b) return;
-    if (n > 0) { b.textContent = n; b.classList.remove('hidden'); } else b.classList.add('hidden'); } catch {}
-}
-function openApprove(u) {
-  $('#approveUserId').value = u.user_id; $('#approveEmail').textContent = u.email;
-  $('#approveRole').value = 'cliente'; $('#approvePlan').value = 'basic';
-  $('#approveGuilds').value = ''; $('#approveNotes').value = ''; openModal('modalApprove');
-}
-$('#approveForm')?.addEventListener('submit', async e => {
+
+$('approveForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  try {
-    await api(`/api/dev/usuarios/${$('#approveUserId').value}/approve`, { method: 'POST', body: JSON.stringify({
-      role: $('#approveRole').value,
-      plan: $('#approvePlan').value,
-      assigned_guilds: $('#approveGuilds').value.split(',').map(s => s.trim()).filter(Boolean),
-      notes: $('#approveNotes').value.trim() || null,
-    })});
-    toast('Aprovado!'); closeModal('modalApprove'); loadPending(); loadPendingBadge();
-  } catch (err) { showMsg('#approveMsg', err.message); }
+  const userId = $('approveUserId').value;
+  const body = {
+    role: $('approveRole').value,
+    plan: $('approvePlan').value,
+    assigned_guilds: $('approveGuilds').value.split(',').map(x => x.trim()).filter(Boolean),
+    notes: $('approveNotes').value.trim() || null,
+  };
+  const r = await api(`/api/dev/usuarios/${userId}/approve`, { method: 'POST', body: JSON.stringify(body) });
+  if (!r.ok) return setMsg('approveMsg', r.error, 'error');
+  toast('Aprovado!', 'ok');
+  closeModal('modalApprove');
+  loadPending();
 });
 
 // ═══════════════════════════════════════════════════════════
-// LOGS
+// AUDITORIA
 // ═══════════════════════════════════════════════════════════
-async function loadLogs() {
-  const t = $('#logsTable'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const params = new URLSearchParams();
-    if ($('#logFilterAction')?.value) params.set('action', $('#logFilterAction').value.trim());
-    const r = await api('/api/dev/audit?' + params);
-    if (!r.logs.length) { t.innerHTML = '<div class="empty"><span class="icon">📋</span>Sem logs</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Quando</th><th>Ator</th><th>Ação</th><th>Alvo</th><th>IP</th></tr></thead>
-      <tbody>${r.logs.map(l => `<tr>
-        <td>${fmtDate(l.created_at)}</td>
-        <td class="wrap">${escapeHtml(l.actor_email || l.actor_id)}</td>
-        <td><code>${escapeHtml(l.action)}</code></td>
-        <td class="wrap">${escapeHtml(l.target_id || '—')}</td>
-        <td><code>${escapeHtml(l.ip || '—')}</code></td>
-      </tr>`).join('')}</tbody></table>`;
-  } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+async function loadAudit() {
+  // Stats
+  const stats = $('auditStats');
+  const rs = await api('/api/dev/audit/stats');
+  if (rs.ok) {
+    stats.innerHTML = `
+      <div class="stat-card"><div class="stat-icon blue">📋</div><div class="stat-body"><div class="stat-value">${fmtNumber(rs.stats.total)}</div><div class="stat-label">Total</div></div></div>
+      <div class="stat-card"><div class="stat-icon red">❌</div><div class="stat-body"><div class="stat-value">${fmtNumber(rs.stats.failed)}</div><div class="stat-label">Falhas</div></div></div>
+      <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-body"><div class="stat-value">${fmtNumber(rs.stats.logins_7d)}</div><div class="stat-label">Logins 7d</div></div></div>
+      <div class="stat-card"><div class="stat-icon amber">⚠️</div><div class="stat-body"><div class="stat-value">${fmtNumber(rs.stats.logins_failed_7d)}</div><div class="stat-label">Falhas 7d</div></div></div>
+      <div class="stat-card"><div class="stat-icon red">🚫</div><div class="stat-body"><div class="stat-value">${fmtNumber(rs.stats.access_denied_7d)}</div><div class="stat-label">Access denied 7d</div></div></div>
+    `;
+  }
+
+  APP.auditPage = 0;
+  await loadAuditTable();
+
+  $('btnAuditFilter')?.addEventListener('click', () => { APP.auditPage = 0; loadAuditTable(); }, { once: true });
+  $('btnAuditRefresh')?.addEventListener('click', () => { loadAudit(); }, { once: true });
+  $('btnAuditClear')?.addEventListener('click', () => {
+    ['auditFilterAction','auditFilterActor','auditFilterTarget','auditFilterIp','auditFilterFrom','auditFilterTo'].forEach(id => $(id).value = '');
+    $('auditFilterSuccess').value = '';
+    loadAudit();
+  }, { once: true });
+  $('btnAuditExport')?.addEventListener('click', () => {
+    const p = new URLSearchParams();
+    if ($('auditFilterAction')?.value) p.set('action', $('auditFilterAction').value);
+    if ($('auditFilterFrom')?.value) p.set('from', new Date($('auditFilterFrom').value).toISOString());
+    if ($('auditFilterTo')?.value) p.set('to', new Date($('auditFilterTo').value).toISOString());
+    window.open('/api/dev/audit/export?' + p, '_blank');
+  }, { once: true });
+  $('btnAuditPrev')?.addEventListener('click', () => {
+    if (APP.auditPage > 0) { APP.auditPage--; loadAuditTable(); }
+  }, { once: true });
+  $('btnAuditNext')?.addEventListener('click', () => {
+    APP.auditPage++; loadAuditTable();
+  }, { once: true });
+}
+
+async function loadAuditTable() {
+  const wrap = $('auditTable');
+  wrap.innerHTML = '<div class="card">⏳</div>';
+
+  const params = new URLSearchParams();
+  if ($('auditFilterAction')?.value) params.set('action', $('auditFilterAction').value);
+  if ($('auditFilterActor')?.value) params.set('actor_id', $('auditFilterActor').value);
+  if ($('auditFilterTarget')?.value) params.set('target_id', $('auditFilterTarget').value);
+  if ($('auditFilterIp')?.value) params.set('ip', $('auditFilterIp').value);
+  if ($('auditFilterFrom')?.value) params.set('from', new Date($('auditFilterFrom').value).toISOString());
+  if ($('auditFilterTo')?.value) params.set('to', new Date($('auditFilterTo').value).toISOString());
+  if ($('auditFilterSuccess')?.value) params.set('success', $('auditFilterSuccess').value);
+  const limit = Number($('auditFilterLimit')?.value) || 100;
+  params.set('limit', limit);
+  params.set('offset', APP.auditPage * limit);
+
+  const r = await api('/api/dev/audit?' + params);
+  if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
+  const logs = r.logs || [];
+  if (!logs.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>Nenhum evento</p></div>'; return; }
+
+  const totalPages = Math.ceil(r.total / limit);
+  $('auditPaginationInfo').textContent = `Página ${APP.auditPage + 1} de ${totalPages || 1} • ${fmtNumber(r.total)} eventos`;
+  $('btnAuditPrev').disabled = APP.auditPage === 0;
+  $('btnAuditNext').disabled = APP.auditPage >= totalPages - 1;
+
+  wrap.innerHTML = `
+    <table class="audit-table">
+      <thead><tr>
+        <th>Data</th><th>Ação</th><th>Actor</th><th>IP</th><th>Device</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        ${logs.map(l => `
+          <tr class="${l.success === false ? 'fail' : 'success'}" data-audit-id="${l.id}">
+            <td class="audit-time">${timeAgo(l.created_at)}</td>
+            <td><span class="audit-action">${escapeHtml(l.action)}</span></td>
+            <td class="audit-actor">${escapeHtml(l.actor_email || l.actor_id || '—')}</td>
+            <td><span class="audit-ip">${escapeHtml(l.ip || '—')}</span></td>
+            <td>
+              <div class="audit-device">
+                <span class="badge-device ${l.device_type || 'desktop'}">${escapeHtml(l.device_type || '?')}</span>
+                <span class="badge-browser badge-device">${escapeHtml(l.browser || '?')}</span>
+                <span class="badge-os badge-device">${escapeHtml(l.os || '?')}</span>
+              </div>
+            </td>
+            <td>${l.success !== false ? '<span class="badge badge-ok">OK</span>' : `<span class="badge badge-fail">${escapeHtml(l.error_reason || 'FAIL')}</span>`}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  wrap.querySelectorAll('[data-audit-id]').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const log = logs.find(x => String(x.id) === tr.dataset.auditId);
+      if (log) showAuditDetail(log);
+    });
+  });
+}
+
+function showAuditDetail(log) {
+  const body = $('auditDetailBody');
+  const row = (label, value, isCode) => `
+    <div class="detail-row">
+      <div class="detail-label">${escapeHtml(label)}</div>
+      <div class="detail-value">${isCode ? `<code>${escapeHtml(value)}</code>` : escapeHtml(value || '—')}</div>
+    </div>
+  `;
+  body.innerHTML = `
+    <div class="detail-section-title">Identificação</div>
+    ${row('ID', log.id, true)}
+    ${row('Ação', log.action, true)}
+    ${row('Data', fmtDate(log.created_at))}
+    ${row('Sucesso', log.success !== false ? '✅ Sim' : '❌ Não')}
+    ${log.error_reason ? row('Motivo do erro', log.error_reason) : ''}
+
+    <div class="detail-section-title">Usuário</div>
+    ${row('Actor ID', log.actor_id, true)}
+    ${row('Actor Email', log.actor_email || '—')}
+    ${log.target_id ? row('Target ID', log.target_id, true) : ''}
+    ${log.target_role ? row('Target Role', log.target_role) : ''}
+
+    <div class="detail-section-title">Rede</div>
+    ${row('IP', log.ip || '—', true)}
+    ${log.country ? row('País', log.country) : ''}
+    ${log.city ? row('Cidade', log.city) : ''}
+    ${row('Device', log.device_type || '—')}
+    ${row('Browser', log.browser || '—')}
+    ${row('OS', log.os || '—')}
+    ${row('User Agent', log.user_agent || '—')}
+    ${log.referer ? row('Referer', log.referer) : ''}
+    ${log.accept_language ? row('Idioma', log.accept_language) : ''}
+
+    ${log.duration_ms ? `<div class="detail-section-title">Performance</div>${row('Duração', log.duration_ms + 'ms')}` : ''}
+
+    ${log.metadata && Object.keys(log.metadata).length ? `
+      <div class="detail-section-title">Metadata</div>
+      <pre>${escapeHtml(JSON.stringify(log.metadata, null, 2))}</pre>
+    ` : ''}
+  `;
+  openModal('modalAuditDetail');
 }
 
 // ═══════════════════════════════════════════════════════════
-// DEV TOOLS
+// USER SESSIONS (dev vê outro user)
 // ═══════════════════════════════════════════════════════════
-async function loadKillSwitch() {
-  try { const r = await api('/api/dev/kill-switch');
-    $('#ksStatus').innerHTML = `<div class="status-indicator ${r.active ? 'on' : 'off'}">${r.active ? `🔴 ATIVO${r.reason ? ` — ${escapeHtml(r.reason)}` : ''}` : '🟢 Normal'}</div>`;
-    if (r.reason) $('#ksReason').value = r.reason;
-  } catch (e) { $('#ksStatus').innerHTML = `❌ ${escapeHtml(e.message)}`; }
+async function openUserSessions(userId, email) {
+  APP.currentUserSessions = userId;
+  $('userSessionsTarget').textContent = email;
+  openModal('modalUserSessions');
+  await loadUserSessions();
+
+  $('btnRefreshUserSessions')?.addEventListener('click', loadUserSessions, { once: true });
+  $('btnRevokeAllUserSessions')?.addEventListener('click', async () => {
+    if (!confirm('Revogar TODAS as sessões deste usuário?')) return;
+    const r = await api(`/api/dev/user/${userId}/sessions`, { method: 'DELETE' });
+    if (r.ok) { toast('Sessões revogadas', 'ok'); loadUserSessions(); }
+  }, { once: true });
 }
-$('#btnKillOn')?.addEventListener('click', async () => {
-  if (!confirm('Ativar Kill Switch?')) return;
-  try { await api('/api/dev/kill-switch', { method: 'POST', body: JSON.stringify({ active: true, reason: $('#ksReason').value }) }); toast('ON'); loadKillSwitch(); }
-  catch (e) { toast(e.message, 'error'); }
-});
-$('#btnKillOff')?.addEventListener('click', async () => {
-  try { await api('/api/dev/kill-switch', { method: 'POST', body: JSON.stringify({ active: false }) }); toast('OFF'); loadKillSwitch(); }
-  catch (e) { toast(e.message, 'error'); }
-});
-async function loadMaintenance() {
-  try { const r = await api('/api/dev/maintenance');
-    $('#mtStatus').innerHTML = `<div class="status-indicator ${r.active ? 'on' : 'off'}">${r.active ? `🔴 ATIVA${r.reason ? ` — ${escapeHtml(r.reason)}` : ''}` : '🟢 Operacional'}</div>`;
-    if (r.reason) $('#mtReason').value = r.reason;
-  } catch (e) { $('#mtStatus').innerHTML = `❌ ${escapeHtml(e.message)}`; }
+
+async function loadUserSessions() {
+  const wrap = $('userSessionsList');
+  wrap.innerHTML = '⏳';
+  const r = await api(`/api/dev/user/${APP.currentUserSessions}/sessions`);
+  if (!r.ok) { wrap.innerHTML = `❌ ${escapeHtml(r.error)}`; return; }
+  const sessions = r.sessions || [];
+  if (!sessions.length) { wrap.innerHTML = '<div class="empty-state"><p>Nenhuma sessão ativa</p></div>'; return; }
+  wrap.innerHTML = sessions.map(s => sessionCardHTML(s)).join('');
 }
-$('#btnMtOn')?.addEventListener('click', async () => {
-  if (!confirm('Ativar manutenção global?')) return;
-  try { await api('/api/dev/maintenance', { method: 'POST', body: JSON.stringify({ active: true, reason: $('#mtReason').value }) }); toast('ON'); loadMaintenance(); }
-  catch (e) { toast(e.message, 'error'); }
-});
-$('#btnMtOff')?.addEventListener('click', async () => {
-  try { await api('/api/dev/maintenance', { method: 'POST', body: JSON.stringify({ active: false }) }); toast('OFF'); loadMaintenance(); }
-  catch (e) { toast(e.message, 'error'); }
-});
-async function loadForcePremium() {
-  const t = $('#fpList'); if (!t) return;
-  t.innerHTML = '<div class="loading">Carregando…</div>';
-  try {
-    const r = await api('/api/dev/force-premium');
-    if (!r.items.length) { t.innerHTML = '<div class="empty">Nenhum</div>'; return; }
-    t.innerHTML = `<table><thead><tr><th>Scope</th><th>Target</th><th>Expira</th><th>Por</th><th></th></tr></thead>
-      <tbody>${r.items.map(f => `<tr>
-        <td>${escapeHtml(f.scope)}</td><td><code>${escapeHtml(f.target_id)}</code></td>
-        <td>${f.permanent ? '♾️' : (f.expires_at ? fmtDateShort(f.expires_at) : '?')}</td>
-        <td>${escapeHtml(f.granted_by || '—')}</td>
-        <td><button class="btn btn-sm btn-danger" data-fp-del="${f.id}">🗑️</button></td>
-      </tr>`).join('')}</tbody></table>`;
-    t.querySelectorAll('[data-fp-del]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('Remover?')) return;
-      try { await api('/api/dev/force-premium/' + b.dataset.fpDel, { method: 'DELETE' }); loadForcePremium(); }
-      catch (e) { toast(e.message, 'error'); }
-    }));
-  } catch (e) { t.innerHTML = `<div class="empty" style="color:#f87171">❌ ${escapeHtml(e.message)}</div>`; }
+
+// ═══════════════════════════════════════════════════════════
+// COMMAND PALETTE
+// ═══════════════════════════════════════════════════════════
+const CMD_ITEMS = [
+  { label: 'Dashboard', icon: '📊', nav: 'dashboard', roles: ['dev','admin','funcionario','cliente'] },
+  { label: 'Keys', icon: '🔑', nav: 'keys', roles: ['dev','admin','funcionario'] },
+  { label: 'Packs', icon: '📦', nav: 'packs', roles: ['dev'] },
+  { label: 'Meus Servidores', icon: '🌐', nav: 'servers', roles: ['dev','admin','funcionario','cliente'] },
+  { label: 'Minhas Keys', icon: '🎁', nav: 'my-keys', roles: ['dev','admin','funcionario','cliente'] },
+  { label: 'Minhas Sessões', icon: '🖥️', nav: 'sessions', roles: ['dev','admin','funcionario','cliente'] },
+  { label: 'Notificações', icon: '🔔', nav: 'notifications', roles: ['dev','admin','funcionario','cliente'] },
+  { label: 'Tickets Global', icon: '🎫', nav: 'tickets-global', roles: ['dev','admin'] },
+  { label: 'Financeiro', icon: '💰', nav: 'financial', roles: ['dev','admin'] },
+  { label: 'Gerenciar Servidores', icon: '🛰️', nav: 'dev-servers', roles: ['dev'] },
+  { label: 'Buscar Servidor', icon: '🔎', nav: 'dev-server-search', roles: ['dev'] },
+  { label: 'Kill Switch', icon: '🚨', nav: 'kill-switch', roles: ['dev'] },
+  { label: 'Manutenção', icon: '🔧', nav: 'maintenance', roles: ['dev'] },
+  { label: 'Force Premium', icon: '💎', nav: 'force-premium', roles: ['dev'] },
+  { label: 'Broadcast', icon: '📢', nav: 'broadcast', roles: ['dev'] },
+  { label: 'Backup', icon: '💾', nav: 'backup', roles: ['dev'] },
+  { label: 'Usuários', icon: '👥', nav: 'usuarios', roles: ['dev'] },
+  { label: 'Aprovações', icon: '⏳', nav: 'pending', roles: ['dev'] },
+  { label: 'Auditoria', icon: '📋', nav: 'logs', roles: ['dev'] },
+];
+
+let _cmdkIndex = 0;
+let _cmdkFiltered = [];
+
+function bindCommandPalette() {
+  $('btnCmdTrigger')?.addEventListener('click', openCmdk);
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      openCmdk();
+    }
+    if (e.key === 'Escape' && $('cmdPalette')?.classList.contains('active')) {
+      closeCmdk();
+    }
+  });
+
+  const input = $('cmdInput');
+  input?.addEventListener('input', () => renderCmdkResults(input.value));
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _cmdkIndex = Math.min(_cmdkIndex + 1, _cmdkFiltered.length - 1); renderCmdkHighlight(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); _cmdkIndex = Math.max(_cmdkIndex - 1, 0); renderCmdkHighlight(); }
+    if (e.key === 'Enter') { e.preventDefault(); const item = _cmdkFiltered[_cmdkIndex]; if (item) { closeCmdk(); navigate(item.nav); } }
+  });
+
+  $('cmdPalette')?.addEventListener('click', (e) => {
+    if (e.target.id === 'cmdPalette') closeCmdk();
+  });
 }
-$('#btnFpAdd')?.addEventListener('click', async () => {
-  const scope = $('#fpScope').value, target_id = $('#fpTarget').value.trim(), days = Number($('#fpDays').value), reason = $('#fpReason').value.trim();
-  if (!target_id) return toast('Digite o ID', 'error');
-  try { await api('/api/dev/force-premium', { method: 'POST', body: JSON.stringify({ scope, target_id, days, reason }) }); toast('Adicionado'); $('#fpTarget').value = ''; loadForcePremium(); }
-  catch (e) { toast(e.message, 'error'); }
-});
-$('#btnBcSend')?.addEventListener('click', async () => {
-  const title = $('#bcTitle').value.trim(), content = $('#bcContent').value.trim(), role = $('#bcRole').value;
-  if (!title || !content) return toast('Preencha', 'error');
-  if (!confirm(`Enviar para ${role || 'todos'}?`)) return;
-  try { const r = await api('/api/dev/broadcast', { method: 'POST', body: JSON.stringify({ title, content, role: role || null }) }); toast(`Enviado p/ ${r.sent}`); $('#bcTitle').value = ''; $('#bcContent').value = ''; }
-  catch (e) { toast(e.message, 'error'); }
-});
-$('#btnForceUpdate')?.addEventListener('click', async () => {
-  if (!confirm('Resetar broadcast?')) return;
-  try { await api('/api/dev/force-update', { method: 'POST' }); toast('Resetado'); }
-  catch (e) { toast(e.message, 'error'); }
-});
+
+function openCmdk() {
+  $('cmdPalette')?.classList.add('active');
+  $('cmdInput').value = '';
+  renderCmdkResults('');
+  setTimeout(() => $('cmdInput').focus(), 50);
+}
+function closeCmdk() { $('cmdPalette')?.classList.remove('active'); }
+
+function renderCmdkResults(query) {
+  const role = APP.admin?.role || 'cliente';
+  const q = String(query || '').toLowerCase();
+  _cmdkFiltered = CMD_ITEMS
+    .filter(it => it.roles.includes(role))
+    .filter(it => !q || it.label.toLowerCase().includes(q));
+  _cmdkIndex = 0;
+
+  const wrap = $('cmdResults');
+  if (!_cmdkFiltered.length) {
+    wrap.innerHTML = '<div style="padding:20px;text-align:center;opacity:.5">Nada encontrado</div>';
+    return;
+  }
+  wrap.innerHTML = _cmdkFiltered.map((it, i) => `
+    <div class="cmd-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
+      <span style="font-size:18px">${it.icon}</span>
+      <span>${escapeHtml(it.label)}</span>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.cmd-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const item = _cmdkFiltered[Number(el.dataset.idx)];
+      if (item) { closeCmdk(); navigate(item.nav); }
+    });
+    el.addEventListener('mouseenter', () => { _cmdkIndex = Number(el.dataset.idx); renderCmdkHighlight(); });
+  });
+}
+
+function renderCmdkHighlight() {
+  $$('#cmdResults .cmd-item').forEach((el, i) => el.classList.toggle('active', i === _cmdkIndex));
+  const el = $(`#cmdResults .cmd-item[data-idx="${_cmdkIndex}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
 
 // ═══════════════════════════════════════════════════════════
-// BACKUP
+// BOOT INICIAL
 // ═══════════════════════════════════════════════════════════
-$('#btnDownloadBackup')?.addEventListener('click', async () => {
+(async function boot() {
+  // Tenta sessão existente
   try {
-    const token = localStorage.getItem('sb_token');
-    const r = await fetch('/api/dev/backup', { headers: { 'Authorization': 'Bearer ' + token } });
-    if (!r.ok) throw new Error('Erro no download');
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `frio-backup-${new Date().toISOString().substring(0, 10)}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast('Backup baixado!');
-  } catch (e) { toast(e.message, 'error'); }
-});
-$('#btnForceSync')?.addEventListener('click', async () => {
-  try {
-    const r = await api('/api/dev/sync-servers', { method: 'POST' });
-    toast(r.message || 'Sync agendado!');
-  } catch (e) { toast(e.message, 'error'); }
-});
-$('#btnSyncServers')?.addEventListener('click', async () => {
-  try { await api('/api/dev/sync-servers', { method: 'POST' }); toast('Sync agendado!'); }
-  catch (e) { toast(e.message, 'error'); }
-});
+    const r = await api('/api/auth/me');
+    if (r.ok && r.admin) {
+      APP.user = r.user;
+      APP.admin = r.admin;
+      // CSRF é regerado só ao logar, então aqui usa o cookie atual
+      APP.csrf = document.cookie.match(/frio_csrf=([^;]+)/)?.[1] || null;
+      await bootApp();
+      return;
+    }
+  } catch {}
 
-// ═══════════════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════════════
-$('#loginForm')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = $('#btnLogin'); btn.disabled = true;
-  const msgEl = $('#loginMsg');
-  try {
-    const r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#loginEmail').value.trim(), password: $('#loginPassword').value }) });
-    if (r.token) localStorage.setItem('sb_token', r.token);
-    hydrateApp(r);
-  } catch (err) {
-    if (err.code === 'EMAIL_NOT_CONFIRMED') {
-      msgEl.innerHTML = `<div style="text-align:left"><b>⚠️ Email não confirmado</b><br>Verifique sua caixa de entrada.<br><br><button type="button" id="btnResendConfirm" class="btn btn-secondary btn-sm">📧 Reenviar</button></div>`;
-      msgEl.className = 'msg error'; msgEl.style.display = 'block';
-      document.getElementById('btnResendConfirm')?.addEventListener('click', async () => {
-        const rb = document.getElementById('btnResendConfirm');
-        rb.disabled = true; rb.textContent = '⏳ Enviando...';
-        try {
-          await api('/api/auth/resend-confirmation', { method: 'POST', body: JSON.stringify({ email: $('#loginEmail').value.trim() }) });
-          rb.textContent = '✅ Reenviado!';
-        } catch (e) { rb.textContent = '❌ Erro'; rb.disabled = false; toast(e.message, 'error'); }
-      });
-    } else if (err.code === 'PENDING') {
-      showMsg(msgEl, '⏳ Aguardando aprovação do DEV.', 'info');
-    } else { showMsg(msgEl, err.message); }
-  } finally { btn.disabled = false; }
-});
-$('#btnShowRegister')?.addEventListener('click', () => showView('register'));
-$('#linkBackLogin')?.addEventListener('click', e => { e.preventDefault(); showView('login'); });
-$('#registerForm')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const msg = $('#registerMsg'); const p1 = $('#regPassword').value, p2 = $('#regConfirm').value;
-  if (p1 !== p2) return showMsg(msg, 'Senhas diferentes');
-  if (p1.length < 8) return showMsg(msg, 'Senha curta');
-  try {
-    await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: $('#regEmail').value.trim(), password: p1, discord_id: $('#regDiscord').value.trim() || null }) });
-    msg.innerHTML = `✅ <b>Cadastro criado!</b><br><br>1️⃣ Verifique seu email (olha no spam).<br>2️⃣ Depois aguarde aprovação do DEV.`;
-    msg.className = 'msg ok'; msg.style.display = 'block';
-    setTimeout(() => showView('login'), 6000);
-  } catch (err) { showMsg(msg, err.message); }
-});
-$('#linkForgot')?.addEventListener('click', e => { e.preventDefault(); openModal('modalForgot'); });
-$('#btnSendForgot')?.addEventListener('click', async () => {
-  const email = $('#forgotEmail').value.trim();
-  if (!email) return toast('Digite o e-mail', 'error');
-  try { await api('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) }); toast('Enviado'); closeModal('modalForgot'); }
-  catch (e) { toast(e.message, 'error'); }
-});
-$('#resetForm')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const msg = $('#resetMsg'); const p1 = $('#resetPassword').value, p2 = $('#resetConfirm').value;
-  if (p1 !== p2) return showMsg(msg, 'Senhas diferentes');
-  if (!window.__RESET_TOKEN__) return showMsg(msg, 'Token ausente');
-  try { await api('/api/auth/update-password', { method: 'POST', body: JSON.stringify({ token: window.__RESET_TOKEN__, new_password: p1 }) }); showMsg(msg, '✅ OK', 'ok'); setTimeout(() => { window.location.hash = ''; window.location.reload(); }, 2000); }
-  catch (err) { showMsg(msg, err.message); }
-});
-$('#btnLogout')?.addEventListener('click', async () => {
-  await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
-  localStorage.removeItem('sb_token'); window.location.reload();
-});
+  // Sem sessão — mostra login
+  showAuthView('view-login');
+})();
 
-// ═══════════════════════════════════════════════════════════
-// LISTENERS GLOBAIS
-// ═══════════════════════════════════════════════════════════
-$('#btnHamburger')?.addEventListener('click', openSidebar);
-$('#sidebarOverlay')?.addEventListener('click', closeSidebar);
-$$('#sidebar a[data-nav]').forEach(a => a.addEventListener('click', () => goToPage(a.dataset.nav)));
-$('#btnBell')?.addEventListener('click', () => { $('#notifDrawer').classList.add('active'); loadNotifications(); });
-$('#btnCloseDrawer')?.addEventListener('click', () => $('#notifDrawer').classList.remove('active'));
-$('#btnMarkAllRead')?.addEventListener('click', markAllRead);
-$('#btnMarkAllReadDrawer')?.addEventListener('click', markAllRead);
-$('#btnRefreshKeys')?.addEventListener('click', loadKeys);
-$('#filterStatus')?.addEventListener('change', loadKeys);
-$('#filterTier')?.addEventListener('change', loadKeys);
-$('#btnRefreshUsers')?.addEventListener('click', loadUsers);
-$('#userSearch')?.addEventListener('input', (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadUsers, 400); }; })());
-$('#userFilterRole')?.addEventListener('change', loadUsers);
-$('#userFilterPlan')?.addEventListener('change', loadUsers);
-$('#userFilterAtivo')?.addEventListener('change', loadUsers);
-$('#btnRefreshLogs')?.addEventListener('click', loadLogs);
-$('#btnRefreshDevServers')?.addEventListener('click', loadDevServers);
-$('#devServersSearch')?.addEventListener('input', (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadDevServers, 400); }; })());
-$('#devServersMinMembers')?.addEventListener('input', (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadDevServers, 400); }; })());
-$('#devServersPremium')?.addEventListener('change', loadDevServers);
-$('#btnForceSyncAll')?.addEventListener('click', async () => {
-  try { await api('/api/dev/sync-servers', { method: 'POST' }); toast('⚡ Sync global agendado'); }
-  catch (e) { toast(e.message, 'error'); }
+// Atalhos extras
+document.addEventListener('click', (e) => {
+  // Fechar modais clicando fora
+  if (e.target.classList?.contains('modal') && e.target.classList.contains('active')) {
+    e.target.classList.remove('active');
+    document.body.style.overflow = '';
+  }
 });
-$$('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); }));
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadNotifications(); });
-
-boot();

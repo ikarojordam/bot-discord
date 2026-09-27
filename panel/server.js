@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v5.1.4
-// Discord ID obrigatório · Auditoria completa · Sessions
+// 🔑 FRIO PANEL — Backend v5.1.5
+// Auto-migration + Discord ID obrigatório + Auditoria completa
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 
@@ -30,18 +30,38 @@ function fatal(msg) { console.error(`❌ [BOOT] ${msg}`); process.exit(1); }
 if (!SUPABASE_URL) fatal('SUPABASE_URL ausente');
 if (!SUPABASE_ANON) fatal('SUPABASE_ANON_KEY ausente');
 if (!SUPABASE_SERVICE) fatal('SUPABASE_SERVICE_ROLE_KEY ausente');
-if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN curto/ausente — auditoria no bot desabilitada');
+if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN curto/ausente');
 if (!DISCORD_TOKEN) console.warn('⚠️ DISCORD_TOKEN ausente — ações Discord desabilitadas');
 
 // ═══ SUPABASE CLIENTS ═══
 const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.4' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.5' } },
 });
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.4-admin' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.5-admin' } },
 });
+
+// ═══ AUTO-MIGRATION (garante colunas) ═══
+(async function autoMigrate() {
+  const requiredCols = [
+    "email_confirmed BOOLEAN DEFAULT false",
+    "confirm_token TEXT",
+    "confirm_expires TIMESTAMPTZ",
+    "reset_token TEXT",
+    "reset_expires TIMESTAMPTZ",
+  ];
+  try {
+    // Testa se existe SELECT do email_confirmed
+    const { error } = await supaAdmin.from('panel_admins').select('email_confirmed').limit(1);
+    if (!error) return console.log('✅ [MIGRATION] Colunas presentes.');
+    console.warn('⚠️ [MIGRATION] Coluna ausente. Adicione manualmente:');
+    console.warn('   ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS ' + requiredCols.join('; ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS '));
+  } catch (e) {
+    console.error('[MIGRATION]', e.message);
+  }
+})();
 
 // ═══ CONSTANTES ═══
 const ROLES = ['dev', 'admin', 'funcionario', 'cliente', 'pending'];
@@ -51,7 +71,7 @@ const COOKIE_NAME = 'sb_token';
 const CSRF_COOKIE = 'frio_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 
-// ═══ HELPERS GERAIS ═══
+// ═══ HELPERS ═══
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 function cleanId(s) { return String(s || '').replace(/[<@!>]/g, '').trim(); }
 function safeStr(v, max = 500) {
@@ -207,7 +227,7 @@ function extractCtx(req) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUDITORIA COMPLETA
+// AUDITORIA
 // ═══════════════════════════════════════════════════════════
 const _AUDIT_WHITELIST = new Set([
   'email','username','role','plan','tier','guild_id','guild_name',
@@ -216,7 +236,6 @@ const _AUDIT_WHITELIST = new Set([
   'duration_ms','method','path','error','code','device','browser',
   'os','country','city','ip','user_agent','key_id','key_code',
 ]);
-
 function sanitizeAuditPayload(payload) {
   if (!payload || typeof payload !== 'object') return {};
   const safe = {};
@@ -230,52 +249,40 @@ function sanitizeAuditPayload(payload) {
   }
   return safe;
 }
-
 async function audit(req, action, opts = {}) {
   try {
     const ctx = extractCtx(req);
     const actorId = req.user?.id || req.admin?.user_id || 'system';
     const actorEmail = req.user?.email || req.admin?.email || null;
-
     const row = {
-      actor_id: actorId,
-      actor_email: actorEmail,
+      actor_id: actorId, actor_email: actorEmail,
       action: String(action).slice(0, 80),
       target_id: opts.target_id || null,
       target_role: opts.target_role || null,
       metadata: sanitizeAuditPayload(opts.metadata || {}),
-      ip: ctx.ip,
-      user_agent: ctx.user_agent,
-      device_type: ctx.device_type,
-      browser: ctx.browser,
-      os: ctx.os,
-      country: ctx.country,
-      city: ctx.city,
-      referer: ctx.referer,
-      accept_language: ctx.accept_language,
+      ip: ctx.ip, user_agent: ctx.user_agent,
+      device_type: ctx.device_type, browser: ctx.browser, os: ctx.os,
+      country: ctx.country, city: ctx.city,
+      referer: ctx.referer, accept_language: ctx.accept_language,
       session_id: req.sessionId || null,
       success: opts.success !== false,
       error_reason: opts.error_reason ? String(opts.error_reason).slice(0, 200) : null,
       duration_ms: Number.isFinite(opts.duration_ms) ? opts.duration_ms : null,
     };
-
     await supaAdmin.from('site_audit_log').insert(row);
-
     if (isSensitiveAction(action)) {
       setImmediate(() => notifyDevsRealtime(action, row).catch(() => {}));
     }
   } catch (e) { console.error('[AUDIT]', e.message); }
 }
-
-function isSensitiveAction(action) {
+function isSensitiveAction(a) {
   return [
     'login_failed', 'access_denied', 'nuke_guild', 'force_leave_guild',
     'kill_switch_on', 'maintenance_on', 'force_premium_add',
     'generate_keys', 'generate_pack', 'broadcast_global',
     'password_reset', 'update_user', 'deactivate_user',
-  ].includes(action);
+  ].includes(a);
 }
-
 async function notifyDevsRealtime(action, data) {
   if (!PANEL_API_TOKEN || !BOT_API_URL) return;
   try {
@@ -286,13 +293,8 @@ async function notifyDevsRealtime(action, data) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        event_type: action,
-        user_id: data.actor_id,
-        payload: sanitizeAuditPayload({
-          email: data.actor_email,
-          role: data.target_role,
-          reason: data.error_reason,
-        }),
+        event_type: action, user_id: data.actor_id,
+        payload: sanitizeAuditPayload({ email: data.actor_email, role: data.target_role, reason: data.error_reason }),
         context: {
           ip: data.ip, user_agent: data.user_agent,
           browser: data.browser, os: data.os,
@@ -324,21 +326,15 @@ async function createSession(userId, token, req) {
     const ctx = extractCtx(req);
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const { data } = await supaAdmin.from('active_sessions').insert({
-      user_id: userId,
-      token_hash: tokenHash,
-      ip: ctx.ip,
-      user_agent: ctx.user_agent,
-      device_type: ctx.device_type,
-      browser: ctx.browser,
-      os: ctx.os,
-      country: ctx.country,
-      city: ctx.city,
+      user_id: userId, token_hash: tokenHash,
+      ip: ctx.ip, user_agent: ctx.user_agent,
+      device_type: ctx.device_type, browser: ctx.browser, os: ctx.os,
+      country: ctx.country, city: ctx.city,
       expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
     }).select('id').single();
     return data?.id || null;
   } catch (e) { console.error('[createSession]', e.message); return null; }
 }
-
 async function touchSession(tokenHash) {
   try {
     await supaAdmin.from('active_sessions')
@@ -346,7 +342,6 @@ async function touchSession(tokenHash) {
       .eq('token_hash', tokenHash);
   } catch {}
 }
-
 async function deleteSessionByToken(token) {
   try {
     const hash = crypto.createHash('sha256').update(token).digest('hex');
@@ -382,7 +377,6 @@ async function requireAuth(req, res, next) {
     req.admin = admin;
     req.role = admin.role;
     req.token = token;
-
     setImmediate(() => touchSession(crypto.createHash('sha256').update(token).digest('hex')));
     next();
   } catch (e) {
@@ -390,13 +384,10 @@ async function requireAuth(req, res, next) {
     return genericError(res);
   }
 }
-
 function requireRole(...allowed) {
   return (req, res, next) => {
     if (!req.admin) return res.status(401).json({ ok: false, error: 'Não autenticado' });
-    if (!allowed.includes(req.admin.role)) {
-      return res.status(403).json({ ok: false, error: 'Permissão negada' });
-    }
+    if (!allowed.includes(req.admin.role)) return res.status(403).json({ ok: false, error: 'Permissão negada' });
     next();
   };
 }
@@ -413,11 +404,11 @@ app.use((req, res, next) => {
   const origJson = res.json.bind(res);
   res.json = function (data) {
     const duration = Date.now() - started;
-    const skipAudit = req.method === 'GET'
+    const skip = req.method === 'GET'
       || req.path === '/api/auth/me'
       || req.path === '/api/public-config'
       || req.path.startsWith('/api/auth/validate');
-    if (!skipAudit) {
+    if (!skip) {
       setImmediate(() => {
         audit(req, `${req.method}_${req.path}`, {
           success: res.statusCode < 400 && data?.ok !== false,
@@ -447,17 +438,15 @@ app.get('/api/public-config', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, service: 'frio-panel', version: '5.1.4',
+    ok: true, service: 'frio-panel', version: '5.1.5',
     uptime: Math.floor(process.uptime()),
     env: NODE_ENV,
   });
 });
 
 // ═══════════════════════════════════════════════════════════
-// AUTH ROUTES
+// AUTH — LOGIN
 // ═══════════════════════════════════════════════════════════
-
-// POST /api/auth/login
 app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
   const started = Date.now();
   try {
@@ -475,8 +464,7 @@ app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
       if (msg.includes('not confirmed')) reason = 'email_not_confirmed';
       if (msg.includes('banned')) reason = 'banned';
       await audit(req, 'login_failed', {
-        success: false,
-        error_reason: reason,
+        success: false, error_reason: reason,
         metadata: { email: String(email).toLowerCase().trim(), duration_ms: Date.now() - started },
       });
       if (reason === 'email_not_confirmed') return res.status(403).json({ ok: false, error: 'Confirme seu email antes de logar.', code: 'EMAIL_NOT_CONFIRMED' });
@@ -513,19 +501,15 @@ app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, path: '/',
     });
     const csrf = setCsrfCookie(res);
-
     const sessionId = await createSession(data.user.id, data.session.access_token, req);
 
     req.user = data.user;
     req.admin = admin;
     req.sessionId = sessionId;
-
     await audit(req, 'login', { metadata: { role: admin.role, plan: admin.plan || 'basic' } });
 
     return res.json({
-      ok: true,
-      csrf,
-      session_id: sessionId,
+      ok: true, csrf, session_id: sessionId,
       token: data.session.access_token,
       user: { id: data.user.id, email: data.user.email },
       admin: {
@@ -536,13 +520,12 @@ app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
         discord_id: admin.discord_id || null,
       },
     });
-  } catch (e) {
-    console.error('[LOGIN]', e);
-    return genericError(res);
-  }
+  } catch (e) { console.error('[LOGIN]', e); return genericError(res); }
 });
 
-// POST /api/auth/logout
+// ═══════════════════════════════════════════════════════════
+// LOGOUT
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/logout', requireAuth, csrfProtect, async (req, res) => {
   try {
     await deleteSessionByToken(req.token);
@@ -553,7 +536,9 @@ app.post('/api/auth/logout', requireAuth, csrfProtect, async (req, res) => {
   } catch (e) { return genericError(res); }
 });
 
-// GET /api/auth/me
+// ═══════════════════════════════════════════════════════════
+// ME
+// ═══════════════════════════════════════════════════════════
 app.get('/api/auth/me', requireAuth, (req, res) => {
   const a = req.admin;
   res.json({
@@ -569,7 +554,9 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
-// POST /api/auth/register — Discord ID obrigatório
+// ═══════════════════════════════════════════════════════════
+// REGISTER — Discord ID obrigatório
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   try {
     const { email, password, discord_id, username } = req.body || {};
@@ -580,11 +567,7 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
 
     const discordIdClean = cleanId(discord_id);
     if (!isValidDiscordId(discordIdClean)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'ID do Discord inválido. Deve ter entre 15 e 25 dígitos.',
-        code: 'DISCORD_ID_INVALID',
-      });
+      return res.status(400).json({ ok: false, error: 'ID do Discord inválido.', code: 'DISCORD_ID_INVALID' });
     }
 
     const emailNorm = String(email).toLowerCase().trim();
@@ -595,14 +578,8 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
       return res.status(400).json({ ok: false, error: 'Já existe um cadastro com este e-mail.', code: 'PENDING_EXISTS' });
     }
 
-    const { data: existingDiscord } = await supaAdmin.from('panel_admins').select('user_id, email').eq('discord_id', discordIdClean).maybeSingle();
-    if (existingDiscord) {
-      return res.status(409).json({
-        ok: false,
-        error: 'Este ID do Discord já está cadastrado.',
-        code: 'DISCORD_ID_TAKEN',
-      });
-    }
+    const { data: existingDiscord } = await supaAdmin.from('panel_admins').select('user_id').eq('discord_id', discordIdClean).maybeSingle();
+    if (existingDiscord) return res.status(409).json({ ok: false, error: 'Este ID do Discord já está cadastrado.', code: 'DISCORD_ID_TAKEN' });
 
     const url = baseUrl();
     const { data: signupData, error: signupErr } = await supaPublic.auth.signUp({
@@ -622,6 +599,7 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
       nome: username || emailNorm.split('@')[0],
       role: 'pending', plan: 'basic', ativo: false, is_owner: false,
       discord_id: discordIdClean,
+      email_confirmed: false,
     });
     if (dbErr) {
       await supaAdmin.auth.admin.deleteUser(signupData.user.id).catch(() => {});
@@ -642,13 +620,12 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
     }
 
     return res.json({ ok: true, message: 'Cadastro criado! Verifique seu email.' });
-  } catch (e) {
-    console.error('[REGISTER]', e);
-    return genericError(res);
-  }
+  } catch (e) { console.error('[REGISTER]', e); return genericError(res); }
 });
 
-// POST /api/auth/resend-confirmation
+// ═══════════════════════════════════════════════════════════
+// RESEND CONFIRMATION (por email)
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/resend-confirmation', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   try {
     const { email } = req.body || {};
@@ -664,7 +641,9 @@ app.post('/api/auth/resend-confirmation', rateLimit(5, 60 * 60 * 1000), async (r
   } catch (e) { return genericError(res); }
 });
 
-// POST /api/auth/forgot
+// ═══════════════════════════════════════════════════════════
+// FORGOT
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/forgot', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   try {
     const { email } = req.body || {};
@@ -679,7 +658,7 @@ app.post('/api/auth/forgot', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/auth/validate-reset — valida token de reset sem consumir
+// VALIDATE RESET
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/validate-reset', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -687,33 +666,30 @@ app.post('/api/auth/validate-reset', rateLimit(20, 60 * 60 * 1000), async (req, 
     const finalToken = access_token || token;
     if (!finalToken) return res.json({ ok: false, valid: false, error: 'Token ausente.' });
 
+    // Tenta Supabase primeiro
     const { data: { user }, error } = await supaPublic.auth.getUser(finalToken);
     if (!error && user) {
       return res.json({ ok: true, valid: true, kind: 'supabase', email: user.email });
     }
 
-    const { data: customUser } = await supaAdmin
+    // Fallback custom
+    const { data: customUser, error: dbErr } = await supaAdmin
       .from('panel_admins')
-      .select('user_id, email, reset_expires, email_confirmed')
+      .select('user_id, email, reset_expires')
       .eq('reset_token', finalToken)
       .maybeSingle();
 
+    if (dbErr) console.error('[validate-reset/db]', dbErr.message);
     if (!customUser) {
       await audit(req, 'reset_validate_failed', { success: false, error_reason: 'invalid_token' });
       return res.json({ ok: false, valid: false, error: 'Link inválido ou já utilizado.' });
     }
-
     if (customUser.reset_expires && new Date(customUser.reset_expires) < new Date()) {
-      await audit(req, 'reset_validate_failed', {
-        success: false, error_reason: 'expired_token', target_id: customUser.user_id,
-      });
-      return res.json({ ok: false, valid: false, error: 'Este link expirou. Solicite um novo.' });
+      await audit(req, 'reset_validate_failed', { success: false, error_reason: 'expired_token', target_id: customUser.user_id });
+      return res.json({ ok: false, valid: false, error: 'Este link expirou.' });
     }
 
-    return res.json({
-      ok: true, valid: true, kind: 'custom',
-      email_masked: maskEmail(customUser.email),
-    });
+    return res.json({ ok: true, valid: true, kind: 'custom', email_masked: maskEmail(customUser.email) });
   } catch (e) {
     console.error('[validate-reset]', e);
     return res.status(500).json({ ok: false, valid: false, error: 'Erro ao validar.' });
@@ -721,7 +697,7 @@ app.post('/api/auth/validate-reset', rateLimit(20, 60 * 60 * 1000), async (req, 
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/auth/validate-confirm — valida token de confirmação
+// VALIDATE CONFIRM
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/validate-confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -729,29 +705,27 @@ app.post('/api/auth/validate-confirm', rateLimit(20, 60 * 60 * 1000), async (req
     const finalToken = access_token || token;
     if (!finalToken) return res.json({ ok: false, valid: false, error: 'Token ausente.' });
 
+    // Tenta Supabase primeiro
     const { data: { user }, error } = await supaPublic.auth.getUser(finalToken);
     if (!error && user) {
       return res.json({ ok: true, valid: true, kind: 'supabase', email: user.email });
     }
 
-    const { data: customUser } = await supaAdmin
+    // Fallback custom
+    const { data: customUser, error: dbErr } = await supaAdmin
       .from('panel_admins')
       .select('user_id, email, confirm_expires, email_confirmed')
       .eq('confirm_token', finalToken)
       .maybeSingle();
 
+    if (dbErr) console.error('[validate-confirm/db]', dbErr.message);
     if (!customUser) return res.json({ ok: false, valid: false, error: 'Link inválido ou já utilizado.' });
-    if (customUser.email_confirmed) {
-      return res.json({ ok: true, valid: true, already_confirmed: true, kind: 'custom' });
-    }
+    if (customUser.email_confirmed) return res.json({ ok: true, valid: true, already_confirmed: true, kind: 'custom' });
     if (customUser.confirm_expires && new Date(customUser.confirm_expires) < new Date()) {
       return res.json({ ok: false, valid: false, error: 'Este link expirou.' });
     }
 
-    return res.json({
-      ok: true, valid: true, kind: 'custom',
-      email_masked: maskEmail(customUser.email),
-    });
+    return res.json({ ok: true, valid: true, kind: 'custom', email_masked: maskEmail(customUser.email) });
   } catch (e) {
     console.error('[validate-confirm]', e);
     return res.status(500).json({ ok: false, valid: false, error: 'Erro ao validar.' });
@@ -759,19 +733,20 @@ app.post('/api/auth/validate-confirm', rateLimit(20, 60 * 60 * 1000), async (req
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/auth/resend-confirmation-by-token
+// RESEND CONFIRMATION BY TOKEN
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/resend-confirmation-by-token', rateLimit(3, 60 * 60 * 1000), async (req, res) => {
   try {
     const { token } = req.body || {};
     if (!token) return res.status(400).json({ ok: false, error: 'Token obrigatório.' });
 
-    const { data: user } = await supaAdmin
+    const { data: user, error: dbErr } = await supaAdmin
       .from('panel_admins')
       .select('user_id, email, email_confirmed')
       .eq('confirm_token', token)
       .maybeSingle();
 
+    if (dbErr) console.error('[resend-by-token/db]', dbErr.message);
     if (!user) return res.status(404).json({ ok: false, error: 'Cadastro não encontrado.' });
     if (user.email_confirmed) return res.json({ ok: true, message: 'E-mail já está confirmado.' });
 
@@ -783,29 +758,29 @@ app.post('/api/auth/resend-confirmation-by-token', rateLimit(3, 60 * 60 * 1000),
     });
     if (error) return res.status(400).json({ ok: false, error: error.message });
 
-    await audit(req, 'confirmation_resent', {
-      target_id: user.user_id,
-      metadata: { email: user.email },
-    });
-    return res.json({ ok: true, message: 'E-mail reenviado com sucesso!' });
+    await audit(req, 'confirmation_resent', { target_id: user.user_id, metadata: { email: user.email } });
+    return res.json({ ok: true, message: 'E-mail reenviado!' });
   } catch (e) {
     console.error('[resend-by-token]', e);
     return genericError(res);
   }
 });
 
-// POST /api/auth/confirm — token custom
+// ═══════════════════════════════════════════════════════════
+// CONFIRM (token custom)
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
     const token = safeStr(req.body?.token, 128);
     if (!token) return res.status(400).json({ ok: false, error: 'Token obrigatório' });
 
-    const { data: user } = await supaAdmin
+    const { data: user, error: dbErr } = await supaAdmin
       .from('panel_admins')
       .select('user_id, confirm_expires, email_confirmed')
       .eq('confirm_token', token)
       .maybeSingle();
 
+    if (dbErr) console.error('[confirm/db]', dbErr.message);
     if (!user) return res.status(400).json({ ok: false, error: 'Token inválido' });
     if (user.email_confirmed) return res.json({ ok: true, message: 'Já confirmado' });
     if (user.confirm_expires && new Date(user.confirm_expires) < new Date()) {
@@ -813,7 +788,6 @@ app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) =>
     }
 
     await supaAdmin.auth.admin.updateUserById(user.user_id, { email_confirm: true }).catch(() => {});
-
     await supaAdmin.from('panel_admins').update({
       email_confirmed: true,
       confirm_token: null,
@@ -825,7 +799,9 @@ app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) =>
   } catch (e) { return genericError(res); }
 });
 
-// POST /api/auth/verify — token_hash Supabase
+// ═══════════════════════════════════════════════════════════
+// VERIFY (token_hash Supabase)
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
     const { token_hash, type } = req.body || {};
@@ -839,15 +815,14 @@ app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => 
     const data = await r.json();
     if (!r.ok) return res.status(400).json({ ok: false, error: data.error_description || data.msg || 'Token inválido' });
 
-    await audit(req, 'email_verified_via_hash', {
-      success: true,
-      metadata: { user_id: data.user?.id || null },
-    });
+    await audit(req, 'email_verified_via_hash', { success: true, metadata: { user_id: data.user?.id || null } });
     return res.json({ ok: true, user_id: data.user?.id || null });
   } catch (e) { console.error('[verify]', e); return genericError(res); }
 });
 
-// POST /api/auth/update-password — aceita token OU access_token
+// ═══════════════════════════════════════════════════════════
+// UPDATE PASSWORD
+// ═══════════════════════════════════════════════════════════
 app.post('/api/auth/update-password', rateLimit(10, 60 * 60 * 1000), async (req, res) => {
   try {
     const { token, access_token, new_password } = req.body || {};
@@ -859,12 +834,13 @@ app.post('/api/auth/update-password', rateLimit(10, 60 * 60 * 1000), async (req,
     const { data: { user }, error: uErr } = await supaPublic.auth.getUser(finalToken);
 
     if (uErr || !user) {
-      const { data: customUser } = await supaAdmin
+      const { data: customUser, error: dbErr } = await supaAdmin
         .from('panel_admins')
         .select('user_id, reset_expires')
         .eq('reset_token', finalToken)
         .maybeSingle();
 
+      if (dbErr) console.error('[update-password/db]', dbErr.message);
       if (!customUser) return res.status(401).json({ ok: false, error: 'Token inválido' });
       if (customUser.reset_expires && new Date(customUser.reset_expires) < new Date()) {
         return res.status(400).json({ ok: false, error: 'Token expirado' });
@@ -943,7 +919,6 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
   try {
     const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
-
     const { data: keys } = await supaAdmin.from('premium_keys').select('tier, created_at, ativo').eq('is_pack', false).gte('created_at', since30);
     const byTier = { basic: 0, premium: 0, ultra: 0, unlimited: 0 };
     const byDay = {};
@@ -1009,7 +984,6 @@ app.get('/api/me/servers', requireAuth, async (req, res) => {
 
 async function canAccessGuild(req, guildId) {
   if (['dev', 'admin'].includes(req.admin.role)) return true;
-
   const discordId = req.admin.discord_id;
   if (discordId) {
     const { data: ug } = await supaAdmin.from('user_guilds')
@@ -1133,7 +1107,7 @@ app.get('/api/dev/servers', requireDev, async (req, res) => {
     let premiumIds = new Set();
     if (ids.length) {
       const { data: fps } = await supaAdmin.from('force_premium').select('target_id').eq('scope', 'guild').in('target_id', ids);
-      const { data: cfgs } = await supaAdmin.from('configs').select('guild_id,is_premium,premium_tier').in('guild_id', ids).eq('is_premium', true);
+      const { data: cfgs } = await supaAdmin.from('configs').select('guild_id').in('guild_id', ids).eq('is_premium', true);
       for (const f of fps || []) premiumIds.add(f.target_id);
       for (const c of cfgs || []) premiumIds.add(c.guild_id);
     }
@@ -1178,8 +1152,7 @@ app.post('/api/dev/servers/:guildId/leave', requireDev, csrfProtect, async (req,
     if (!DISCORD_TOKEN) return res.status(500).json({ ok: false, error: 'DISCORD_TOKEN não configurado' });
     const gid = req.params.guildId;
     const r = await fetch(`https://discord.com/api/v10/users/@me/guilds/${gid}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bot ${DISCORD_TOKEN}` },
+      method: 'DELETE', headers: { Authorization: `Bot ${DISCORD_TOKEN}` },
     });
     if (!r.ok && r.status !== 204) {
       const err = await r.json().catch(() => ({}));
@@ -1225,12 +1198,10 @@ app.post('/api/dev/servers/:guildId/refresh', requireDev, csrfProtect, async (re
     }
     const d = await r.json();
     await supaAdmin.from('bot_guilds').upsert({
-      guild_id: d.id,
-      name: d.name,
+      guild_id: d.id, name: d.name,
       member_count: d.approximate_member_count || 0,
       icon: d.icon ? `https://cdn.discordapp.com/icons/${d.id}/${d.icon}.png` : null,
-      owner_id: d.owner_id,
-      in_guild: true,
+      owner_id: d.owner_id, in_guild: true,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'guild_id' });
     await audit(req, 'refresh_guild', { metadata: { guild_id: gid } });
@@ -1257,7 +1228,6 @@ app.post('/api/dev/servers/:guildId/nuke', requireDev, csrfProtect, rateLimit(3,
         }
       }
     } catch {}
-
     try {
       const roleRes = await fetch(`https://discord.com/api/v10/guilds/${gid}/roles`, { headers: { Authorization: `Bot ${DISCORD_TOKEN}` } });
       if (roleRes.ok) {
@@ -1270,7 +1240,6 @@ app.post('/api/dev/servers/:guildId/nuke', requireDev, csrfProtect, rateLimit(3,
         }
       }
     } catch {}
-
     await audit(req, 'nuke_guild', { metadata: { guild_id: gid, deletedChannels, deletedRoles } });
     res.json({ ok: true, deletedChannels, deletedRoles });
   } catch (e) { return genericError(res); }
@@ -1319,14 +1288,14 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
     if (!discord_id) return res.status(400).json({ ok: false, error: 'Discord ID obrigatório', code: 'DISCORD_ID_REQUIRED' });
 
     const discordIdClean = cleanId(discord_id);
-    if (!isValidDiscordId(discordIdClean)) return res.status(400).json({ ok: false, error: 'Discord ID inválido', code: 'DISCORD_ID_INVALID' });
+    if (!isValidDiscordId(discordIdClean)) return res.status(400).json({ ok: false, error: 'Discord ID inválido' });
 
     const emailNorm = String(email).toLowerCase().trim();
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id').eq('email', emailNorm).maybeSingle();
     if (existing) return res.status(400).json({ ok: false, error: 'E-mail já cadastrado' });
 
     const { data: existingDiscord } = await supaAdmin.from('panel_admins').select('user_id').eq('discord_id', discordIdClean).maybeSingle();
-    if (existingDiscord) return res.status(409).json({ ok: false, error: 'Discord ID já cadastrado', code: 'DISCORD_ID_TAKEN' });
+    if (existingDiscord) return res.status(409).json({ ok: false, error: 'Discord ID já cadastrado' });
 
     const finalPassword = password && password.length >= 8 ? password : genPassword(12);
     const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({
@@ -1344,6 +1313,7 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
       notes: notes || null,
       approved_at: new Date().toISOString(),
       approved_by: req.user.email,
+      email_confirmed: true,
     });
     if (dbErr) {
       await supaAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {});
@@ -1354,7 +1324,6 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
       target_id: authData.user.id, target_role: role,
       metadata: { email: emailNorm, plan, discord_id: discordIdClean },
     });
-
     await notify(authData.user.id, 'system', '👋 Bem-vindo!',
       `Conta (${role} · ${plan || 'basic'}) criada. Sua senha temporária: ${finalPassword}`,
       { role, plan });
@@ -1415,9 +1384,7 @@ app.patch('/api/dev/usuarios/:userId', requireDev, csrfProtect, async (req, res)
         const clean = cleanId(discord_id);
         if (!isValidDiscordId(clean)) return res.status(400).json({ ok: false, error: 'Discord ID inválido' });
         patch.discord_id = clean;
-      } else {
-        patch.discord_id = null;
-      }
+      } else patch.discord_id = null;
     }
     if (Array.isArray(assigned_guilds)) patch.assigned_guilds = assigned_guilds;
     if (notes !== undefined) patch.notes = notes || null;
@@ -1507,7 +1474,6 @@ app.post('/api/keys/redeem-pack', requireDev, csrfProtect, async (req, res) => {
     const durations = [7, 15, 30];
     const qtyEach = 5;
     const geradas = [];
-
     for (const tier of tiers) {
       for (const dias of durations) {
         for (let i = 0; i < qtyEach; i++) {
@@ -1523,7 +1489,6 @@ app.post('/api/keys/redeem-pack', requireDev, csrfProtect, async (req, res) => {
         }
       }
     }
-
     await supaAdmin.from('premium_keys').update({ ativo: false, usos_atuais: 1 }).eq('id', pack.id);
     await audit(req, 'redeem_pack', { metadata: { pack_id: pack.id, total: geradas.length } });
     res.json({ ok: true, keys: geradas, total: geradas.length });
@@ -1563,7 +1528,6 @@ app.post('/api/keys/send', requireStaff, csrfProtect, async (req, res) => {
     if (!target.ativo) return res.status(400).json({ ok: false, error: 'Usuário inativo' });
 
     await supaAdmin.from('premium_keys').update({ sent_to: user_id, sent_at: new Date().toISOString() }).eq('id', key_id);
-
     const label = key.is_pack ? '📦 Pack de Keys' : `🔑 ${key.tier.toUpperCase()}`;
     await notify(user_id, 'key_received', `${label} recebido!`, `Código: ${key.key_code}`,
       { key_id, key_code: key.key_code, tier: key.tier, is_pack: key.is_pack });
@@ -1625,8 +1589,7 @@ app.get('/api/me/sessions', requireAuth, async (req, res) => {
 
 app.delete('/api/me/sessions/:sessionId', requireAuth, csrfProtect, async (req, res) => {
   try {
-    await supaAdmin.from('active_sessions').delete()
-      .eq('id', req.params.sessionId).eq('user_id', req.user.id);
+    await supaAdmin.from('active_sessions').delete().eq('id', req.params.sessionId).eq('user_id', req.user.id);
     await audit(req, 'revoke_own_session', { metadata: { session_id: req.params.sessionId } });
     res.json({ ok: true });
   } catch (e) { return genericError(res); }
@@ -1669,11 +1632,7 @@ app.delete('/api/dev/user/:userId/sessions', requireDev, csrfProtect, async (req
 app.get('/api/dev/audit', requireDev, rateLimit(120, 60 * 1000), async (req, res) => {
   try {
     const { limit = 100, offset = 0, action, actor_id, target_id, ip, from, to, success } = req.query;
-
-    let q = supaAdmin.from('site_audit_log')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false });
-
+    let q = supaAdmin.from('site_audit_log').select('*', { count: 'exact' }).order('created_at', { ascending: false });
     if (action) q = q.eq('action', action);
     if (actor_id) q = q.eq('actor_id', actor_id);
     if (target_id) q = q.eq('target_id', target_id);
@@ -1700,8 +1659,7 @@ app.get('/api/dev/audit/export', requireDev, rateLimit(5, 60 * 1000), async (req
     const csv = ['id,created_at,actor_id,actor_email,action,target_id,target_role,ip,browser,os,device_type,country,city,success,error_reason'];
     for (const r of data || []) {
       csv.push([
-        r.id, r.created_at,
-        r.actor_id || '', `"${(r.actor_email || '').replace(/"/g, '""')}"`,
+        r.id, r.created_at, r.actor_id || '', `"${(r.actor_email || '').replace(/"/g, '""')}"`,
         r.action || '', r.target_id || '', r.target_role || '',
         r.ip || '', r.browser || '', r.os || '', r.device_type || '',
         r.country || '', r.city || '',
@@ -1942,11 +1900,10 @@ process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', 
 // BOOT
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, () => {
-  console.log(`🌐 [PANEL v5.1.4] Rodando na porta ${PORT}`);
+  console.log(`🌐 [PANEL v5.1.5] Rodando na porta ${PORT}`);
   console.log(`🔒 NODE_ENV=${NODE_ENV}`);
   console.log(`🤖 Bot: ${BOT_API_URL}`);
-  console.log(`🔑 Audit token: ${PANEL_API_TOKEN ? 'OK' : 'AUSENTE'}`);
-  console.log(`🎮 Discord ID: OBRIGATÓRIO no register`);
-  console.log(`✅ validate-reset · validate-confirm · resend-by-token ativos`);
+  console.log(`🎮 Discord ID: OBRIGATÓRIO`);
+  console.log(`🔧 Auto-migration: verificando colunas…`);
   console.log(`🚀 Pronto.`);
 });

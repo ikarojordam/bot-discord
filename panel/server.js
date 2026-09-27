@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v5.1.5
-// Auto-migration + Discord ID obrigatório + Auditoria completa
+// 🔑 FRIO PANEL — Backend v5.1.6
+// Fix: requireRole chama requireAuth · Dashboard v2 endpoints
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 
@@ -25,7 +25,7 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 
-// ═══ VALIDAÇÕES DE BOOT ═══
+// ═══ VALIDAÇÕES ═══
 function fatal(msg) { console.error(`❌ [BOOT] ${msg}`); process.exit(1); }
 if (!SUPABASE_URL) fatal('SUPABASE_URL ausente');
 if (!SUPABASE_ANON) fatal('SUPABASE_ANON_KEY ausente');
@@ -33,34 +33,23 @@ if (!SUPABASE_SERVICE) fatal('SUPABASE_SERVICE_ROLE_KEY ausente');
 if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN curto/ausente');
 if (!DISCORD_TOKEN) console.warn('⚠️ DISCORD_TOKEN ausente — ações Discord desabilitadas');
 
-// ═══ SUPABASE CLIENTS ═══
+// ═══ SUPABASE ═══
 const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.5' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.6' } },
 });
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.5-admin' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.6-admin' } },
 });
 
-// ═══ AUTO-MIGRATION (garante colunas) ═══
+// ═══ AUTO-MIGRATION ═══
 (async function autoMigrate() {
-  const requiredCols = [
-    "email_confirmed BOOLEAN DEFAULT false",
-    "confirm_token TEXT",
-    "confirm_expires TIMESTAMPTZ",
-    "reset_token TEXT",
-    "reset_expires TIMESTAMPTZ",
-  ];
   try {
-    // Testa se existe SELECT do email_confirmed
     const { error } = await supaAdmin.from('panel_admins').select('email_confirmed').limit(1);
-    if (!error) return console.log('✅ [MIGRATION] Colunas presentes.');
-    console.warn('⚠️ [MIGRATION] Coluna ausente. Adicione manualmente:');
-    console.warn('   ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS ' + requiredCols.join('; ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS '));
-  } catch (e) {
-    console.error('[MIGRATION]', e.message);
-  }
+    if (!error) console.log('✅ [MIGRATION] Colunas presentes.');
+    else console.warn('⚠️ [MIGRATION] Coluna ausente. Rode: ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS email_confirmed BOOLEAN DEFAULT false, confirm_token TEXT, confirm_expires TIMESTAMPTZ, reset_token TEXT, reset_expires TIMESTAMPTZ;');
+  } catch (e) { console.error('[MIGRATION]', e.message); }
 })();
 
 // ═══ CONSTANTES ═══
@@ -384,11 +373,16 @@ async function requireAuth(req, res, next) {
     return genericError(res);
   }
 }
+
+// ⚡ FIX CRÍTICO: agora chama requireAuth ANTES de checar role
 function requireRole(...allowed) {
   return (req, res, next) => {
-    if (!req.admin) return res.status(401).json({ ok: false, error: 'Não autenticado' });
-    if (!allowed.includes(req.admin.role)) return res.status(403).json({ ok: false, error: 'Permissão negada' });
-    next();
+    requireAuth(req, res, () => {
+      if (!allowed.includes(req.admin.role)) {
+        return res.status(403).json({ ok: false, error: 'Permissão negada' });
+      }
+      next();
+    });
   };
 }
 const requireDev = requireRole('dev');
@@ -438,7 +432,7 @@ app.get('/api/public-config', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, service: 'frio-panel', version: '5.1.5',
+    ok: true, service: 'frio-panel', version: '5.1.6',
     uptime: Math.floor(process.uptime()),
     env: NODE_ENV,
   });
@@ -555,7 +549,7 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// REGISTER — Discord ID obrigatório
+// REGISTER
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -624,7 +618,7 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
 });
 
 // ═══════════════════════════════════════════════════════════
-// RESEND CONFIRMATION (por email)
+// RESEND CONFIRMATION
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/resend-confirmation', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -666,13 +660,11 @@ app.post('/api/auth/validate-reset', rateLimit(20, 60 * 60 * 1000), async (req, 
     const finalToken = access_token || token;
     if (!finalToken) return res.json({ ok: false, valid: false, error: 'Token ausente.' });
 
-    // Tenta Supabase primeiro
     const { data: { user }, error } = await supaPublic.auth.getUser(finalToken);
     if (!error && user) {
       return res.json({ ok: true, valid: true, kind: 'supabase', email: user.email });
     }
 
-    // Fallback custom
     const { data: customUser, error: dbErr } = await supaAdmin
       .from('panel_admins')
       .select('user_id, email, reset_expires')
@@ -705,13 +697,11 @@ app.post('/api/auth/validate-confirm', rateLimit(20, 60 * 60 * 1000), async (req
     const finalToken = access_token || token;
     if (!finalToken) return res.json({ ok: false, valid: false, error: 'Token ausente.' });
 
-    // Tenta Supabase primeiro
     const { data: { user }, error } = await supaPublic.auth.getUser(finalToken);
     if (!error && user) {
       return res.json({ ok: true, valid: true, kind: 'supabase', email: user.email });
     }
 
-    // Fallback custom
     const { data: customUser, error: dbErr } = await supaAdmin
       .from('panel_admins')
       .select('user_id, email, confirm_expires, email_confirmed')
@@ -733,7 +723,7 @@ app.post('/api/auth/validate-confirm', rateLimit(20, 60 * 60 * 1000), async (req
 });
 
 // ═══════════════════════════════════════════════════════════
-// RESEND CONFIRMATION BY TOKEN
+// RESEND BY TOKEN
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/resend-confirmation-by-token', rateLimit(3, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -767,7 +757,7 @@ app.post('/api/auth/resend-confirmation-by-token', rateLimit(3, 60 * 60 * 1000),
 });
 
 // ═══════════════════════════════════════════════════════════
-// CONFIRM (token custom)
+// CONFIRM
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -800,7 +790,7 @@ app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) =>
 });
 
 // ═══════════════════════════════════════════════════════════
-// VERIFY (token_hash Supabase)
+// VERIFY
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -956,6 +946,95 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
       top_servers: (top || []).map(x => ({ name: x.name, member_count: x.member_count || 0, icon: x.icon })),
     }});
   } catch (e) { return genericError(res); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 DASHBOARD v2 — Bot status, atividade, keys expirando, quick stats
+// ═══════════════════════════════════════════════════════════
+
+// GET /api/dashboard/bot-status
+app.get('/api/dashboard/bot-status', requireStaff, async (req, res) => {
+  try {
+    let botStatus = null;
+    try {
+      const r = await fetch(`${BOT_API_URL}/health`, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) botStatus = await r.json();
+    } catch { botStatus = { offline: true }; }
+
+    const [ks, mm] = await Promise.all([
+      supaAdmin.from('kill_switch').select('active,reason').eq('id', 1).maybeSingle(),
+      supaAdmin.from('maintenance_mode').select('active,reason').eq('id', 1).maybeSingle(),
+    ]);
+
+    return res.json({
+      ok: true,
+      bot: botStatus,
+      kill_switch: { active: !!ks.data?.active, reason: ks.data?.reason || null },
+      maintenance: { active: !!mm.data?.active, reason: mm.data?.reason || null },
+    });
+  } catch (e) {
+    console.error('[dashboard/bot-status]', e);
+    return res.status(500).json({ ok: false, error: 'Erro ao consultar bot.' });
+  }
+});
+
+// GET /api/dashboard/recent-activity
+app.get('/api/dashboard/recent-activity', requireStaff, rateLimit(120, 60 * 1000), async (req, res) => {
+  try {
+    const { data } = await supaAdmin.from('site_audit_log')
+      .select('id,action,actor_email,actor_id,target_id,ip,browser,device_type,success,error_reason,created_at')
+      .order('created_at', { ascending: false })
+      .limit(15);
+    return res.json({ ok: true, activity: data || [] });
+  } catch (e) {
+    console.error('[recent-activity]', e);
+    return genericError(res);
+  }
+});
+
+// GET /api/dashboard/keys-expiring
+app.get('/api/dashboard/keys-expiring', requireStaff, async (req, res) => {
+  try {
+    const in7d = new Date(Date.now() + 7 * 86400000).toISOString();
+    const now = new Date().toISOString();
+    const { data } = await supaAdmin.from('premium_keys')
+      .select('id,key_code,tier,duracao_dias,expira_em,ativo,sent_to')
+      .eq('ativo', true).eq('is_pack', false)
+      .not('expira_em', 'is', null)
+      .gte('expira_em', now)
+      .lte('expira_em', in7d)
+      .order('expira_em', { ascending: true })
+      .limit(20);
+    return res.json({ ok: true, keys: data || [] });
+  } catch (e) {
+    console.error('[keys-expiring]', e);
+    return genericError(res);
+  }
+});
+
+// GET /api/dashboard/quick-stats
+app.get('/api/dashboard/quick-stats', requireStaff, async (req, res) => {
+  try {
+    const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [logins24h, loginsFailed24h, keysGenerated24h, redemptions7d, topMediadores] = await Promise.all([
+      supaAdmin.from('site_audit_log').select('*', { count: 'exact', head: true }).eq('action', 'login').gte('created_at', since24h),
+      supaAdmin.from('site_audit_log').select('*', { count: 'exact', head: true }).eq('action', 'login_failed').gte('created_at', since24h),
+      supaAdmin.from('premium_keys').select('*', { count: 'exact', head: true }).gte('created_at', since24h),
+      supaAdmin.from('premium_redemptions').select('*', { count: 'exact', head: true }).gte('created_at', since7d),
+      supaAdmin.from('ff_mediator_queue').select('user_id,earnings_total,matches_total').order('earnings_total', { ascending: false }).limit(5),
+    ]);
+    return res.json({ ok: true, quick: {
+      logins_24h: logins24h.count || 0,
+      logins_failed_24h: loginsFailed24h.count || 0,
+      keys_generated_24h: keysGenerated24h.count || 0,
+      redemptions_7d: redemptions7d.count || 0,
+      top_mediadores: topMediadores.data || [],
+    }});
+  } catch (e) {
+    console.error('[quick-stats]', e);
+    return genericError(res);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1900,10 +1979,9 @@ process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', 
 // BOOT
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, () => {
-  console.log(`🌐 [PANEL v5.1.5] Rodando na porta ${PORT}`);
+  console.log(`🌐 [PANEL v5.1.6] Rodando na porta ${PORT}`);
   console.log(`🔒 NODE_ENV=${NODE_ENV}`);
   console.log(`🤖 Bot: ${BOT_API_URL}`);
-  console.log(`🎮 Discord ID: OBRIGATÓRIO`);
-  console.log(`🔧 Auto-migration: verificando colunas…`);
+  console.log(`🔧 requireRole: OK · Dashboard v2: OK`);
   console.log(`🚀 Pronto.`);
 });

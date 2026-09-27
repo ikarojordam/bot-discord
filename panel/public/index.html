@@ -12,7 +12,7 @@
 <body>
 
 <!-- ═══════════════════════════════════════════════════════════
-     VIEW: TERMOS + PRIVACIDADE (aparece primeiro)
+     VIEW: TERMOS + PRIVACIDADE
      ═══════════════════════════════════════════════════════════ -->
 <div id="view-terms" class="auth-page active">
   <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
@@ -479,11 +479,72 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <main class="app-main">
-    <!-- DASHBOARD -->
+    <!-- ═══ DASHBOARD ═══ -->
     <section class="page active" id="page-dashboard">
-      <div class="page-head"><h2>📊 Dashboard</h2></div>
+      <div class="page-head">
+        <h2>📊 Dashboard</h2>
+        <div class="page-head-actions">
+          <button id="btnRefreshDashboard" class="btn btn-ghost btn-sm">🔄 Atualizar</button>
+        </div>
+      </div>
+
+      <!-- STATUS DO BOT -->
+      <div class="card card-status" id="cardBotStatus">
+        <div class="status-header">
+          <div class="status-left">
+            <span class="status-dot" id="botStatusDot">⚪</span>
+            <span class="status-label" id="botStatusLabel">Verificando...</span>
+          </div>
+          <div class="status-right">
+            <span class="status-chip" id="botStatusPing">--ms</span>
+            <span class="status-chip" id="botStatusUptime">--</span>
+            <span class="status-chip" id="botStatusGuilds">-- guilds</span>
+          </div>
+        </div>
+        <div class="status-warnings hidden" id="statusWarnings"></div>
+      </div>
+
+      <!-- STATS PRINCIPAIS -->
       <div class="stats-grid" id="dashStats"></div>
+
+      <!-- QUICK STATS -->
+      <div class="stats-grid" id="dashQuickStats"></div>
+
+      <!-- GRÁFICOS -->
       <div class="charts-grid" id="dashCharts"></div>
+
+      <!-- DUAS COLUNAS -->
+      <div class="dashboard-columns">
+        <!-- ATIVIDADE RECENTE -->
+        <div class="card">
+          <div class="card-head">
+            <h3>🕐 Atividade Recente</h3>
+            <a class="card-link" onclick="navigate('audit')">Ver tudo →</a>
+          </div>
+          <div id="recentActivity" class="activity-list">
+            <div class="empty-small">⏳ Carregando...</div>
+          </div>
+        </div>
+
+        <!-- AÇÕES RÁPIDAS -->
+        <div class="card">
+          <div class="card-head">
+            <h3>⚡ Ações Rápidas</h3>
+          </div>
+          <div class="quick-actions" id="quickActions"></div>
+        </div>
+      </div>
+
+      <!-- KEYS EXPIRANDO -->
+      <div class="card" id="cardKeysExpiring" style="margin-top:16px">
+        <div class="card-head">
+          <h3>⏰ Keys expirando em 7 dias</h3>
+          <a class="card-link" onclick="navigate('keys')">Ver keys →</a>
+        </div>
+        <div id="keysExpiring" class="keys-list">
+          <div class="empty-small">⏳ Carregando...</div>
+        </div>
+      </div>
     </section>
 
     <!-- KEYS -->
@@ -814,7 +875,6 @@
      MODAIS
      ═══════════════════════════════════════════════════════════ -->
 
-<!-- Server detail -->
 <div id="modalServer" class="modal">
   <div class="modal-box modal-lg">
     <button class="modal-x" data-close="modalServer">✕</button>
@@ -822,7 +882,6 @@
   </div>
 </div>
 
-<!-- Forgot -->
 <div id="modalForgot" class="modal">
   <div class="modal-box">
     <button class="modal-x" data-close="modalForgot">✕</button>
@@ -839,7 +898,6 @@
   </div>
 </div>
 
-<!-- User create/edit -->
 <div id="modalUser" class="modal">
   <div class="modal-box modal-lg">
     <button class="modal-x" data-close="modalUser">✕</button>
@@ -876,7 +934,6 @@
   </div>
 </div>
 
-<!-- Approve -->
 <div id="modalApprove" class="modal">
   <div class="modal-box">
     <button class="modal-x" data-close="modalApprove">✕</button>
@@ -909,7 +966,6 @@
   </div>
 </div>
 
-<!-- Send Key -->
 <div id="modalSendKey" class="modal">
   <div class="modal-box">
     <button class="modal-x" data-close="modalSendKey">✕</button>
@@ -925,7 +981,6 @@
   </div>
 </div>
 
-<!-- Dev Server Actions -->
 <div id="modalDevServerActions" class="modal">
   <div class="modal-box">
     <button class="modal-x" data-close="modalDevServerActions">✕</button>
@@ -945,7 +1000,6 @@
   </div>
 </div>
 
-<!-- User Sessions (dev) -->
 <div id="modalUserSessions" class="modal">
   <div class="modal-box modal-lg">
     <button class="modal-x" data-close="modalUserSessions">✕</button>
@@ -959,7 +1013,6 @@
   </div>
 </div>
 
-<!-- Audit Detail -->
 <div id="modalAuditDetail" class="modal">
   <div class="modal-box modal-lg">
     <button class="modal-x" data-close="modalAuditDetail">✕</button>
@@ -968,7 +1021,6 @@
   </div>
 </div>
 
-<!-- Terms Reject -->
 <div id="modalTermsReject" class="modal">
   <div class="modal-box modal-center">
     <div class="modal-icon-big">👋</div>

@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════
 // FRIO PANEL — app.js v5.2.0
+// Dashboard v2 + Auth + SPA Router + Modals + Command Palette
 // ═══════════════════════════════════════════════════════════
 'use strict';
 
@@ -293,7 +294,6 @@ async function bootApp() {
   document.body.dataset.role = APP.admin.role;
   document.body.dataset.plan = APP.admin.plan || 'none';
 
-  // Filtra sidebar por role
   $$('[data-roles]').forEach(el => {
     const roles = el.dataset.roles.split(',').map(s => s.trim());
     if (!roles.includes(APP.admin.role)) el.style.display = 'none';
@@ -368,33 +368,52 @@ async function navigate(page) {
 window.navigate = navigate;
 
 // ═══════════════════════════════════════════════════════════
-// DASHBOARD
+// DASHBOARD — v2 completo
 // ═══════════════════════════════════════════════════════════
 async function loadDashboard() {
+  loadDashStats();
+  loadBotStatus();
+
+  if (['dev', 'admin', 'funcionario'].includes(APP.admin.role)) {
+    loadQuickStats();
+    loadDashCharts();
+    loadRecentActivity();
+    loadKeysExpiring();
+  }
+
+  renderQuickActions();
+
+  $('btnRefreshDashboard')?.addEventListener('click', () => {
+    toast('Atualizando...', 'ok');
+    loadDashboard();
+  }, { once: true });
+}
+
+async function loadDashStats() {
   const wrap = $('dashStats');
+  if (!wrap) return;
   wrap.innerHTML = '<div class="card">⏳ Carregando...</div>';
 
   const r = await api('/api/dashboard/stats');
   if (!r.ok) { wrap.innerHTML = `<div class="card">❌ ${escapeHtml(r.error)}</div>`; return; }
   const s = r.stats || {};
-
   const isStaff = ['dev', 'admin', 'funcionario'].includes(APP.admin.role);
 
   const cards = isStaff ? [
-    { i: '🌐', l: 'Servidores', v: fmtNumber(s.guilds), c: 'blue' },
-    { i: '👥', l: 'Usuários', v: fmtNumber(s.users), c: 'green' },
-    { i: '🔑', l: 'Keys ativas', v: fmtNumber(s.active_keys), c: 'amber' },
-    { i: '🎁', l: 'Resgates', v: fmtNumber(s.redemptions), c: 'blue' },
-    { i: '⏳', l: 'Pendentes', v: fmtNumber(s.pending), c: 'red' },
-    { i: '👥', l: 'Membros totais', v: fmtNumber(s.total_members), c: 'green' },
+    { i: '🌐', l: 'Servidores', v: fmtNumber(s.guilds), c: 'blue', nav: 'dev-servers' },
+    { i: '👥', l: 'Usuários', v: fmtNumber(s.users), c: 'green', nav: 'usuarios' },
+    { i: '🔑', l: 'Keys ativas', v: fmtNumber(s.active_keys), c: 'amber', nav: 'keys' },
+    { i: '🎁', l: 'Resgates', v: fmtNumber(s.redemptions), c: 'blue', nav: 'keys' },
+    { i: '⏳', l: 'Pendentes', v: fmtNumber(s.pending), c: 'red', nav: 'pending' },
+    { i: '👥', l: 'Membros totais', v: fmtNumber(s.total_members), c: 'green', nav: 'dev-servers' },
   ] : [
-    { i: '🌐', l: 'Meus servidores', v: fmtNumber(s.servers), c: 'blue' },
-    { i: '🔑', l: 'Minhas keys', v: fmtNumber(s.keys), c: 'amber' },
-    { i: '🔔', l: 'Não lidas', v: fmtNumber(s.notifs), c: 'red' },
+    { i: '🌐', l: 'Meus servidores', v: fmtNumber(s.servers), c: 'blue', nav: 'servers' },
+    { i: '🔑', l: 'Minhas keys', v: fmtNumber(s.keys), c: 'amber', nav: 'my-keys' },
+    { i: '🔔', l: 'Não lidas', v: fmtNumber(s.notifs), c: 'red', nav: 'notifications' },
   ];
 
   wrap.innerHTML = cards.map(c => `
-    <div class="stat-card">
+    <div class="stat-card" data-nav="${c.nav}" style="cursor:pointer">
       <div class="stat-icon ${c.c}">${c.i}</div>
       <div class="stat-body">
         <div class="stat-value">${escapeHtml(c.v)}</div>
@@ -403,14 +422,108 @@ async function loadDashboard() {
     </div>
   `).join('');
 
-  if (isStaff) {
-    const rc = await api('/api/dashboard/charts');
-    if (rc.ok) renderCharts(rc.charts);
+  wrap.querySelectorAll('[data-nav]').forEach(el => {
+    el.addEventListener('click', () => navigate(el.dataset.nav));
+  });
+}
+
+async function loadBotStatus() {
+  const dot = $('botStatusDot');
+  const lbl = $('botStatusLabel');
+  const ping = $('botStatusPing');
+  const uptime = $('botStatusUptime');
+  const guilds = $('botStatusGuilds');
+  const warnBox = $('statusWarnings');
+  if (!dot) return;
+
+  const r = await api('/api/dashboard/bot-status');
+  if (!r.ok) {
+    dot.textContent = '⚪';
+    lbl.textContent = 'Status indisponível';
+    return;
+  }
+
+  const { bot, kill_switch, maintenance } = r;
+
+  if (bot?.offline || !bot?.ok) {
+    dot.textContent = '🔴';
+    lbl.textContent = 'Bot offline';
+    ping.textContent = '--ms';
+    uptime.textContent = '--';
+    guilds.textContent = '-- guilds';
+  } else {
+    dot.textContent = '🟢';
+    lbl.textContent = `Bot online (${bot.version || 'v?'})`;
+    ping.textContent = `${bot.ping || 0}ms`;
+    uptime.textContent = bot.uptimeHuman || bot.uptimeHuman || '--';
+    guilds.textContent = `${bot.guilds || 0} guilds`;
+  }
+
+  const warnings = [];
+  if (kill_switch?.active) warnings.push(`🚨 Kill switch ATIVO — ${escapeHtml(kill_switch.reason || 'sem motivo')}`);
+  if (maintenance?.active) warnings.push(`🔧 Manutenção ATIVA — ${escapeHtml(maintenance.reason || 'sem motivo')}`);
+
+  if (warnings.length) {
+    warnBox.innerHTML = warnings.map(w => `<div class="warn-item">${w}</div>`).join('');
+    warnBox.classList.remove('hidden');
+  } else {
+    warnBox.classList.add('hidden');
   }
 }
 
-function renderCharts(charts) {
+async function loadQuickStats() {
+  const wrap = $('dashQuickStats');
+  if (!wrap) return;
+  if (!['dev', 'admin', 'funcionario'].includes(APP.admin.role)) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'grid';
+
+  const r = await api('/api/dashboard/quick-stats');
+  if (!r.ok) { wrap.innerHTML = ''; return; }
+  const q = r.quick || {};
+
+  wrap.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon green">📥</div>
+      <div class="stat-body">
+        <div class="stat-value">${fmtNumber(q.logins_24h)}</div>
+        <div class="stat-label">Logins 24h</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red">🚫</div>
+      <div class="stat-body">
+        <div class="stat-value">${fmtNumber(q.logins_failed_24h)}</div>
+        <div class="stat-label">Falhas 24h</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon amber">🔑</div>
+      <div class="stat-body">
+        <div class="stat-value">${fmtNumber(q.keys_generated_24h)}</div>
+        <div class="stat-label">Keys geradas 24h</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue">🎁</div>
+      <div class="stat-body">
+        <div class="stat-value">${fmtNumber(q.redemptions_7d)}</div>
+        <div class="stat-label">Resgates 7d</div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadDashCharts() {
   const wrap = $('dashCharts');
+  if (!wrap) return;
+
+  const rc = await api('/api/dashboard/charts');
+  if (!rc.ok) { wrap.innerHTML = ''; return; }
+
+  const charts = rc.charts || {};
   wrap.innerHTML = `
     <div class="chart-card"><h4>📈 Keys por dia (30d)</h4><canvas id="chartKeysByDay"></canvas></div>
     <div class="chart-card"><h4>🍩 Keys por tier</h4><canvas id="chartKeysTier"></canvas></div>
@@ -428,7 +541,11 @@ function renderCharts(charts) {
         type: 'line',
         data: {
           labels: charts.keys_by_day.map(d => d.date),
-          datasets: [{ label: 'Keys', data: charts.keys_by_day.map(d => d.count), borderColor: '#5865F2', backgroundColor: 'rgba(88,101,242,.15)', fill: true, tension: .35, pointRadius: 3 }],
+          datasets: [{
+            label: 'Keys', data: charts.keys_by_day.map(d => d.count),
+            borderColor: '#5865F2', backgroundColor: 'rgba(88,101,242,.15)',
+            fill: true, tension: .35, pointRadius: 3,
+          }],
         },
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#9ca3af' } }, x: { ticks: { color: '#9ca3af' } } } },
       });
@@ -439,7 +556,10 @@ function renderCharts(charts) {
         type: 'doughnut',
         data: {
           labels: ['Basic','Premium','Ultra','Unlimited'],
-          datasets: [{ data: [charts.keys_by_tier.basic, charts.keys_by_tier.premium, charts.keys_by_tier.ultra, charts.keys_by_tier.unlimited], backgroundColor: ['#CD7F32','#C0C0C0','#FFD700','#8B5CF6'] }],
+          datasets: [{
+            data: [charts.keys_by_tier.basic, charts.keys_by_tier.premium, charts.keys_by_tier.ultra, charts.keys_by_tier.unlimited],
+            backgroundColor: ['#CD7F32','#C0C0C0','#FFD700','#8B5CF6'],
+          }],
         },
         options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af' } } } },
       });
@@ -449,8 +569,11 @@ function renderCharts(charts) {
       APP.charts.chartUsersRole = new Chart($('chartUsersRole'), {
         type: 'doughnut',
         data: {
-          labels: ['DEV','Admin','Funcionário','Cliente','Pendente'],
-          datasets: [{ data: [charts.users_by_role.dev, charts.users_by_role.admin, charts.users_by_role.funcionario, charts.users_by_role.cliente, charts.users_by_role.pending], backgroundColor: ['#FFD700','#ED4245','#9B59B6','#57F287','#808080'] }],
+          labels: ['DEV','Admin','Func','Cliente','Pending'],
+          datasets: [{
+            data: [charts.users_by_role.dev, charts.users_by_role.admin, charts.users_by_role.funcionario, charts.users_by_role.cliente, charts.users_by_role.pending],
+            backgroundColor: ['#FFD700','#ED4245','#9B59B6','#57F287','#808080'],
+          }],
         },
         options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af' } } } },
       });
@@ -461,7 +584,10 @@ function renderCharts(charts) {
         type: 'bar',
         data: {
           labels: ['Basic','Premium','Ultra','Unlimited','Nenhum'],
-          datasets: [{ data: [charts.users_by_plan.basic, charts.users_by_plan.premium, charts.users_by_plan.ultra, charts.users_by_plan.unlimited, charts.users_by_plan.none], backgroundColor: ['#CD7F32','#C0C0C0','#FFD700','#8B5CF6','#6b7280'] }],
+          datasets: [{
+            data: [charts.users_by_plan.basic, charts.users_by_plan.premium, charts.users_by_plan.ultra, charts.users_by_plan.unlimited, charts.users_by_plan.none],
+            backgroundColor: ['#CD7F32','#C0C0C0','#FFD700','#8B5CF6','#6b7280'],
+          }],
         },
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: '#9ca3af' } }, x: { ticks: { color: '#9ca3af' } } } },
       });
@@ -478,6 +604,125 @@ function renderCharts(charts) {
       });
     }
   } catch (e) { console.error('[charts]', e); }
+}
+
+async function loadRecentActivity() {
+  const wrap = $('recentActivity');
+  if (!wrap) return;
+
+  const r = await api('/api/dashboard/recent-activity');
+  if (!r.ok) { wrap.innerHTML = '<div class="empty-small">Erro ao carregar</div>'; return; }
+
+  const list = r.activity || [];
+  if (!list.length) {
+    wrap.innerHTML = '<div class="empty-small">Nenhuma atividade</div>';
+    return;
+  }
+
+  const iconMap = {
+    login: '🟢', login_failed: '🔴', logout: '⚪',
+    register_pending: '✨', password_reset: '🔑',
+    generate_keys: '🔑', send_key: '📤', delete_key: '🗑️',
+    nuke_guild: '💥', force_leave_guild: '🚪', force_rename_guild: '✏️',
+    kill_switch_on: '🚨', kill_switch_off: '✅',
+    maintenance_on: '🔧', maintenance_off: '✅',
+    force_premium_add: '💎', force_premium_remove: '🗑️',
+    broadcast_global: '📢', approve_user: '✅', update_user: '✏️',
+    access_denied: '🚫', take_members: '🚀', refresh_guild: '🔄',
+  };
+
+  wrap.innerHTML = list.map(a => {
+    const icon = iconMap[a.action] || '📋';
+    const time = timeAgo(a.created_at);
+    const actor = a.actor_email || a.actor_id || 'system';
+    const isFail = a.success === false;
+    return `
+      <div class="activity-item ${isFail ? 'fail' : ''}">
+        <div class="activity-icon">${icon}</div>
+        <div class="activity-info">
+          <div class="activity-title">
+            <span class="activity-action">${escapeHtml(a.action)}</span>
+          </div>
+          <div class="activity-meta">
+            <span>👤 ${escapeHtml(actor)}</span>
+            ${a.ip ? `<span>🌐 ${escapeHtml(a.ip)}</span>` : ''}
+            ${a.browser ? `<span>🖥️ ${escapeHtml(a.browser)}</span>` : ''}
+          </div>
+        </div>
+        <div class="activity-time">${time}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadKeysExpiring() {
+  const wrap = $('keysExpiring');
+  if (!wrap) return;
+
+  const r = await api('/api/dashboard/keys-expiring');
+  if (!r.ok) { wrap.innerHTML = '<div class="empty-small">Erro ao carregar</div>'; return; }
+
+  const keys = r.keys || [];
+  if (!keys.length) {
+    wrap.innerHTML = '<div class="empty-small">✅ Nenhuma key expirando em 7 dias</div>';
+    return;
+  }
+
+  wrap.innerHTML = keys.map(k => {
+    const dias = Math.ceil((new Date(k.expira_em) - Date.now()) / 86400000);
+    const urg = dias <= 2 ? 'urgent' : dias <= 4 ? 'warning' : '';
+    return `
+      <div class="key-item ${urg}">
+        <div class="key-info">
+          <code>${escapeHtml(k.key_code)}</code>
+          <span class="tag tag-info">${PLANS_LABEL[k.tier] || k.tier}</span>
+          ${k.sent_to ? `<span class="tag tag-ok">Enviada</span>` : ''}
+        </div>
+        <div class="key-time">
+          ${dias === 0 ? '⚠️ Hoje' : dias === 1 ? '⚠️ Amanhã' : `${dias} dias`}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderQuickActions() {
+  const wrap = $('quickActions');
+  if (!wrap) return;
+  const role = APP.admin.role;
+
+  const actions = [
+    { label: 'Gerar Key', icon: '🔑', nav: 'keys', roles: ['dev','admin','funcionario'] },
+    { label: 'Novo Usuário', icon: '👥', nav: 'usuarios', roles: ['dev'], action: 'novoUser' },
+    { label: 'Aprovações', icon: '⏳', nav: 'pending', roles: ['dev'] },
+    { label: 'Gerenciar Servidores', icon: '🛰️', nav: 'dev-servers', roles: ['dev'] },
+    { label: 'Kill Switch', icon: '🚨', nav: 'kill-switch', roles: ['dev'] },
+    { label: 'Broadcast', icon: '📢', nav: 'broadcast', roles: ['dev'] },
+    { label: 'Auditoria', icon: '📋', nav: 'audit', roles: ['dev'] },
+    { label: 'Meus Servidores', icon: '🌐', nav: 'servers', roles: ['dev','admin','funcionario','cliente'] },
+    { label: 'Minhas Keys', icon: '🎁', nav: 'my-keys', roles: ['dev','admin','funcionario','cliente'] },
+    { label: 'Sessões', icon: '🖥️', nav: 'sessions', roles: ['dev','admin','funcionario','cliente'] },
+    { label: 'Notificações', icon: '🔔', nav: 'notifications', roles: ['dev','admin','funcionario','cliente'] },
+    { label: 'Financeiro', icon: '💰', nav: 'financial', roles: ['dev','admin'] },
+  ].filter(a => a.roles.includes(role));
+
+  wrap.innerHTML = actions.map(a => `
+    <button class="quick-action" data-nav="${a.nav}" data-action="${a.action || ''}">
+      <span class="qa-icon">${a.icon}</span>
+      <span class="qa-label">${a.label}</span>
+    </button>
+  `).join('');
+
+  wrap.querySelectorAll('.quick-action').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const nav = btn.dataset.nav;
+      const action = btn.dataset.action;
+      navigate(nav);
+      if (action === 'novoUser') {
+        setTimeout(() => $('btnNovoUsuario')?.click(), 400);
+      }
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -610,9 +855,7 @@ $('btnConfirmSendKey')?.addEventListener('click', async () => {
 // ═══════════════════════════════════════════════════════════
 // PACKS
 // ═══════════════════════════════════════════════════════════
-async function loadPacks() {
-  await loadPacksTable();
-}
+async function loadPacks() { await loadPacksTable(); }
 
 $('btnGerarPack')?.addEventListener('click', async () => {
   clearMsg('packResult');
@@ -1554,7 +1797,7 @@ function highlightCmdk() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// MODAL CLOSE (botão X e botões data-close)
+// MODAL CLOSE (botão X e data-close)
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('click', (e) => {
   const closeBtn = e.target.closest('[data-close]');

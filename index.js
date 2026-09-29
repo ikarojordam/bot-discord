@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🤖 FRIOBOT — index.js — v6.7.1
+// 🤖 FRIOBOT — index.js — v6.7.2
 // ESTRUTURA EM 11 PARTES
 //   PARTE 1: Base, Client, Cache, Config, Permissões, Premium, Logs
 //   PARTE 2: Helpers globais (IA, PIX, MP, OAuth, Dashboard, Auto-Heal)
@@ -43,7 +43,7 @@ const QRCode = require('qrcode');
 // ═══════════════════════════════════════════════════════════
 // VERSÃO (definida ANTES de tudo que a usa)
 // ═══════════════════════════════════════════════════════════
-const BOT_VERSION = 'v6.7.1';
+const BOT_VERSION = 'v6.7.2';
 const BOT_START_TIME = Date.now();
 
 // ═══════════════════════════════════════════════════════════
@@ -84,8 +84,8 @@ app.get('/', (req, res) => res.send('FrioBot está online! 🧊'));
 const PORT = process.env.PORT || process.env.WEBHOOK_PORT || 3000;
 
 // ═══════════════════════════════════════════════════════════
-// ⚡ START DO EXPRESS — CRÍTICO: sem isso o Render não detecta a porta
-// O host DEVE ser '0.0.0.0' para o Render conseguir bind.
+// ⚡ START DO EXPRESS — CRÍTICO: Render precisa da porta ABERTA
+// Host '0.0.0.0' é obrigatório (senão Render detecta "no open ports")
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 [EXPRESS] Web rodando em http://0.0.0.0:${PORT}`);
@@ -130,7 +130,7 @@ function tierAtLeast(userTier, requiredTier) { return tierWeight(userTier) >= ti
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
   auth: { persistSession: false },
   global: {
-    headers: { 'X-Client-Info': 'frio-bot/6.7.1' },
+    headers: { 'X-Client-Info': 'frio-bot/6.7.2' },
     fetch: (url, opts = {}) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -142,8 +142,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // ═══════════════════════════════════════════════════════════
 // DISCORD CLIENT — OTIMIZADO
-// ⚡ v6.7.1: removido override de rest.api (usava discordapp.com/api v9
-//    que estava causando timeout no WebSocket do Render)
+// ⚡ v6.7.2: RESTAURADO rest.api = discordapp.com/api v9
+//    Esse é o fix que funcionava antes no Render contra o Cloudflare
 // ═══════════════════════════════════════════════════════════
 const client = new Client({
   intents: [
@@ -158,13 +158,17 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
   ],
   partials: ['CHANNEL', 'MESSAGE', 'REACTION'],
-  // ⚡ Sem override de rest.api — discord.js usa https://discord.com/api/v10 por padrão
-  // Se precisar customizar timeout/retry, descomente abaixo:
-  // rest: {
-  //   timeout: 30000,
-  //   retries: 3,
-  //   retryAfter: 5000,
-  // },
+
+  // ⚡ FIX CRÍTICO: discord.com está bloqueado pelo Cloudflare no Render
+  // discordapp.com/api/v9 responde 200 (testado em set/2026)
+  rest: {
+    api: 'https://discordapp.com/api',
+    version: '9',
+    timeout: 30000,
+    retries: 3,
+    retryAfter: 5000,
+  },
+
   makeCache: Options.cacheWithLimits({
     ...Options.DefaultMakeCacheSettings,
     GuildMemberManager: 50,
@@ -190,6 +194,46 @@ const client = new Client({
 });
 
 // ═══════════════════════════════════════════════════════════
+// 🔬 DIAGNÓSTICO DE REDE — testa os 3 endpoints do Discord
+// Roda em background (não bloqueia o boot) e printa no log
+// Serve pra identificar SE e QUAL endpoint está travando
+// ═══════════════════════════════════════════════════════════
+(async () => {
+  const endpoints = [
+    'https://discordapp.com/api/v9/gateway/bot',
+    'https://discord.com/api/v9/gateway/bot',
+    'https://discord.com/api/v10/gateway/bot',
+  ];
+  const token = process.env.DISCORD_TOKEN;
+
+  console.log('🔬 [DIAG] Testando conectividade com Discord API...');
+  console.log('🔬 [DIAG] Token presente:', !!token, '| len:', token ? token.length : 0);
+
+  for (const url of endpoints) {
+    const t0 = Date.now();
+    try {
+      const r = await fetch(url, {
+        headers: { 'Authorization': `Bot ${token}` },
+        signal: AbortSignal.timeout(10000),
+      });
+      const ms = Date.now() - t0;
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        console.log(`🔬 [DIAG] ✅ ${url} → HTTP ${r.status} em ${ms}ms | gateway: ${d.url || '?'} | shards: ${d.shards}`);
+      } else if (r.status === 401) {
+        console.log(`🔬 [DIAG] ❌ ${url} → HTTP 401 em ${ms}ms (TOKEN INVÁLIDO!)`);
+      } else {
+        console.log(`🔬 [DIAG] ⚠️ ${url} → HTTP ${r.status} em ${ms}ms | ${JSON.stringify(d).substring(0, 200)}`);
+      }
+    } catch (e) {
+      const ms = Date.now() - t0;
+      console.log(`🔬 [DIAG] ❌ ${url} → ${e.name} após ${ms}ms: ${e.message}`);
+    }
+  }
+  console.log('🔬 [DIAG] Diagnóstico concluído.');
+})();
+
+// ═══════════════════════════════════════════════════════════
 // DEVELOPERS
 // ═══════════════════════════════════════════════════════════
 const DEVELOPER_IDS = ['1192230982250672158', '1545438919837880421'];
@@ -204,12 +248,12 @@ function isDeveloper(id) {
 // UPDATE NOTES
 // ═══════════════════════════════════════════════════════════
 const UPDATE_NOTES = [
-  { tag: 'fix', text: 'Express bind 0.0.0.0 + rest API default + JWT/PANEL tokens' },
+  { tag: 'fix', text: 'restaurado rest.api discordapp.com/api v9 (fix Cloudflare)' },
+  { tag: 'fix', text: 'Express bind 0.0.0.0 + diagnóstico de rede inline' },
   { tag: 'hub', text: 'multi-PIX por mediador com painel dedicado' },
   { tag: 'public', text: 'versículo do dia automático + /versiculo' },
   { tag: 'dev', text: 'tiers premium: basic, premium, ultra, unlimited' },
   { tag: 'ticket', text: 'editor com 6 abas funcionais + auto-refresh' },
-  { tag: 'hub', text: 'auto-refresh de embeds ao editar' },
 ];
 const UPDATE_TAG_LABELS = {
   public: { emoji: '🌟', label: 'Públicos' }, ticket: { emoji: '🎫', label: 'Tickets' },

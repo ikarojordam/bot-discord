@@ -16331,10 +16331,14 @@ process.on('SIGTERM', async () => {
   try { await logImportant('UPDATE', '🛑 Bot desligando', { description: 'SIGTERM', severity: 'warning' }); } catch {}
   process.exit(0);
 });
-process.on('SIGINT', async () => {
-  console.log('🛑 SIGINT recebido. Shutting down...');
+let _shuttingDown = false;
+process.on('SIGTERM', async () => {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  console.log('🛑 SIGTERM recebido. Aguardando shutdown natural do Render...');
   try { clearAllIntervals(); } catch {}
-  process.exit(0);
+  try { await logImportant('UPDATE', '🛑 Bot desligando', { description: 'SIGTERM', severity: 'warning' }); } catch {}
+  // ⚠️ NÃO chamar process.exit(0)
 });
 
 console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);

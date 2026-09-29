@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🤖 FRIOBOT — index.js — v6.7.0
+// 🤖 FRIOBOT — index.js — v6.7.1
 // ESTRUTURA EM 11 PARTES
 //   PARTE 1: Base, Client, Cache, Config, Permissões, Premium, Logs
 //   PARTE 2: Helpers globais (IA, PIX, MP, OAuth, Dashboard, Auto-Heal)
@@ -43,7 +43,7 @@ const QRCode = require('qrcode');
 // ═══════════════════════════════════════════════════════════
 // VERSÃO (definida ANTES de tudo que a usa)
 // ═══════════════════════════════════════════════════════════
-const BOT_VERSION = 'v6.7.0';
+const BOT_VERSION = 'v6.7.1';
 const BOT_START_TIME = Date.now();
 
 // ═══════════════════════════════════════════════════════════
@@ -62,7 +62,7 @@ if (!JWT_SECRET) console.warn('⚠️ [SECURITY] JWT_SECRET ausente — rotas /a
 if (!PANEL_API_TOKEN) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN ausente — auditoria do site desabilitada.');
 
 // ═══════════════════════════════════════════════════════════
-// EXPRESS (compartilhado com PARTE 9 e 10)
+// EXPRESS (compartilhado com PARTE 9, 10 e 11)
 // ═══════════════════════════════════════════════════════════
 const app = express();
 app.set('trust proxy', 1);
@@ -82,6 +82,15 @@ app.get('/', (req, res) => res.send('FrioBot está online! 🧊'));
 // ⚠️ /health definido na PARTE 9 (versão completa)
 
 const PORT = process.env.PORT || process.env.WEBHOOK_PORT || 3000;
+
+// ═══════════════════════════════════════════════════════════
+// ⚡ START DO EXPRESS — CRÍTICO: sem isso o Render não detecta a porta
+// O host DEVE ser '0.0.0.0' para o Render conseguir bind.
+// ═══════════════════════════════════════════════════════════
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 [EXPRESS] Web rodando em http://0.0.0.0:${PORT}`);
+  console.log(`🌐 [EXPRESS] Health check: http://0.0.0.0:${PORT}/health`);
+});
 
 // ═══════════════════════════════════════════════════════════
 // CONSTANTES GLOBAIS
@@ -121,7 +130,7 @@ function tierAtLeast(userTier, requiredTier) { return tierWeight(userTier) >= ti
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
   auth: { persistSession: false },
   global: {
-    headers: { 'X-Client-Info': 'frio-bot/6.7.0' },
+    headers: { 'X-Client-Info': 'frio-bot/6.7.1' },
     fetch: (url, opts = {}) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -133,6 +142,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // ═══════════════════════════════════════════════════════════
 // DISCORD CLIENT — OTIMIZADO
+// ⚡ v6.7.1: removido override de rest.api (usava discordapp.com/api v9
+//    que estava causando timeout no WebSocket do Render)
 // ═══════════════════════════════════════════════════════════
 const client = new Client({
   intents: [
@@ -147,13 +158,13 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
   ],
   partials: ['CHANNEL', 'MESSAGE', 'REACTION'],
-  rest: {
-    api: 'https://discordapp.com/api',
-    version: '9',
-    timeout: 30000,
-    retries: 3,
-    retryAfter: 5000,
-  },
+  // ⚡ Sem override de rest.api — discord.js usa https://discord.com/api/v10 por padrão
+  // Se precisar customizar timeout/retry, descomente abaixo:
+  // rest: {
+  //   timeout: 30000,
+  //   retries: 3,
+  //   retryAfter: 5000,
+  // },
   makeCache: Options.cacheWithLimits({
     ...Options.DefaultMakeCacheSettings,
     GuildMemberManager: 50,
@@ -193,7 +204,7 @@ function isDeveloper(id) {
 // UPDATE NOTES
 // ═══════════════════════════════════════════════════════════
 const UPDATE_NOTES = [
-  { tag: 'fix', text: '47 bugs corrigidos + 18 otimizações para 2000+ servidores' },
+  { tag: 'fix', text: 'Express bind 0.0.0.0 + rest API default + JWT/PANEL tokens' },
   { tag: 'hub', text: 'multi-PIX por mediador com painel dedicado' },
   { tag: 'public', text: 'versículo do dia automático + /versiculo' },
   { tag: 'dev', text: 'tiers premium: basic, premium, ultra, unlimited' },

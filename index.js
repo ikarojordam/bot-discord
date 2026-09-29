@@ -16345,7 +16345,7 @@ app.use('/api/*', (req, res) => {
 // FIM DA PARTE 11/11
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// PROCESS HANDLERS + LOGIN
+// PROCESS HANDLERS + LOGIN (v6.7.2 com watchdog + debug)
 // ═══════════════════════════════════════════════════════════
 process.on('unhandledRejection', r => {
   console.log('⚠️ unhandledRejection:', r?.message || r);
@@ -16367,40 +16367,149 @@ client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'co
 client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
 client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
 client.on('invalidated', () => console.error('⚠️ [INVALIDATED]'));
-client.on('warn', m => console.warn('⚠️ [WARN]', m));
+client.on('warn', m => console.warn('⚠️ [DJS-WARN]', m));
 
-process.on('SIGTERM', async () => {
-  console.log('🛑 SIGTERM recebido. Shutting down...');
-  try { clearAllIntervals(); } catch {}
-  try { await logImportant('UPDATE', '🛑 Bot desligando', { description: 'SIGTERM', severity: 'warning' }); } catch {}
-  process.exit(0);
+// ═══════════════════════════════════════════════════════════
+// 🔬 DEBUG LISTENER — captura TODAS as ações internas do discord.js
+// Filtra só o que interessa (WS/shard/gateway) pra não poluir
+// ═══════════════════════════════════════════════════════════
+client.on('debug', (msg) => {
+  if (typeof msg !== 'string') return;
+  const interessantes = [
+    'gateway', 'shard', 'WS', 'ws', 'Heartbeat', 'heartbeat',
+    'Identifying', 'Resuming', 'Session', 'Connecting', 'connect',
+    'Ready', 'ready', 'Authenticated', 'authenticated',
+    'zlib', 'Token', 'token',
+  ];
+  if (interessantes.some(k => msg.includes(k))) {
+    console.log('[DJS-DEBUG]', msg.substring(0, 300));
+  }
 });
+
+// ═══════════════════════════════════════════════════════════
+// 🔬 TESTE DIRETO DE WEBSOCKET — antes de chamar client.login()
+// Testa a conexão WSS crua ao gateway do Discord
+// ═══════════════════════════════════════════════════════════
+(async () => {
+  try {
+    const WebSocket = require('ws');
+    const url = 'wss://gateway.discord.gg/?v=9&encoding=json';
+    console.log('🔬 [WSTEST] Testando WSS direto:', url);
+
+    const ws = new WebSocket(url, {
+      headers: { 'User-Agent': 'DiscordBot (https://github.com/frio-bot, 6.7.2)' },
+    });
+
+    const timer = setTimeout(() => {
+      console.error('🔬 [WSTEST] ❌ TIMEOUT — gateway.discord.gg NÃO respondeu em 10s');
+      console.error('🔬 [WSTEST] Isso confirma BLOQUEIO no WebSocket (não no HTTPS)');
+      try { ws.terminate(); } catch {}
+    }, 10000);
+
+    ws.on('open', () => {
+      clearTimeout(timer);
+      console.log('🔬 [WSTEST] ✅ Gateway WS conectado! Aguardando HELLO...');
+    });
+
+    ws.on('message', (data) => {
+      try {
+        const p = JSON.parse(data.toString());
+        if (p.op === 10) {
+          console.log('🔬 [WSTEST] ✅ HELLO recebido | heartbeat_interval:', p.d.heartbeat_interval);
+          console.log('🔬 [WSTEST] ✅ WebSocket funciona perfeitamente!');
+          clearTimeout(timer);
+          ws.close(1000, 'test done');
+        } else {
+          console.log('🔬 [WSTEST] Mensagem recebida op=', p.op);
+        }
+      } catch {}
+    });
+
+    ws.on('error', (e) => {
+      clearTimeout(timer);
+      console.error('🔬 [WSTEST] ❌ Erro WS:', e.message, '| code:', e.code);
+    });
+
+    ws.on('close', (code, reason) => {
+      console.log('🔬 [WSTEST] WS fechado | code:', code, '| reason:', reason.toString().substring(0, 100));
+    });
+  } catch (e) {
+    console.error('🔬 [WSTEST] Falha ao executar teste:', e.message);
+  }
+})();
+
+// ═══════════════════════════════════════════════════════════
+// SIGTERM/SIGINT — NÃO mata o processo à força (Render cuida)
+// ═══════════════════════════════════════════════════════════
 let _shuttingDown = false;
 process.on('SIGTERM', async () => {
   if (_shuttingDown) return;
   _shuttingDown = true;
-  console.log('🛑 SIGTERM recebido. Aguardando shutdown natural do Render...');
+  console.log('🛑 SIGTERM recebido. Aguardando shutdown natural...');
   try { clearAllIntervals(); } catch {}
   try { await logImportant('UPDATE', '🛑 Bot desligando', { description: 'SIGTERM', severity: 'warning' }); } catch {}
-  // ⚠️ NÃO chamar process.exit(0)
+  // ⚠️ NÃO chamar process.exit(0) — deixa o Render terminar
+});
+process.on('SIGINT', async () => {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  console.log('🛑 SIGINT recebido. Aguardando shutdown natural...');
+  try { clearAllIntervals(); } catch {}
 });
 
 console.log('🔑 [LOGIN] Token presente:', !!process.env.DISCORD_TOKEN);
+console.log('🔑 [LOGIN] Token length:', process.env.DISCORD_TOKEN?.length || 0);
+console.log('🔑 [LOGIN] discord.js version:', require('discord.js').version);
 console.log('🔑 [LOGIN] Tentando conectar...');
+
+// ═══════════════════════════════════════════════════════════
+// 🔬 WATCHDOG 30s — força ws.connect() se ficar em IDLE
+// ═══════════════════════════════════════════════════════════
+setTimeout(() => {
+  if (client.isReady()) return; // já conectou, ignora
+  const status = client.ws.status;
+  console.log('🚨 [WATCHDOG-30s] isReady:', client.isReady(), '| ws.status:', status);
+  console.log('🚨 [WATCHDOG-30s] token set?', !!client.token);
+  console.log('🚨 [WATCHDOG-30s] gateway:', JSON.stringify(client.gateway || null));
+  console.log('🚨 [WATCHDOG-30s] options.rest:', JSON.stringify(client.options.rest || null));
+  console.log('🚨 [WATCHDOG-30s] options.shards:', client.options.shards);
+  console.log('🚨 [WATCHDOG-30s] options.shardCount:', client.options.shardCount);
+  console.log('🚨 [WATCHDOG-30s] ws.shards.size:', client.ws.shards.size);
+
+  // Se está em IDLE e nenhum shard foi criado, força conexão
+  if (status === 3 && client.ws.shards.size === 0) {
+    console.error('🚨 [WATCHDOG-30s] FORÇANDO client.ws.connect() manualmente...');
+    try {
+      client.ws.connect();
+      console.error('🚨 [WATCHDOG-30s] ✅ connect() executado. Novo status:', client.ws.status);
+    } catch (e) {
+      console.error('🚨 [WATCHDOG-30s] ❌ connect() falhou:', e.message);
+      console.error('🚨 [WATCHDOG-30s] stack:', e.stack);
+    }
+  }
+}, 30000);
 
 setTimeout(() => {
   console.log('⏰ [TIMEOUT 60s] isReady:', client.isReady());
   console.log('⏰ [TIMEOUT 60s] WS status:', client.ws.status);
   console.log('⏰ [TIMEOUT 60s] WS ping:', client.ws.ping);
+  console.log('⏰ [TIMEOUT 60s] WS shards:', client.ws.shards.size);
+  if (client.ws.shards.size > 0) {
+    const s = client.ws.shards.first();
+    console.log('⏰ [TIMEOUT 60s] shard[0] status:', s?.status, '| ping:', s?.ping);
+  }
 }, 60000);
 
 setInterval(() => {
-  console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | isReady=${client.isReady()} | ws.status=${client.ws.status} | guilds=${client.guilds.cache.size}`);
+  const s = client.ws.shards.size > 0 ? client.ws.shards.first() : null;
+  console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | isReady=${client.isReady()} | ws.status=${client.ws.status} | shards=${client.ws.shards.size} | shard0=${s?.status ?? '?'} | guilds=${client.guilds.cache.size}`);
 }, 60000);
 
-// ⚠️ PARTE 10 vai anexar as rotas /api/bot/* antes do login
-// (mantendo ordem: PARTE 10 é registrada logo acima do login)
-
-// ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 9/11
-// ═══════════════════════════════════════════════════════════
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => console.log('🔑 [LOGIN] Promise resolvida ✅'))
+  .catch(e => {
+    console.error('🔑 [LOGIN] ❌ FALHOU');
+    console.error('🔑 [LOGIN] message:', e.message);
+    console.error('🔑 [LOGIN] code:', e.code);
+    console.error('🔑 [LOGIN] stack:', e.stack);
+  });

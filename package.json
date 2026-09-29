@@ -1,6 +1,6 @@
 {
   "name": "frio-bot",
-  "version": "6.6.0",
+  "version": "6.7.2",
   "description": "FrioBot — Sistema completo para servidores Discord",
   "main": "index.js",
   "engines": {
@@ -12,25 +12,20 @@
     "teste-ws": "node teste-ws.js"
   },
   "dependencies": {
-    "@discordjs/voice": "^0.17.0",
+    "@discordjs/voice": "0.18.0",
     "@napi-rs/canvas": "^0.1.65",
     "@supabase/supabase-js": "^2.45.4",
     "axios": "^1.7.7",
-    "discord.js": "^14.16.3",
+    "discord.js": "14.16.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "ffmpeg-static": "^5.2.0",
     "libsodium-wrappers": "^0.7.13",
     "play-dl": "^1.9.7",
     "qrcode": "^1.5.3",
-    "ws": "^8.18.0"
+    "ws": "8.18.0"
   },
-  "keywords": [
-    "discord",
-    "bot",
-    "free-fire",
-    "apostas"
-  ],
+  "keywords": ["discord", "bot", "free-fire", "apostas"],
   "author": "FrioBot",
   "license": "MIT"
 }

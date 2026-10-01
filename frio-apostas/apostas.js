@@ -6547,29 +6547,232 @@ client.on('messageCreate', async (m) => {
 // ═══════════════════════════════════════════════════════════
 // FIM DA PARTE 6/7 — .govdev
 // ═══════════════════════════════════════════════════════════
-client.once('ready', async () => {
-  console.log(`✅ ${client.user.tag} online!`);
-  console.log(`🔍 [READY] ${client.guilds.cache.size} guilds`);
+// ═══════════════════════════════════════════════════════════
+// [PARTE 7/7] MENUS CONFIG + SLASH COMMANDS + LOGIN
+// ═══════════════════════════════════════════════════════════
 
-  const guilds = [...client.guilds.cache.values()];
-  for (let i = 0; i < guilds.length; i += 20) {
-    await Promise.allSettled(guilds.slice(i, i + 20).map(async (g) => {
-      await ensureGuild(g).catch(() => {});
-    }));
-    await sleep(500);
+// ═══════════════════════════════════════════════════════════
+// MENUS DE CONFIG — TICKET
+// (referenciados pela PARTE 4, precisam existir aqui)
+// ═══════════════════════════════════════════════════════════
+async function buildConfigTicketMenu(guildId) {
+  const panels = await getTicketPanels(guildId);
+  const postados = panels.filter(p => p.canal_id && p.mensagem_id).length;
+  const totalTipos = panels.reduce((a, p) => a + (p.tipos?.length || 0), 0);
+
+  let abertos = 0;
+  try {
+    const { count } = await supabase.from('ticket_data')
+      .select('id', { count: 'exact', head: true })
+      .eq('guild_id', guildId).is('closed_at', null);
+    abertos = count || 0;
+  } catch {}
+
+  const e = new EmbedBuilder()
+    .setTitle('⚙️ Configuração — Tickets')
+    .setColor('#9B59B6')
+    .setDescription(
+      `**Central de configuração.**\n\n` +
+      `> 🎫 **Painéis:** \`${panels.length}/${MAX_TICKET_PANELS}\`\n` +
+      `> 📢 **Postados:** \`${postados}\`\n` +
+      `> 🎯 **Tipos totais:** \`${totalTipos}\`\n` +
+      `> 📬 **Abertos agora:** \`${abertos}\`\n\n` +
+      `⚡ **Auto-refresh ativo.**`
+    )
+    .setFooter({ text: 'Frio Apostas • Config Ticket' })
+    .setTimestamp();
+
+  return {
+    embeds: [e],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('cfgtkt:panels').setLabel('Gerenciar Painéis').setEmoji('📋').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('cfgtkt:create').setLabel('Criar Novo').setEmoji('➕').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cfgtkt:stats').setLabel('Estatísticas').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('cfgtkt:refresh').setLabel('Force Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+async function buildConfigTicketPanelsList(guildId) {
+  const panels = await getTicketPanels(guildId);
+  const desc = panels.length
+    ? panels.slice(0, 10).map(p =>
+        `**#${p.id} — ${p.nome}**\n` +
+        `> 🎯 Tipos: \`${p.tipos?.length || 0}\` • 📢 ${p.canal_id ? `<#${p.canal_id}>` : '*não postado*'}`
+      ).join('\n\n')
+    : '*Nenhum painel criado ainda.*';
+
+  const e = new EmbedBuilder()
+    .setTitle('📋 Painéis de Ticket')
+    .setColor('#9B59B6')
+    .setDescription(desc)
+    .setFooter({ text: `${panels.length}/${MAX_TICKET_PANELS}` })
+    .setTimestamp();
+
+  const rows = [];
+  if (panels.length) {
+    const menu = new StringSelectMenuBuilder().setCustomId('cfgtkt:pick_panel').setPlaceholder('🎫 Escolher painel');
+    for (const p of panels.slice(0, 25)) {
+      menu.addOptions({
+        label: `#${p.id} — ${p.nome}`.slice(0, 90),
+        value: String(p.id),
+        description: `${p.tipos?.length || 0} tipos • ${p.canal_id ? '✅ postado' : '❌ não postado'}`,
+      });
+    }
+    rows.push(new ActionRowBuilder().addComponents(menu));
   }
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('cfgtkt:create').setLabel('Criar Novo').setEmoji('➕').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('cfgtkt:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+  ));
+  return { embeds: [e], components: rows };
+}
 
-  await registerCommands();
-  safeInterval(checkTicketsAutoClose, 5 * 60 * 1000, 'TICKETS-AUTO-CLOSE');
+async function buildTicketStats(guildId) {
+  const [open, closed, total, ratings] = await Promise.allSettled([
+    supabase.from('ticket_data').select('id', { count: 'exact', head: true }).eq('guild_id', guildId).is('closed_at', null),
+    supabase.from('ticket_data').select('id', { count: 'exact', head: true }).eq('guild_id', guildId).not('closed_at', 'is', null),
+    supabase.from('ticket_data').select('id', { count: 'exact', head: true }).eq('guild_id', guildId),
+    supabase.from('ticket_ratings').select('rating').eq('guild_id', guildId).limit(500),
+  ]);
+  const openN = open.status === 'fulfilled' ? (open.value.count || 0) : 0;
+  const closedN = closed.status === 'fulfilled' ? (closed.value.count || 0) : 0;
+  const totalN = total.status === 'fulfilled' ? (total.value.count || 0) : 0;
+  const ratingsData = ratings.status === 'fulfilled' ? (ratings.value.data || []) : [];
+  const avg = ratingsData.length
+    ? (ratingsData.reduce((a, r) => a + Number(r.rating || 0), 0) / ratingsData.length).toFixed(2)
+    : '—';
 
-  setInterval(() => {
-    console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | ready=${client.isReady()} | ws=${client.ws.status} | ping=${client.ws.ping}ms | guilds=${client.guilds.cache.size}`);
-  }, 60000);
+  const e = new EmbedBuilder()
+    .setTitle('📊 Estatísticas de Tickets')
+    .setColor('#9B59B6')
+    .addFields(
+      { name: '🟢 Abertos', value: `\`${openN}\``, inline: true },
+      { name: '🔴 Fechados', value: `\`${closedN}\``, inline: true },
+      { name: '📋 Total', value: `\`${totalN}\``, inline: true },
+      { name: '⭐ Média', value: `\`${avg}\` (${ratingsData.length})`, inline: true },
+    )
+    .setTimestamp();
 
-  client.user.setPresence({
-    activities: [{ name: '🎮 /apostas painel', type: ActivityType.Watching }],
-    status: 'online',
-  });
+  return {
+    embeds: [e],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('cfgtkt:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
 
-  console.log(`[READY] ✅ ${BOT_VERSION} pronto.`);
+// ═══════════════════════════════════════════════════════════
+// HANDLER: /dev + /apostas
+// (/config e /solicitar já são tratados nas PARTES 3 e 4)
+// ═══════════════════════════════════════════════════════════
+client.on('interactionCreate', async (i) => {
+  if (i.replied || i.deferred) return;
+  if (!i.isChatInputCommand()) return;
+  if (!i.guild) return;
+
+  try {
+    // ─── /dev ───
+    if (i.commandName === 'dev') {
+      if (!isDeveloper(i.user.id)) {
+        return i.reply({ content: '❌ Apenas devs.', flags: EPHEMERAL });
+      }
+      return i.reply({ ...devHub(), flags: EPHEMERAL });
+    }
+
+    // ─── /apostas painel ───
+    if (i.commandName === 'apostas') {
+      const sub = i.options.getSubcommand();
+      if (sub === 'painel') {
+        if (!await isAdmin(i.user, i.guild)) {
+          return i.reply({ content: '❌ Apenas administradores.', flags: EPHEMERAL });
+        }
+        return i.reply({ ...(await ffConfigPanel(i.guild.id)), flags: EPHEMERAL });
+      }
+    }
+  } catch (err) {
+    console.error('[PARTE7-SLASH]', err);
+    if (i.isRepliable() && !i.replied && !i.deferred) {
+      i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }).catch(() => {});
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// REGISTRO DE COMANDOS
+// ═══════════════════════════════════════════════════════════
+async function registerCommands() {
+  const cmds = [
+    new SlashCommandBuilder()
+      .setName('dev')
+      .setDescription('👑 Painel de desenvolvedor'),
+
+    new SlashCommandBuilder()
+      .setName('apostas')
+      .setDescription('🎮 Sistema de apostas Free Fire')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addSubcommand(s => s.setName('painel').setDescription('Abrir painel FF')),
+
+    new SlashCommandBuilder()
+      .setName('config')
+      .setDescription('⚙️ Painel de configuração do servidor')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addSubcommand(s => s.setName('ticket').setDescription('🎫 Configurar sistema de tickets'))
+      .addSubcommand(s => s.setName('streamer').setDescription('🎥 Configurar sistema de streamers')),
+
+    new SlashCommandBuilder()
+      .setName('solicitar')
+      .setDescription('📢 Postar painéis')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addSubcommandGroup(g => g
+        .setName('painel')
+        .setDescription('Postar um painel')
+        .addSubcommand(s => s
+          .setName('ticket')
+          .setDescription('🎫 Postar painel de tickets')
+          .addChannelOption(o => o.setName('canal').setDescription('Canal (padrão: atual)').addChannelTypes(ChannelType.GuildText))
+          .addIntegerOption(o => o.setName('painel_id').setDescription('ID do painel').setRequired(false)))
+        .addSubcommand(s => s
+          .setName('streamer')
+          .setDescription('🎥 Postar painel de streamers')
+          .addChannelOption(o => o.setName('canal').setDescription('Canal (padrão: atual)').addChannelTypes(ChannelType.GuildText)))),
+  ].map(c => c.toJSON());
+
+  try {
+    await client.application.commands.set(cmds);
+    console.log(`✅ [CMDS] ${cmds.length} comandos registrados globalmente`);
+  } catch (e) {
+    console.error('❌ [CMDS]', e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROCESS HANDLERS
+// ═══════════════════════════════════════════════════════════
+process.on('unhandledRejection', r => console.error('⚠️ unhandledRejection:', r?.message || r));
+process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', e?.message || e));
+
+let _shuttingDown = false;
+async function gracefulShutdown(sig) {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  console.log(`🛑 [${sig}] Encerrando...`);
+  try { clearAllIntervals(); } catch {}
+  try { client.destroy(); } catch {}
+  setTimeout(() => process.exit(0), 2000);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// ═══════════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════════
+console.log('🔑 [LOGIN] Token presente:', !!DISCORD_TOKEN);
+console.log('🔑 [LOGIN] Token length:', DISCORD_TOKEN?.length || 0);
+
+client.login(DISCORD_TOKEN).catch(err => {
+  console.error('❌ [LOGIN] FALHOU:', err.message);
+  process.exit(1);
 });

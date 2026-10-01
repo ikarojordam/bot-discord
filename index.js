@@ -1,18 +1,19 @@
 // ═══════════════════════════════════════════════════════════
-// 🤖 FRIOBOT — index.js — v6.7.2
-// ESTRUTURA EM 11 PARTES
+// 🤖 FRIOBOT — index.js — v6.8.0
+// ESTRUTURA EM 12 PARTES
 //   PARTE 1: Base, Client, Cache, Config, Permissões, Premium, Logs
 //   PARTE 2: Helpers globais (IA, PIX, MP, OAuth, Dashboard, Auto-Heal)
 //   PARTE 3: Versículo, Analytics, Voz, Música, Sorteios, Shop
 //   PARTE 4: Free Fire (Config, Multi-PIX, Logs, Filas, Painéis)
 //   PARTE 4.5: Painéis FF (Hub + Subpainéis + Custom Embed)
-//   PARTE 5: Tickets (Estrutura + Editor 6 abas + Ações + Automações)
+//   PARTE 5: Tickets REFATORADO (/config ticket + /solicitar painel ticket)
 //   PARTE 6: Setups (Loja, Comunidade, Organização)
 //   PARTE 7: SQL Migration + Dev Hub + Painéis DEV
 //   PARTE 8: Admin Hub + Painéis ADMIN + Loja
 //   PARTE 9: Interaction + Message + Eventos + READY + HTTP + Login
 //   PARTE 10: FRIO PANEL API (site ↔ bot) + Auditoria
 //   PARTE 11: CLIENTE API (por plano, isolamento por guild)
+//   PARTE 12: Sistema de Streamers (/config streamer + /solicitar painel streamer)
 // ═══════════════════════════════════════════════════════════
 require('dotenv').config();
 
@@ -41,9 +42,9 @@ const { createClient } = require('@supabase/supabase-js');
 const QRCode = require('qrcode');
 
 // ═══════════════════════════════════════════════════════════
-// VERSÃO (definida ANTES de tudo que a usa)
+// VERSÃO
 // ═══════════════════════════════════════════════════════════
-const BOT_VERSION = 'v6.7.2';
+const BOT_VERSION = 'v6.8.0';
 const BOT_START_TIME = Date.now();
 
 // ═══════════════════════════════════════════════════════════
@@ -62,7 +63,7 @@ if (!JWT_SECRET) console.warn('⚠️ [SECURITY] JWT_SECRET ausente — rotas /a
 if (!PANEL_API_TOKEN) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN ausente — auditoria do site desabilitada.');
 
 // ═══════════════════════════════════════════════════════════
-// EXPRESS (compartilhado com PARTE 9, 10 e 11)
+// EXPRESS
 // ═══════════════════════════════════════════════════════════
 const app = express();
 app.set('trust proxy', 1);
@@ -79,14 +80,9 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
 app.get('/', (req, res) => res.send('FrioBot está online! 🧊'));
-// ⚠️ /health definido na PARTE 9 (versão completa)
 
 const PORT = process.env.PORT || process.env.WEBHOOK_PORT || 3000;
 
-// ═══════════════════════════════════════════════════════════
-// ⚡ START DO EXPRESS — CRÍTICO: Render precisa da porta ABERTA
-// Host '0.0.0.0' é obrigatório (senão Render detecta "no open ports")
-// ═══════════════════════════════════════════════════════════
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 [EXPRESS] Web rodando em http://0.0.0.0:${PORT}`);
   console.log(`🌐 [EXPRESS] Health check: http://0.0.0.0:${PORT}/health`);
@@ -105,7 +101,6 @@ const MAX_FORM_QUESTIONS = 5;
 const DEV_ROLE_NAME = 'Dev do Frio Bot';
 const BOT_ROLE_NAME = 'Frio Bot';
 
-// ⚡ Premium tiers com peso pra comparação
 const PREMIUM_TIERS = {
   basic:     { label: 'Basic',     emoji: '🥉', color: '#CD7F32', weight: 1 },
   premium:   { label: 'Premium',   emoji: '🥈', color: '#C0C0C0', weight: 2 },
@@ -130,7 +125,7 @@ function tierAtLeast(userTier, requiredTier) { return tierWeight(userTier) >= ti
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
   auth: { persistSession: false },
   global: {
-    headers: { 'X-Client-Info': 'frio-bot/6.7.2' },
+    headers: { 'X-Client-Info': 'frio-bot/6.8.0' },
     fetch: (url, opts = {}) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -141,9 +136,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 });
 
 // ═══════════════════════════════════════════════════════════
-// DISCORD CLIENT — OTIMIZADO
-// ⚡ v6.7.2: RESTAURADO rest.api = discordapp.com/api v9
-//    Esse é o fix que funcionava antes no Render contra o Cloudflare
+// DISCORD CLIENT
 // ═══════════════════════════════════════════════════════════
 const client = new Client({
   intents: [
@@ -158,9 +151,6 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
   ],
   partials: ['CHANNEL', 'MESSAGE', 'REACTION'],
-
-  // ⚡ FIX CRÍTICO: discord.com está bloqueado pelo Cloudflare no Render
-  // discordapp.com/api/v9 responde 200 (testado em set/2026)
   rest: {
     api: 'https://discordapp.com/api',
     version: '9',
@@ -168,7 +158,6 @@ const client = new Client({
     retries: 3,
     retryAfter: 5000,
   },
-
   makeCache: Options.cacheWithLimits({
     ...Options.DefaultMakeCacheSettings,
     GuildMemberManager: 50,
@@ -194,15 +183,12 @@ const client = new Client({
 });
 
 // ═══════════════════════════════════════════════════════════
-// 🔬 DIAGNÓSTICO DE REDE — testa os 3 endpoints do Discord
-// Roda em background (não bloqueia o boot) e printa no log
-// Serve pra identificar SE e QUAL endpoint está travando
+// 🔬 DIAGNÓSTICO DE REDE
 // ═══════════════════════════════════════════════════════════
 (async () => {
   const endpoints = [
     'https://discordapp.com/api/v9/gateway/bot',
     'https://discord.com/api/v9/gateway/bot',
-    'https://discord.com/api/v10/gateway/bot',
   ];
   const token = process.env.DISCORD_TOKEN;
 
@@ -219,18 +205,16 @@ const client = new Client({
       const ms = Date.now() - t0;
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
-        console.log(`🔬 [DIAG] ✅ ${url} → HTTP ${r.status} em ${ms}ms | gateway: ${d.url || '?'} | shards: ${d.shards}`);
+        console.log(`🔬 [DIAG] ✅ ${url} → HTTP ${r.status} em ${ms}ms | gateway: ${d.url || '?'}`);
       } else if (r.status === 401) {
-        console.log(`🔬 [DIAG] ❌ ${url} → HTTP 401 em ${ms}ms (TOKEN INVÁLIDO!)`);
+        console.log(`🔬 [DIAG] ❌ ${url} → HTTP 401 (TOKEN INVÁLIDO!)`);
       } else {
-        console.log(`🔬 [DIAG] ⚠️ ${url} → HTTP ${r.status} em ${ms}ms | ${JSON.stringify(d).substring(0, 200)}`);
+        console.log(`🔬 [DIAG] ⚠️ ${url} → HTTP ${r.status} em ${ms}ms`);
       }
     } catch (e) {
-      const ms = Date.now() - t0;
-      console.log(`🔬 [DIAG] ❌ ${url} → ${e.name} após ${ms}ms: ${e.message}`);
+      console.log(`🔬 [DIAG] ❌ ${url} → ${e.name} após ${Date.now() - t0}ms`);
     }
   }
-  console.log('🔬 [DIAG] Diagnóstico concluído.');
 })();
 
 // ═══════════════════════════════════════════════════════════
@@ -248,12 +232,12 @@ function isDeveloper(id) {
 // UPDATE NOTES
 // ═══════════════════════════════════════════════════════════
 const UPDATE_NOTES = [
+  { tag: 'ticket', text: 'sistema de ticket refatorado: /config ticket + /solicitar painel ticket' },
+  { tag: 'streamer', text: 'sistema completo de streamers: fila, canais privados, embed de apostas' },
   { tag: 'fix', text: 'restaurado rest.api discordapp.com/api v9 (fix Cloudflare)' },
   { tag: 'fix', text: 'Express bind 0.0.0.0 + diagnóstico de rede inline' },
   { tag: 'hub', text: 'multi-PIX por mediador com painel dedicado' },
   { tag: 'public', text: 'versículo do dia automático + /versiculo' },
-  { tag: 'dev', text: 'tiers premium: basic, premium, ultra, unlimited' },
-  { tag: 'ticket', text: 'editor com 6 abas funcionais + auto-refresh' },
 ];
 const UPDATE_TAG_LABELS = {
   public: { emoji: '🌟', label: 'Públicos' }, ticket: { emoji: '🎫', label: 'Tickets' },
@@ -321,7 +305,6 @@ function resolveRole(guild, input) {
     || null;
 }
 
-// ⚡ safeInterval com lock
 const _activeIntervals = new Set();
 function safeInterval(fn, ms, label = 'interval') {
   let running = false;
@@ -341,7 +324,7 @@ function clearAllIntervals() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HMAC (captcha de verificação)
+// HMAC
 // ═══════════════════════════════════════════════════════════
 function signVerifyToken(guildId, userId, ttlMs = 15 * 60 * 1000) {
   const exp = Date.now() + ttlMs;
@@ -364,7 +347,7 @@ function verifyVerifyToken(token) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// JWT (para API do painel — PARTE 10 e 11)
+// JWT
 // ═══════════════════════════════════════════════════════════
 function verifyJWT(token) {
   if (!JWT_SECRET) return null;
@@ -486,7 +469,7 @@ const defaultConfig = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// ⚡ CACHE LRU COM TTL — stale-while-revalidate + dedupe
+// TTLCache
 // ═══════════════════════════════════════════════════════════
 class TTLCache {
   constructor(maxSize = 3000, ttlMs = 3 * 60 * 1000) {
@@ -580,7 +563,7 @@ const _ticketSaveLocks = new Map();
 const _ownerCache = new Map();
 
 // ═══════════════════════════════════════════════════════════
-// CONFIG HELPERS — LRU + fetch pattern
+// CONFIG HELPERS
 // ═══════════════════════════════════════════════════════════
 async function getConfig(gid) {
   return _configCache.fetch(gid, async () => {
@@ -627,7 +610,7 @@ async function patchSettings(gid, p) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOCALE POR GUILD
+// LOCALE
 // ═══════════════════════════════════════════════════════════
 async function getGuildLocale(gid) {
   if (!gid) return 'pt-BR';
@@ -863,7 +846,7 @@ async function setKillSwitch(active, reason, userId) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// BLACKLIST (com cache)
+// BLACKLIST
 // ═══════════════════════════════════════════════════════════
 async function isBlacklisted(uid) {
   if (blacklistUsersCache.has(uid)) return true;
@@ -1143,7 +1126,7 @@ async function checkDevRoles() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SYNC USER_GUILDS (usa discord_id)
+// SYNC USER_GUILDS
 // ═══════════════════════════════════════════════════════════
 async function syncUserGuilds() {
   let total = 0, errors = 0;
@@ -1169,7 +1152,7 @@ async function syncUserGuilds() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RATE LIMIT POR INTERAÇÃO
+// RATE LIMIT
 // ═══════════════════════════════════════════════════════════
 function checkInteractionRateLimit(userId, key, limitMs) {
   const rlKey = `${userId}:${key}`;
@@ -1185,7 +1168,7 @@ function checkInteractionRateLimit(userId, key, limitMs) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HELPERS DE ATIVIDADE (intervals adaptativos)
+// HELPERS DE ATIVIDADE
 // ═══════════════════════════════════════════════════════════
 let _recentMatchActivity = 0;
 async function hadRecentMatchActivity() {
@@ -4412,7 +4395,7 @@ async function withCoinLock(k, fn) {
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 // [PARTE 4.5/11] PAINÉIS FF — HUB + SUBPAINÉIS + CUSTOM EMBED
-// 11 painéis completos que faltavam na v6.6.0
+// v6.8.0 — ffPanelStreamer REMOVIDO (migrado para PARTE 12)
 // ═══════════════════════════════════════════════════════════
 
 // ───── HUB PRINCIPAL ─────
@@ -4460,7 +4443,6 @@ async function ffConfigPanel(gid) {
         new ButtonBuilder().setCustomId('ffcfg:panel:loja_coins').setLabel('Loja Coins').setEmoji('🪙').setStyle(ButtonStyle.Success),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ffcfg:panel:streamer').setLabel('Streamer').setEmoji('🎥').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('ffcfg:custom_embed').setLabel('Custom Embed').setEmoji('🎨').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('ffcfg:manutencao').setLabel('Manutenção').setEmoji('🔧').setStyle(ButtonStyle.Danger),
       ),
@@ -4800,41 +4782,7 @@ async function ffPanelLojaCoins(gid) {
   };
 }
 
-// ───── STREAMER ─────
-async function ffPanelStreamer(gid) {
-  const c = await ffGetConfig(gid) || {};
-  const streamers = await ffGetStreamerQueue(gid);
-  const live = streamers.filter(s => s.status === 'live').length;
-  const custom = c.custom_streamer_embed || {};
-
-  const e = new EmbedBuilder()
-    .setTitle('🎥 Painel Streamer')
-    .setColor(safeColor(custom.color, '#9146FF'))
-    .setDescription(custom.descricao || 'Configure o painel de streamers e designação de mediador.')
-    .addFields(
-      { name: '📢 Canal', value: c.streamer_channel_id ? `<#${c.streamer_channel_id}>` : '*não configurado*', inline: true },
-      { name: '🎥 Streamers na fila', value: `${streamers.length}`, inline: true },
-      { name: '🔴 Ao vivo agora', value: `${live}`, inline: true },
-      { name: '🎨 Título custom', value: custom.title || '*padrão*', inline: true },
-    )
-    .setTimestamp();
-
-  return {
-    embeds: [e],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ffstr:config').setLabel('Configurar Embed').setEmoji('🎨').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('ffstr:preview').setLabel('Preview').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('ffstr:reset').setLabel('Resetar').setEmoji('🔄').setStyle(ButtonStyle.Danger),
-      ),
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ffstr:post').setLabel('Postar painel').setEmoji('📢').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('ffstr:update').setLabel('Atualizar').setEmoji('🔄').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('ffcfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
-  };
-}
+// ⚠️ ffPanelStreamer REMOVIDO — migrado para PARTE 12 (/config streamer)
 
 // ───── CUSTOM EMBED ─────
 async function ffPanelCustomEmbed(gid) {
@@ -4879,8 +4827,9 @@ async function ffPanelCustomEmbed(gid) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 4.5/11
+// FIM DA PARTE 4.5/11 — v6.8.0
 // ═══════════════════════════════════════════════════════════
+
 // ═══════════════════════════════════════════════════════════
 // [PARTE 5/11] SISTEMA DE TICKETS — REESCRITO
 // Estrutura + Editor 6 abas + Ações + Automações + Transcripts
@@ -7298,206 +7247,6 @@ async function quickSetupFFServer(g, authorId) {
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
-// 📋 SQL MIGRATION — Rode ANTES de subir o bot
-// ═══════════════════════════════════════════════════════════
-/*
--- ═══════════════════════════════════════════════════════════
--- FRIOBOT v6.7.0 — MIGRATION CONSOLIDADA
--- Idempotente: pode rodar 2x sem problema.
--- ═══════════════════════════════════════════════════════════
-
--- 1. TICKETS
-CREATE TABLE IF NOT EXISTS ticket_data (
-  id SERIAL PRIMARY KEY,
-  thread_id TEXT NOT NULL,
-  guild_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  panel_id INT,
-  type_id TEXT,
-  status TEXT DEFAULT 'aberto',
-  form_answers JSONB,
-  opened_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE ticket_data
-  ADD COLUMN IF NOT EXISTS assumed_by TEXT,
-  ADD COLUMN IF NOT EXISTS assumed_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS locked BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS is_priority BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS priority_set_by TEXT,
-  ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS closed_by TEXT,
-  ADD COLUMN IF NOT EXISTS closed_reason TEXT,
-  ADD COLUMN IF NOT EXISTS auto_close_warned_at TIMESTAMPTZ;
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_data_thread_id_key') THEN
-    ALTER TABLE ticket_data ADD CONSTRAINT ticket_data_thread_id_key UNIQUE (thread_id);
-  END IF;
-END $$;
-
--- 2. CONFIGS (versículo + painéis)
-ALTER TABLE configs
-  ADD COLUMN IF NOT EXISTS versiculo_ativo BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS versiculo_channel TEXT,
-  ADD COLUMN IF NOT EXISTS versiculo_hora INT DEFAULT 8,
-  ADD COLUMN IF NOT EXISTS versiculo_last_sent TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS versiculo_last_hash TEXT,
-  ADD COLUMN IF NOT EXISTS ticket_panels JSONB DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS shop_panels JSONB DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS embed_color TEXT DEFAULT '#5865F2';
-
--- 3. FORCE PREMIUM
-ALTER TABLE force_premium ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'unlimited';
-
--- 4. MULTI-PIX MEDIADOR
-CREATE TABLE IF NOT EXISTS ff_mediator_pix (
-  id SERIAL PRIMARY KEY,
-  guild_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  pix_key TEXT NOT NULL,
-  pix_name TEXT NOT NULL,
-  pix_city TEXT DEFAULT 'SAO PAULO',
-  pix_type TEXT DEFAULT 'aleatoria',
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (guild_id, user_id)
-);
-
--- 5. VERSÍCULO HISTÓRICO
-CREATE TABLE IF NOT EXISTS daily_verses_history (
-  id SERIAL PRIMARY KEY,
-  guild_id TEXT NOT NULL,
-  verse_ref TEXT NOT NULL,
-  verse_text TEXT NOT NULL,
-  verse_hash TEXT NOT NULL,
-  sent_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 6. ANALYTICS
-CREATE TABLE IF NOT EXISTS guild_feature_usage (
-  id SERIAL PRIMARY KEY,
-  guild_id TEXT NOT NULL,
-  feature TEXT NOT NULL,
-  uses INT DEFAULT 1,
-  last_used TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (guild_id, feature)
-);
-
--- 7. AUTO-BACKUP
-CREATE TABLE IF NOT EXISTS auto_backups (
-  id SERIAL PRIMARY KEY,
-  guild_id TEXT NOT NULL,
-  data JSONB NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  auto BOOLEAN DEFAULT true
-);
-
--- 8. FF CONFIG extras
-ALTER TABLE ff_config
-  ADD COLUMN IF NOT EXISTS pix_mediator_channel_id TEXT,
-  ADD COLUMN IF NOT EXISTS analyst_panel_channel_id TEXT,
-  ADD COLUMN IF NOT EXISTS blacklist_embed_id TEXT,
-  ADD COLUMN IF NOT EXISTS auto_post_frequencia TEXT DEFAULT 'weekly';
-
--- 9. TABELAS DE API (site ↔ bot)
-CREATE TABLE IF NOT EXISTS site_audit_log (
-  id BIGSERIAL PRIMARY KEY,
-  actor_id TEXT,
-  actor_email TEXT,
-  action TEXT NOT NULL,
-  target_id TEXT,
-  target_role TEXT,
-  metadata JSONB DEFAULT '{}'::jsonb,
-  ip TEXT,
-  user_agent TEXT,
-  device_type TEXT,
-  browser TEXT,
-  os TEXT,
-  country TEXT,
-  city TEXT,
-  referer TEXT,
-  accept_language TEXT,
-  session_id TEXT,
-  success BOOLEAN DEFAULT true,
-  error_reason TEXT,
-  duration_ms INT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_audit_created ON site_audit_log(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_action ON site_audit_log(action);
-CREATE INDEX IF NOT EXISTS idx_audit_actor ON site_audit_log(actor_id);
-CREATE INDEX IF NOT EXISTS idx_audit_target ON site_audit_log(target_id);
-
-CREATE TABLE IF NOT EXISTS active_sessions (
-  id BIGSERIAL PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,
-  ip TEXT,
-  user_agent TEXT,
-  device_type TEXT,
-  browser TEXT,
-  os TEXT,
-  country TEXT,
-  city TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  last_seen TIMESTAMPTZ DEFAULT NOW(),
-  expires_at TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON active_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON active_sessions(expires_at);
-
--- 10. ÍNDICES
-CREATE INDEX IF NOT EXISTS idx_configs_guild ON configs(guild_id);
-CREATE INDEX IF NOT EXISTS idx_configs_versiculo ON configs(versiculo_ativo, versiculo_hora) WHERE versiculo_ativo = true;
-CREATE INDEX IF NOT EXISTS idx_configs_premium ON configs(is_premium) WHERE is_premium = true;
-CREATE INDEX IF NOT EXISTS idx_ff_config_guild ON ff_config(guild_id);
-CREATE INDEX IF NOT EXISTS idx_ff_matches_guild_status ON ff_matches(guild_id, status);
-CREATE INDEX IF NOT EXISTS idx_ff_matches_status_created ON ff_matches(status, created_at) WHERE status IN ('waiting','playing','pix_released');
-CREATE INDEX IF NOT EXISTS idx_ff_matches_mediator ON ff_matches(mediator_id) WHERE mediator_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_ff_bets_guild ON ff_bets(guild_id);
-CREATE INDEX IF NOT EXISTS idx_ff_players_guild_coins ON ff_players(guild_id, coins DESC);
-CREATE INDEX IF NOT EXISTS idx_ff_med_queue_guild_status ON ff_mediator_queue(guild_id, status);
-CREATE INDEX IF NOT EXISTS idx_ff_med_pix_guild ON ff_mediator_pix(guild_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_data_thread ON ticket_data(thread_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_data_open ON ticket_data(guild_id, opened_at) WHERE closed_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_giveaways_ended ON giveaways(ended, ends_at) WHERE ended = false;
-CREATE INDEX IF NOT EXISTS idx_temproles_expires ON temproles(expires_at);
-CREATE INDEX IF NOT EXISTS idx_daily_verses_guild ON daily_verses_history(guild_id, sent_at DESC);
-
--- 11. UNIQUE constrains nas filas
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_ff_med_queue') THEN
-    ALTER TABLE ff_mediator_queue ADD CONSTRAINT uq_ff_med_queue UNIQUE (guild_id, user_id);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_ff_ana_queue') THEN
-    ALTER TABLE ff_analyst_queue ADD CONSTRAINT uq_ff_ana_queue UNIQUE (guild_id, user_id);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_ff_str_queue') THEN
-    ALTER TABLE ff_streamer_queue ADD CONSTRAINT uq_ff_str_queue UNIQUE (guild_id, user_id);
-  END IF;
-END $$;
-
--- 12. RPC coins
-CREATE OR REPLACE FUNCTION increment_coins(p_guild_id TEXT, p_user_id TEXT, p_amount INT)
-RETURNS INT AS $$
-DECLARE novo_saldo INT;
-BEGIN
-  INSERT INTO ff_players (guild_id, user_id, coins) VALUES (p_guild_id, p_user_id, 0)
-  ON CONFLICT (guild_id, user_id) DO NOTHING;
-  UPDATE ff_players SET coins = GREATEST(0, coins + p_amount)
-  WHERE guild_id = p_guild_id AND user_id = p_user_id
-  RETURNING coins INTO novo_saldo;
-  RETURN novo_saldo;
-END;
-$$ LANGUAGE plpgsql;
-
--- 13. LIMPEZA
-UPDATE ff_matches SET status='cancelled', finished_at=NOW()
-WHERE status='playing' AND created_at < NOW() - INTERVAL '3 hours';
-
-ANALYZE;
-*/
-
-// ═══════════════════════════════════════════════════════════
 // DEV HUB
 // ═══════════════════════════════════════════════════════════
 function devHub() {
@@ -9284,13 +9033,12 @@ async function handleResgatar(i) {
 // ═══════════════════════════════════════════════════════════
 // FIM DA PARTE 8/11
 // ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// [PARTE 9/11] INTERACTIONCREATE + EVENTOS + HTTP + LOGIN
-// ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
-// INTERACTION CREATE — HANDLER PRINCIPAL
+// [PARTE 9/11] INTERACTIONCREATE + EVENTOS + HTTP + LOGIN
+// v6.8.0 — removido ffstr:, removidos ticket_panel_*, adm_ticket_* redirecionam
 // ═══════════════════════════════════════════════════════════
+
 client.on('interactionCreate', async (i) => {
   // ⚡ FIX: garante member e me populados
   if (i.guild && !i.member && i.user?.id) {
@@ -9347,6 +9095,8 @@ client.on('interactionCreate', async (i) => {
     // ═══════════════════════════════════════════════════════════
     if (i.isChatInputCommand()) {
       const c = i.commandName;
+
+      // ⚠️ /config e /solicitar são tratados nas PARTES 5 e 12 (não duplicar aqui)
 
       if (c === 'ping') {
         const lat = Date.now() - i.createdTimestamp;
@@ -9823,21 +9573,23 @@ client.on('interactionCreate', async (i) => {
         return i.update(await panelShopPanels(guild.id));
       }
 
+      // ⚠️ adm_ticket_edit_pick → REDIRECIONA
       if (cid === 'adm_ticket_edit_pick') {
-        if (!await isAdmin(i.user, guild)) return;
-        return i.update(await ticketEditorPanel(guild.id, value));
+        return i.reply({
+          content: '⚠️ **Este menu foi migrado.** Use `/config ticket` → **Gerenciar Painéis** para editar.',
+          flags: EPHEMERAL,
+        });
       }
 
+      // ⚠️ ticket_panel_type_del → mantido (não usado mais, mas redireciona)
       if (cid.startsWith('ticket_panel_type_del:')) {
-        if (!await isAdmin(i.user, guild)) return;
-        const panelId = cid.split(':')[1];
-        const panel = await getTicketPanel(guild.id, panelId);
-        if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-        panel.tipos = panel.tipos.filter(t => String(t.id) !== String(value));
-        await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
-        return i.update({ content: `✅ Tipo removido.`, embeds: [], components: [] });
+        return i.reply({
+          content: '⚠️ Use `/config ticket` → **Gerenciar Painéis** → escolher painel → **🎯 Tipos**.',
+          flags: EPHEMERAL,
+        });
       }
 
+      // ─── Abrir ticket via select ───
       if (cid.startsWith('ticket_pick_type:')) {
         const panelId = cid.split(':')[1];
         const panel = await getTicketPanel(guild.id, panelId);
@@ -10815,14 +10567,13 @@ client.on('interactionCreate', async (i) => {
             ],
           });
         }
+        // 🔄 REDIRECIONA para /config ticket
         if (cid === 'adm_p_ticket') {
           if (!await isAdmin(i.user, guild)) return;
-          const panels = await getTicketPanels(guild.id);
-          if (!panels.length) return i.reply({ content: '❌ Nenhum painel criado.', flags: EPHEMERAL });
-          const panel = panels[0];
-          const msg = await channel.send({ embeds: [buildTicketPanelEmbed(panel)], components: buildTicketPanelComponents(panel) });
-          await updateTicketPanel(guild.id, panel.id, { canal_id: channel.id, mensagem_id: msg.id });
-          return i.reply({ content: '✅', flags: EPHEMERAL });
+          return i.reply({
+            content: '⚠️ **Sistema migrado!** Use `/config ticket` para gerenciar os painéis de ticket.',
+            flags: EPHEMERAL,
+          });
         }
         if (cid === 'adm_p_verif') {
           if (!await isAdmin(i.user, guild)) return;
@@ -10886,7 +10637,14 @@ client.on('interactionCreate', async (i) => {
         if (cid === 'adm_antiraid') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAntiRaid()); }
         if (cid === 'adm_musica') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelMusica(guild)); }
         if (cid === 'adm_manutencao') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelManutencao(guild)); }
-        if (cid === 'adm_tickets') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelTickets(guild)); }
+        // 🔄 REDIRECIONA para /config ticket
+        if (cid === 'adm_tickets') {
+          if (!await isAdmin(i.user, guild)) return;
+          return i.reply({
+            content: '⚠️ **Sistema migrado!** Use `/config ticket` para gerenciar o sistema de tickets.',
+            flags: EPHEMERAL,
+          });
+        }
         if (cid === 'adm_usuarios') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelUsuarios()); }
         if (cid === 'adm_automacao') { if (!await isAdmin(i.user, guild)) return; return i.update(await admPanelAutomacao(guild)); }
 
@@ -11058,110 +10816,19 @@ client.on('interactionCreate', async (i) => {
           );
           return i.showModal(m);
         }
-        if (cid === 'adm_ticket_create') {
+        // 🔄 REDIRECIONA para /config ticket
+        if (cid === 'adm_ticket_create' || cid === 'adm_ticket_panels' || cid === 'adm_ticket_edit_pick') {
           if (!await isAdmin(i.user, guild)) return;
-          const m = new ModalBuilder().setCustomId('ticket_panel_modal:create').setTitle('Criar painel de ticket');
-          m.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue('Central de Suporte').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue('Clique abaixo').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor hex').setStyle(TextInputStyle.Short).setValue('#9B59B6').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('botao').setLabel('Texto do botão').setStyle(TextInputStyle.Short).setValue('Abrir Ticket').setRequired(false)),
-          );
-          return i.showModal(m);
-        }
-        if (cid === 'adm_ticket_panels') {
-          if (!await isAdmin(i.user, guild)) return;
-          const panels = await getTicketPanels(guild.id);
-          const e = new EmbedBuilder().setTitle('🎨 Painéis de Ticket').setColor('#9B59B6')
-            .setDescription(`**Total:** ${panels.length}/${MAX_TICKET_PANELS}\n\n${panels.length ? panels.map(p => `**#${p.id} — ${p.nome}**\n> Tipos: ${p.tipos.length} • ${p.canal_id ? `📢 <#${p.canal_id}>` : '*não postado*'}`).join('\n\n') : '*Nenhum.*'}`);
-          const rows = [];
-          if (panels.length) {
-            const menu = new StringSelectMenuBuilder().setCustomId('adm_ticket_edit_pick').setPlaceholder('Editar painel');
-            for (const p of panels.slice(0, 25)) menu.addOptions({ label: `#${p.id} — ${p.nome}`.slice(0, 90), value: String(p.id) });
-            rows.push(new ActionRowBuilder().addComponents(menu));
-          }
-          rows.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('adm_ticket_create').setLabel('Criar novo').setEmoji('➕').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('adm_tickets').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
-          ));
-          return i.update({ embeds: [e], components: rows });
+          return i.reply({
+            content: '⚠️ **Sistema migrado!** Use `/config ticket` → **Gerenciar Painéis**.',
+            flags: EPHEMERAL,
+          });
         }
       }
 
-      if (cid.startsWith('ticket_panel_')) {
-        if (!await isAdmin(i.user, guild)) return;
-        const parts = cid.split(':');
-        const a2 = parts[0].replace('ticket_panel_', '');
-        const panelId = parts[1];
-        if (a2 === 'edit') {
-          const panel = await getTicketPanel(guild.id, panelId);
-          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-          const m = new ModalBuilder().setCustomId(`ticket_panel_modal:edit:${panelId}`).setTitle('Editar painel');
-          m.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('nome').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(panel.nome || '').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('titulo').setLabel('Título').setStyle(TextInputStyle.Short).setValue(panel.titulo || '').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(panel.descricao || '').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor hex').setStyle(TextInputStyle.Short).setValue(panel.cor || '#9B59B6').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('botao').setLabel('Botão').setStyle(TextInputStyle.Short).setValue(panel.botao_label || 'Abrir Ticket').setRequired(false)),
-          );
-          return i.showModal(m);
-        }
-        if (a2 === 'edit_extras') {
-          const panel = await getTicketPanel(guild.id, panelId);
-          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-          const m = new ModalBuilder().setCustomId(`ticket_panel_modal:edit_extras:${panelId}`).setTitle('Imagens & extras');
-          m.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner').setLabel('Banner URL').setStyle(TextInputStyle.Short).setValue(panel.banner || '').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('thumbnail').setLabel('Thumb URL').setStyle(TextInputStyle.Short).setValue(panel.thumbnail || '').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji do botão').setStyle(TextInputStyle.Short).setValue(panel.botao_emoji || '🎫').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cargo').setLabel('ID/mention cargo staff').setStyle(TextInputStyle.Short).setValue(panel.cargo_id || '').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('log').setLabel('ID/#canal log').setStyle(TextInputStyle.Short).setValue(panel.log_channel_id || '').setRequired(false)),
-          );
-          return i.showModal(m);
-        }
-        if (a2 === 'type_add') {
-          const panel = await getTicketPanel(guild.id, panelId);
-          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-          if (panel.tipos.length >= MAX_TICKET_TYPES_PER_PANEL) return i.reply({ content: `❌ Limite ${MAX_TICKET_TYPES_PER_PANEL}.`, flags: EPHEMERAL });
-          const m = new ModalBuilder().setCustomId(`ticket_panel_modal:type_add:${panelId}`).setTitle('Adicionar tipo');
-          m.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Nome do tipo').setStyle(TextInputStyle.Short).setValue('Suporte').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue('🎫').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição curta').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('canal_id').setLabel('ID/#canal específico').setStyle(TextInputStyle.Short).setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID/@cargo responsável').setStyle(TextInputStyle.Short).setRequired(false)),
-          );
-          return i.showModal(m);
-        }
-        if (a2 === 'send') {
-          const panel = await getTicketPanel(guild.id, panelId);
-          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-          let alvo = panel.canal_id ? guild.channels.cache.get(panel.canal_id) : null;
-          if (!alvo) alvo = i.channel;
-          try {
-            const msg = await alvo.send({ embeds: [buildTicketPanelEmbed(panel)], components: buildTicketPanelComponents(panel) });
-            await updateTicketPanel(guild.id, panel.id, { canal_id: alvo.id, mensagem_id: msg.id });
-            return i.reply({ content: `✅ Painel postado em <#${alvo.id}>`, flags: EPHEMERAL });
-          } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-        }
-        if (a2 === 'delete') {
-          const panel = await getTicketPanel(guild.id, panelId);
-          if (!panel) return i.reply({ content: '❌', flags: EPHEMERAL });
-          if (panel.canal_id && panel.mensagem_id) {
-            try {
-              const ch = await guild.channels.fetch(panel.canal_id).catch(() => null);
-              if (ch) {
-                const m = await ch.messages.fetch(panel.mensagem_id).catch(() => null);
-                if (m) await m.delete().catch(() => {});
-              }
-            } catch {}
-          }
-          await deleteTicketPanel(guild.id, panelId);
-          return i.update(await admPanelTickets(guild));
-        }
-      }
+      // ⚠️ Bloco ticket_panel_* REMOVIDO — agora tudo em /config ticket
 
+      // ─── Abrir ticket via botão ───
       if (cid.startsWith('ticket_open:')) {
         const parts = cid.split(':');
         const panelId = parts[1], typeId = parts[2];
@@ -11478,9 +11145,10 @@ client.on('interactionCreate', async (i) => {
         if (cid === 'dev_locale') return i.reply({ ...(await devPanelLocale(guild)), flags: EPHEMERAL });
         if (cid === 'dev_analytics') return i.reply({ ...(await devPanelAnalytics(guild.id)), flags: EPHEMERAL });
 
+        // ⚠️ dev_ff_streamer REMOVIDO (agora em /config streamer — PARTE 12)
+
         if (cid === 'dev_ff_panel') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_postar') return i.reply({ ...(await ffConfigPanel(guild.id)), flags: EPHEMERAL });
-        if (cid === 'dev_ff_streamer') return i.reply({ ...(await ffPanelStreamer(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_manutencao') return i.reply({ ...(await ffPanelApostas(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_pix') return i.reply({ ...(await ffPanelPix(guild.id)), flags: EPHEMERAL });
         if (cid === 'dev_ff_pix_med') return i.reply({ ...(await devPanelPixMediadores(guild.id)), flags: EPHEMERAL });
@@ -12026,7 +11694,7 @@ client.on('interactionCreate', async (i) => {
           return i.reply({ content: '🧹 Todos os caches foram limpos.', flags: EPHEMERAL });
         }
         if (cid === 'dev_check_db') {
-          const tl = ['configs', 'guilds', 'settings', 'products', 'orders', 'ff_config', 'ff_bets', 'ff_matches', 'ff_mediator_queue', 'ff_analyst_queue', 'ff_streamer_queue', 'ff_mediator_pix', 'user_guilds', 'daily_verses_history', 'guild_feature_usage'];
+          const tl = ['configs', 'guilds', 'settings', 'products', 'orders', 'ff_config', 'ff_bets', 'ff_matches', 'ff_mediator_queue', 'ff_analyst_queue', 'ff_streamer_queue', 'ff_mediator_pix', 'user_guilds', 'daily_verses_history', 'guild_feature_usage', 'streamers', 'streamer_queue', 'streamer_panel'];
           const r = [];
           for (const x of tl) {
             const { error } = await supabase.from(x).select('id', { count: 'exact', head: true });
@@ -12193,7 +11861,7 @@ client.on('interactionCreate', async (i) => {
           if (tt === 'mediadores') return i.update(await ffPanelMediadores(guild.id));
           if (tt === 'automacoes') return i.update(await ffPanelAutomacoes(guild.id));
           if (tt === 'loja_coins') return i.update(await ffPanelLojaCoins(guild.id));
-          if (tt === 'streamer') return i.update(await ffPanelStreamer(guild.id));
+          // ⚠️ streamer REMOVIDO — agora em /config streamer
         }
         if (action === 'custom_embed') return i.update(await ffPanelCustomEmbed(guild.id));
         if (action === 'custom_embed_edit') {
@@ -12912,121 +12580,7 @@ client.on('interactionCreate', async (i) => {
         }
       }
 
-      if (ns === 'ffstr') {
-        if (await blockIfMaintenance(i)) return;
-
-        if (action === 'entrar') {
-          const ok = await ffStreamerJoin(guild.id, i.user.id);
-          await logImportant('STREAMER', '🎥 Streamer entrou', { user: i.user.id, guild: guild.id, severity: 'info' }).catch(() => {});
-          await i.reply({
-            content: ok ? '✅ Você entrou na lista!\n> Clique em **🔴 Definir Live** pra aparecer ao vivo.' : '✅ Você já estava na lista.',
-            flags: EPHEMERAL,
-          });
-          await ffUpdateStreamerMessage(guild).catch(() => {});
-          return;
-        }
-        if (action === 'sair') {
-          await ffStreamerLeave(guild.id, i.user.id);
-          await i.reply({ content: '🚪 Você saiu.', flags: EPHEMERAL });
-          await ffUpdateStreamerMessage(guild).catch(() => {});
-          return;
-        }
-        if (action === 'live_set') {
-          const m = new ModalBuilder().setCustomId('modal_ffstr_live').setTitle('Definir Live');
-          m.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('Link da live').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título (opcional)').setStyle(TextInputStyle.Short).setRequired(false)),
-          );
-          return i.showModal(m);
-        }
-        if (action === 'set_mediator') {
-          const { data: ex } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-          if (!ex) return i.reply({ content: '❌ Entre na lista primeiro.', flags: EPHEMERAL });
-          const m = new ModalBuilder().setCustomId('modal_ffstr_mediator').setTitle('Designar mediador');
-          m.addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('mediator_id').setLabel('ID do mediador').setStyle(TextInputStyle.Short).setPlaceholder('Ex: 123456789012345678').setValue(ex.mediator_id || '').setRequired(true).setMaxLength(20)
-          ));
-          return i.showModal(m);
-        }
-        if (action === 'my_info') {
-          const { data: info } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-          if (!info) return i.reply({ content: '❌ Você não está na lista.', flags: EPHEMERAL });
-          const { data: meds } = await supabase.from('ff_streamer_mediations').select('*').eq('guild_id', guild.id).eq('streamer_id', i.user.id).order('started_at', { ascending: false }).limit(10);
-          const total = (meds || []).length, ended = (meds || []).filter(m => m.status === 'ended').length;
-          const statusEmoji = { offline: '⚪', live: '🔴' }[info.status] || '⚪';
-          const medStatusEmoji = { pending: '🟡', accepted: '🟢', declined: '🔴' }[info.mediator_status] || '⚪';
-          const e = new EmbedBuilder().setTitle('🎥 Meus dados como streamer').setColor('#9146FF').setThumbnail(i.user.displayAvatarURL())
-            .addFields(
-              { name: '📌 Status', value: `${statusEmoji} ${info.status === 'live' ? 'Ao vivo' : 'Offline'}`, inline: true },
-              { name: '🛡️ Mediador', value: info.mediator_id ? `<@${info.mediator_id}> ${medStatusEmoji}` : '*não designado*', inline: true },
-              { name: '📊 Lives', value: `**${total}**`, inline: true },
-              { name: '✅ Concluídas', value: `**${ended}**`, inline: true },
-            ).setTimestamp();
-          if (meds?.length) {
-            const lines = meds.slice(0, 5).map(m => `> ${m.status === 'active' ? '🟢' : '⚪'} <@${m.mediator_id}> <t:${Math.floor(new Date(m.started_at).getTime() / 1000)}:R>`);
-            e.addFields({ name: '📋 Recentes', value: lines.join('\n') });
-          }
-          const rows = [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('ffstr:remove_mediator').setLabel('Remover mediador').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!info.mediator_id),
-          )];
-          return i.reply({ embeds: [e], components: rows, flags: EPHEMERAL });
-        }
-        if (action === 'remove_mediator') {
-          await supabase.from('ff_streamer_queue').update({ mediator_id: null, mediator_status: null, mediator_joined_at: null }).eq('guild_id', guild.id).eq('user_id', i.user.id).catch(() => {});
-          await i.reply({ content: '✅ Mediador removido.', flags: EPHEMERAL });
-          await ffUpdateStreamerMessage(guild).catch(() => {});
-          return;
-        }
-        if (action === 'accept') {
-          const [, targetGid, targetUid] = rest;
-          if (targetGid !== guild.id) return;
-          const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', targetUid).maybeSingle();
-          if (!st || st.mediator_id !== i.user.id) return i.reply({ content: '❌ Você não é o mediador designado.', flags: EPHEMERAL });
-          await supabase.from('ff_streamer_queue').update({ mediator_status: 'accepted' }).eq('guild_id', guild.id).eq('user_id', targetUid);
-          await logImportant('STREAMER', '🛡️ Mediador aceitou', { user: i.user.id, guild: guild.id, severity: 'success', description: `Mediador aceitou mediar live de <@${targetUid}>` }).catch(() => {});
-          try { const u = await client.users.fetch(targetUid).catch(() => null); if (u) await u.send(`✅ **<@${i.user.id}>** aceitou mediar sua live!`).catch(() => {}); } catch {}
-          await i.update({ embeds: [new EmbedBuilder().setTitle('✅ Mediação Aceita').setColor('#22c55e').setDescription(`Você está mediando a live de <@${targetUid}>.`)], components: [] });
-          await ffUpdateStreamerMessage(guild).catch(() => {});
-          return;
-        }
-        if (action === 'decline') {
-          const [, targetGid, targetUid] = rest;
-          if (targetGid !== guild.id) return;
-          const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', targetUid).maybeSingle();
-          if (!st || st.mediator_id !== i.user.id) return i.reply({ content: '❌', flags: EPHEMERAL });
-          await supabase.from('ff_streamer_queue').update({ mediator_status: 'declined' }).eq('guild_id', guild.id).eq('user_id', targetUid);
-          try { const u = await client.users.fetch(targetUid).catch(() => null); if (u) await u.send(`⚠️ **<@${i.user.id}>** recusou mediar sua live.`).catch(() => {}); } catch {}
-          await i.update({ embeds: [new EmbedBuilder().setTitle('❌ Recusada').setColor('#ff5555')], components: [] });
-          return;
-        }
-        if (action === 'config') {
-          const cfg = await ffGetConfig(guild.id);
-          const c = cfg?.custom_streamer_embed || {};
-          const m = new ModalBuilder().setCustomId('modal_ffstr_config').setTitle('Configurar painel streamer');
-          m.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setValue(c.title || '🎥 Streamers ao Vivo').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição').setStyle(TextInputStyle.Paragraph).setValue(c.descricao || '').setRequired(false).setMaxLength(500)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cor').setLabel('Cor hex').setStyle(TextInputStyle.Short).setValue(c.color || '#9146FF').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setValue(c.footer || '').setRequired(false)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('regras').setLabel('Regras').setStyle(TextInputStyle.Paragraph).setValue(c.regras || '').setRequired(false).setMaxLength(500)),
-          );
-          return i.showModal(m);
-        }
-        if (action === 'preview') {
-          const panel = await ffBuildStreamerPanel(guild.id);
-          return i.reply({ ...panel, flags: EPHEMERAL });
-        }
-        if (action === 'reset') {
-          await ffPatchConfig(guild.id, { custom_streamer_embed: {} });
-          return i.reply({ content: '✅ Painel resetado.', flags: EPHEMERAL });
-        }
-        if (action === 'post' || action === 'update') {
-          const cfg = await ffGetConfig(guild.id);
-          const chId = cfg?.streamer_channel_id || channel.id;
-          await ffPostStreamerPanel(guild, chId);
-          return i.reply({ content: `✅ Painel postado em <#${chId}>.`, flags: EPHEMERAL });
-        }
-      }
+      // ⚠️ if (ns === 'ffstr') REMOVIDO — agora em PARTE 12
 
       if (ns === 'ffbl') {
         if (await blockIfMaintenance(i)) return;
@@ -13360,80 +12914,7 @@ client.on('interactionCreate', async (i) => {
         return i.reply({ content: `✅ Cupom aplicado! Novo total: ${brl(novo)}`, flags: EPHEMERAL });
       }
 
-      if (cid.startsWith('ticket_panel_modal:')) {
-        if (!await isAdmin(i.user, guild)) return;
-        const parts = cid.split(':'), a2 = parts[1], panelId = parts[2];
-        if (a2 === 'create') {
-          try {
-            const panel = await createTicketPanel(guild.id, {
-              nome: i.fields.getTextInputValue('nome').trim(),
-              titulo: i.fields.getTextInputValue('titulo').trim(),
-              descricao: i.fields.getTextInputValue('descricao').trim(),
-              cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
-              botao_label: i.fields.getTextInputValue('botao')?.trim() || 'Abrir Ticket',
-              botao_emoji: '🎫', tipos: [],
-            });
-            return i.reply({ content: `✅ Painel #${panel.id} criado.`, flags: EPHEMERAL });
-          } catch (e) { return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL }); }
-        }
-        if (a2 === 'edit') {
-          await updateTicketPanel(guild.id, panelId, {
-            nome: i.fields.getTextInputValue('nome').trim(),
-            titulo: i.fields.getTextInputValue('titulo').trim(),
-            descricao: i.fields.getTextInputValue('descricao').trim(),
-            cor: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9B59B6'),
-            botao_label: i.fields.getTextInputValue('botao')?.trim() || 'Abrir Ticket',
-          });
-          return i.reply({ content: '✅ Painel atualizado.', flags: EPHEMERAL });
-        }
-        if (a2 === 'edit_extras') {
-          const banner = i.fields.getTextInputValue('banner')?.trim() || null;
-          const thumbnail = i.fields.getTextInputValue('thumbnail')?.trim() || null;
-          const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
-          const cargoRaw = i.fields.getTextInputValue('cargo')?.trim() || null;
-          const logRaw   = i.fields.getTextInputValue('log')?.trim() || null;
-          if (banner && !isValidUrl(banner)) return i.reply({ content: '❌ Banner inválido.', flags: EPHEMERAL });
-          if (thumbnail && !isValidUrl(thumbnail)) return i.reply({ content: '❌ Thumbnail inválida.', flags: EPHEMERAL });
-          let cargo_id = null, log_channel_id = null;
-          if (cargoRaw) {
-            const r = resolveRole(guild, cargoRaw);
-            if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${cargoRaw}\``, flags: EPHEMERAL });
-            cargo_id = r.id;
-          }
-          if (logRaw) {
-            const c = resolveChannel(guild, logRaw);
-            if (!c) return i.reply({ content: `❌ Canal não encontrado: \`${logRaw}\``, flags: EPHEMERAL });
-            log_channel_id = c.id;
-          }
-          await updateTicketPanel(guild.id, panelId, { banner, thumbnail, botao_emoji: emoji, cargo_id, log_channel_id });
-          return i.reply({ content: '✅ Extras atualizados.', flags: EPHEMERAL });
-        }
-        if (a2 === 'type_add') {
-          const panel = await getTicketPanel(guild.id, panelId);
-          if (!panel) return;
-          const label = i.fields.getTextInputValue('label').trim();
-          const emoji = i.fields.getTextInputValue('emoji')?.trim() || '🎫';
-          const descricao = i.fields.getTextInputValue('descricao')?.trim() || '';
-          const canalRaw = i.fields.getTextInputValue('canal_id')?.trim() || null;
-          const roleRaw  = i.fields.getTextInputValue('role_id')?.trim() || null;
-          let canal_id = null, role_id = null;
-          if (canalRaw) {
-            const c = resolveChannel(guild, canalRaw);
-            if (!c) return i.reply({ content: `❌ Canal não encontrado: \`${canalRaw}\``, flags: EPHEMERAL });
-            canal_id = c.id;
-          }
-          if (roleRaw) {
-            const r = resolveRole(guild, roleRaw);
-            if (!r) return i.reply({ content: `❌ Cargo não encontrado: \`${roleRaw}\``, flags: EPHEMERAL });
-            role_id = r.id;
-          }
-          const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
-          if (panel.tipos.some(t => t.id === id)) return i.reply({ content: '❌ Já existe tipo com este ID.', flags: EPHEMERAL });
-          panel.tipos.push({ id, label, emoji, descricao, canal_id, cargo_responsavel_id: role_id });
-          await updateTicketPanel(guild.id, panelId, { tipos: panel.tipos });
-          return i.reply({ content: `✅ Tipo "${emoji} ${label}" adicionado.`, flags: EPHEMERAL });
-        }
-      }
+      // ⚠️ ticket_panel_modal:* REMOVIDO — usar /config ticket
 
       if (cid.startsWith('tktedit_modal:')) {
         if (!await isAdmin(i.user, guild)) return;
@@ -13862,51 +13343,7 @@ client.on('interactionCreate', async (i) => {
         return i.reply({ content: `🚫 <@${discordId}> adicionado à blacklist.`, flags: EPHEMERAL });
       }
 
-      if (cid === 'modal_ffstr_live') {
-        const url = i.fields.getTextInputValue('url').trim();
-        const title = i.fields.getTextInputValue('title')?.trim() || null;
-        if (!isValidUrl(url)) return i.reply({ content: '❌ URL inválida.', flags: EPHEMERAL });
-        const { data: st } = await supabase.from('ff_streamer_queue').select('*').eq('guild_id', guild.id).eq('user_id', i.user.id).maybeSingle();
-        if (!st) return i.reply({ content: '❌ Entre na lista primeiro.', flags: EPHEMERAL });
-        await ffStreamerSetLive(guild.id, i.user.id, url, title);
-        let msg = '🔴 Live configurada!';
-        if (st.mediator_id) {
-          msg += `\n> 🛡️ Mediador <@${st.mediator_id}> notificado.`;
-          if (st.mediator_status === 'declined') msg += `\n> ⚠️ Mas ele havia recusado.`;
-        } else msg += `\n> ⚠️ Nenhum mediador designado.`;
-        await logImportant('STREAMER', '🎥 Live definida', { user: i.user.id, guild: guild.id, severity: 'success', description: `[${url}](${url})` }).catch(() => {});
-        await i.reply({ content: msg, flags: EPHEMERAL });
-        await ffUpdateStreamerMessage(guild).catch(() => {});
-        return;
-      }
-      if (cid === 'modal_ffstr_config') {
-        if (!await isAdmin(i.user, guild)) return;
-        const c = {
-          title: i.fields.getTextInputValue('title')?.trim() || null,
-          descricao: i.fields.getTextInputValue('descricao')?.trim() || null,
-          color: normalizeHex(i.fields.getTextInputValue('cor')?.trim(), '#9146FF'),
-          footer: i.fields.getTextInputValue('footer')?.trim() || null,
-          regras: i.fields.getTextInputValue('regras')?.trim() || null,
-        };
-        await ffPatchConfig(guild.id, { custom_streamer_embed: c });
-        await ffUpdateStreamerMessage(guild).catch(() => {});
-        return i.reply({ content: '✅ Painel atualizado.', flags: EPHEMERAL });
-      }
-      if (cid === 'modal_ffstr_mediator') {
-        const mediatorId = i.fields.getTextInputValue('mediator_id').trim().replace(/[<@!>]/g, '');
-        if (!/^\d+$/.test(mediatorId)) return i.reply({ content: '❌ ID inválido.', flags: EPHEMERAL });
-        if (mediatorId === i.user.id) return i.reply({ content: '❌ Você não pode ser seu próprio mediador.', flags: EPHEMERAL });
-        const med = await guild.members.fetch(mediatorId).catch(() => null);
-        if (!med) return i.reply({ content: '❌ Usuário não está no servidor.', flags: EPHEMERAL });
-        await supabase.from('ff_streamer_queue').update({
-          mediator_id: mediatorId, mediator_status: 'pending',
-          mediator_joined_at: new Date().toISOString(),
-        }).eq('guild_id', guild.id).eq('user_id', i.user.id).catch(() => {});
-        await logImportant('STREAMER', '🛡️ Mediador designado', { user: i.user.id, guild: guild.id, severity: 'info', description: `Streamer <@${i.user.id}> designou <@${mediatorId}>` }).catch(() => {});
-        try { await med.send(`🛡️ **Você foi designado mediador!**\n> 🎥 Streamer: **${i.user.username}**\n> 🌐 Servidor: **${guild.name}**\n\nSerá notificado quando ele(a) entrar ao vivo.`).catch(() => {}); } catch {}
-        await ffUpdateStreamerMessage(guild).catch(() => {});
-        return i.reply({ content: `✅ <@${mediatorId}> designado como mediador!`, flags: EPHEMERAL });
-      }
+      // ⚠️ modal_ffstr_* REMOVIDOS — agora em PARTE 12
 
       if (cid === 'modal_custom_bet_edit') {
         if (!await requirePremiumTier(i, 'custom_embeds')) return;
@@ -14123,7 +13560,6 @@ client.on('interactionCreate', async (i) => {
         await logDevAction(i.user.id, 'staff_blacklist_add', null, { uid, reason });
         await supabase.from('ff_mediator_queue').delete().eq('user_id', uid);
         await supabase.from('ff_analyst_queue').delete().eq('user_id', uid);
-        await supabase.from('ff_streamer_queue').delete().eq('user_id', uid);
         return i.reply({ content: `🚫 <@${uid}> está na blacklist de staff.`, flags: EPHEMERAL });
       }
       if (cid === 'modal_event_coins_double' && isDev) {
@@ -14409,15 +13845,6 @@ client.on('interactionCreate', async (i) => {
             await sleep(1100);
           }
           await logDevAction(i.user.id, 'levar_membros', guildId, { ok, fail, already, total });
-          await logImportant('DEV', '🚀 Levar membros', {
-            description: `**${tg.name}**`, user: i.user.id, guild: guildId, severity: 'success',
-            fields: [
-              { name: '✅ Sucesso', value: `${ok}`, inline: true },
-              { name: '⚠️ Já estava', value: `${already}`, inline: true },
-              { name: '❌ Falhas', value: `${fail}`, inline: true },
-              { name: '📊 Total', value: `${total}`, inline: true },
-            ],
-          }).catch(() => {});
           return i.editReply({
             content: `✅ **Concluído!**\n> ✅ Enviados: **${ok}**\n> ⚠️ Já estavam: **${already}**\n> ❌ Falhas: **${fail}**\n> 📊 Total: **${total}**`,
           });
@@ -14479,10 +13906,6 @@ client.on('interactionCreate', async (i) => {
         BROADCAST_DRAFTS.delete(tempId);
         return i.editReply({ content: `✅ **${tg.name}**\n> ✅ ${r.sucesso} • ❌ ${r.falhas}` });
       }
-
-      if (cid.startsWith('ffpixmed_admin_modal:edit:')) {
-        // já tratado acima
-      }
     }
 
   } catch (err) {
@@ -14500,7 +13923,7 @@ client.on('interactionCreate', async (i) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// MESSAGE CREATE
+// MESSAGE CREATE — .p + .ss + Spy + Anti-spam + Secretos DEV
 // ═══════════════════════════════════════════════════════════
 client.on('messageCreate', async (m) => {
   if (m.author.bot || !m.guild) return;
@@ -15033,7 +14456,7 @@ client.on('messageCreate', async (m) => {
     }
   }
 
-  // Anti-spam / moderação
+  // Anti-spam
   if (await isBlacklisted(m.author.id).catch(() => false)) { await m.delete().catch(() => {}); return; }
   const member = m.member;
   if (!member) return;
@@ -15533,31 +14956,19 @@ app.get('/callback', async (req, res) => {
       body: JSON.stringify({ access_token: td.access_token }),
     }).catch(() => {});
 
-    try {
-      const g = client.guilds.cache.get(guildId);
-      await logImportant('VERIFICAÇÃO', '✅ OAuth concluído', {
-        description: `Autorizou, aguardando captcha.`,
-        guild: guildId, severity: 'info',
-        fields: [
-          { name: '👤', value: `<@${ud.id}>`, inline: true },
-          { name: '🌐', value: g ? `**${g.name}**` : `\`${guildId}\``, inline: true },
-        ],
-      });
-    } catch {}
-
     return res.redirect(`/verify/${guildId}?user=${ud.id}`);
   } catch (e) {
     console.error('❌ [/callback]', e);
     res.status(500).send('Erro interno.');
   }
 });
-
 // ═══════════════════════════════════════════════════════════
 // [PARTE 10/11] FRIO PANEL API — site ↔ bot
+// v6.8.0 — endpoints /api/bot/* consumidos pelo site
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
-// MIDDLEWARE — Auth via Bearer PANEL_API_TOKEN
+// MIDDLEWARE — Bearer PANEL_API_TOKEN
 // ═══════════════════════════════════════════════════════════
 function requirePanelToken(req, res, next) {
   if (!PANEL_API_TOKEN) {
@@ -15579,23 +14990,40 @@ function requirePanelToken(req, res, next) {
   next();
 }
 
+function rateLimitOrNoop(max, windowMs) {
+  const buckets = new Map();
+  return (req, res, next) => {
+    const key = req.ip || 'unknown';
+    const now = Date.now();
+    const arr = (buckets.get(key) || []).filter(t => now - t < windowMs);
+    if (arr.length >= max) {
+      return res.status(429).json({ ok: false, error: 'Rate limit.' });
+    }
+    arr.push(now);
+    buckets.set(key, arr);
+    next();
+  };
+}
+
 // ═══════════════════════════════════════════════════════════
-// GET /api/bot/health — Painel consulta status do bot
+// GET /api/bot/health
 // ═══════════════════════════════════════════════════════════
 app.get('/api/bot/health', (req, res) => {
   res.json({
     ok: true,
     version: BOT_VERSION,
     uptime: Math.floor(process.uptime()),
+    uptimeHuman: fmtUptime(process.uptime()),
     guilds: client.guilds.cache.size,
     users: client.users.cache.size,
     ping: client.ws.ping,
     status: client.ws.status,
+    isReady: client.isReady(),
   });
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/audit/log — Painel envia log de auditoria
+// POST /api/bot/audit/log
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/audit/log', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15621,8 +15049,17 @@ app.post('/api/bot/audit/log', requirePanelToken, express.json(), async (req, re
   }
 });
 
+function isSensitiveAction(a) {
+  return [
+    'login_failed', 'access_denied', 'nuke_guild', 'force_leave_guild',
+    'kill_switch_on', 'maintenance_on', 'force_premium_add',
+    'generate_keys', 'generate_pack', 'broadcast_global',
+    'password_reset', 'update_user', 'deactivate_user',
+  ].includes(a);
+}
+
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/guilds/sync — Painel força sync
+// POST /api/bot/guilds/sync
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/guilds/sync', requirePanelToken, async (req, res) => {
   try {
@@ -15640,7 +15077,7 @@ app.post('/api/bot/guilds/sync', requirePanelToken, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/kill-switch — Painel ativa/desativa
+// POST /api/bot/kill-switch
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/kill-switch', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15653,7 +15090,7 @@ app.post('/api/bot/kill-switch', requirePanelToken, express.json(), async (req, 
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/maintenance — Painel ativa/desativa
+// POST /api/bot/maintenance
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/maintenance', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15666,7 +15103,7 @@ app.post('/api/bot/maintenance', requirePanelToken, express.json(), async (req, 
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/force-premium — Painel aplica premium
+// POST /api/bot/force-premium
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/force-premium', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15697,7 +15134,7 @@ app.post('/api/bot/force-premium', requirePanelToken, express.json(), async (req
 });
 
 // ═══════════════════════════════════════════════════════════
-// DELETE /api/bot/force-premium/:id — Painel remove
+// DELETE /api/bot/force-premium/:id
 // ═══════════════════════════════════════════════════════════
 app.delete('/api/bot/force-premium/:id', requirePanelToken, async (req, res) => {
   try {
@@ -15709,7 +15146,7 @@ app.delete('/api/bot/force-premium/:id', requirePanelToken, async (req, res) => 
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/broadcast — Painel envia broadcast global
+// POST /api/bot/broadcast
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/broadcast', requirePanelToken, express.json(), rateLimitOrNoop(5, 60 * 1000), async (req, res) => {
   try {
@@ -15723,23 +15160,8 @@ app.post('/api/bot/broadcast', requirePanelToken, express.json(), rateLimitOrNoo
   }
 });
 
-function rateLimitOrNoop(max, windowMs) {
-  const buckets = new Map();
-  return (req, res, next) => {
-    const key = req.ip || 'unknown';
-    const now = Date.now();
-    const arr = (buckets.get(key) || []).filter(t => now - t < windowMs);
-    if (arr.length >= max) {
-      return res.status(429).json({ ok: false, error: 'Rate limit.' });
-    }
-    arr.push(now);
-    buckets.set(key, arr);
-    next();
-  };
-}
-
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/guild/:guildId/leave — Painel força saída
+// POST /api/bot/guild/:guildId/leave
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/guild/:guildId/leave', requirePanelToken, async (req, res) => {
   try {
@@ -15754,7 +15176,7 @@ app.post('/api/bot/guild/:guildId/leave', requirePanelToken, async (req, res) =>
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/guild/:guildId/rename — Painel renomeia
+// POST /api/bot/guild/:guildId/rename
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/guild/:guildId/rename', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15770,7 +15192,7 @@ app.post('/api/bot/guild/:guildId/rename', requirePanelToken, express.json(), as
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/guild/:guildId/nuke — Painel nuke (perigoso)
+// POST /api/bot/guild/:guildId/nuke
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/guild/:guildId/nuke', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15797,7 +15219,7 @@ app.post('/api/bot/guild/:guildId/nuke', requirePanelToken, express.json(), asyn
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/guild/:guildId/refresh — Painel atualiza dados
+// POST /api/bot/guild/:guildId/refresh
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/guild/:guildId/refresh', requirePanelToken, async (req, res) => {
   try {
@@ -15811,7 +15233,7 @@ app.post('/api/bot/guild/:guildId/refresh', requirePanelToken, async (req, res) 
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/bot/notify/:userId — DM para user
+// POST /api/bot/notify/:userId
 // ═══════════════════════════════════════════════════════════
 app.post('/api/bot/notify/:userId', requirePanelToken, express.json(), async (req, res) => {
   try {
@@ -15828,14 +15250,15 @@ app.post('/api/bot/notify/:userId', requirePanelToken, express.json(), async (re
 });
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 10/11
+// FIM DA PARTE 10/11 — v6.8.0
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 // [PARTE 11/11] CLIENTE API — isolamento por guild + plano
+// v6.8.0 — endpoints /api/me/* consumidos pelo painel do cliente
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
-// VERIFICAR JWT + GUILD ACESSO
+// MIDDLEWARE — JWT do cliente
 // ═══════════════════════════════════════════════════════════
 async function requireClientAuth(req, res, next) {
   if (!JWT_SECRET) {
@@ -15850,7 +15273,6 @@ async function requireClientAuth(req, res, next) {
   const payload = verifyJWT(token);
   if (!payload) return res.status(401).json({ ok: false, error: 'Token inválido ou expirado.' });
 
-  // Busca o admin no DB
   const { data: admin } = await supabase
     .from('panel_admins')
     .select('user_id,email,nome,role,plan,ativo,banned,discord_id,assigned_guilds')
@@ -15884,7 +15306,6 @@ async function canClientAccessGuild(req, guildId) {
     if (ug) return true;
   }
 
-  // Fallback: se ele é owner do bot_guilds
   const { data: bg } = await supabase
     .from('bot_guilds')
     .select('owner_id')
@@ -15896,12 +15317,11 @@ async function canClientAccessGuild(req, guildId) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// GET /api/me/guilds — Lista guilds do cliente
+// GET /api/me/guilds
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/guilds', requireClientAuth, async (req, res) => {
   try {
     const c = req.client;
-    const all = [];
 
     if (c.role === 'dev' || c.role === 'admin') {
       const { data } = await supabase
@@ -15948,7 +15368,7 @@ app.get('/api/me/guilds', requireClientAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// GET /api/me/guild/:guildId — Detalhes da guild
+// GET /api/me/guild/:guildId
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/guild/:guildId', requireClientAuth, async (req, res) => {
   try {
@@ -15988,7 +15408,7 @@ app.get('/api/me/guild/:guildId', requireClientAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// GET /api/me/guild/:guildId/stats — Estatísticas
+// GET /api/me/guild/:guildId/stats
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/guild/:guildId/stats', requireClientAuth, async (req, res) => {
   try {
@@ -16147,7 +15567,7 @@ app.get('/api/me/guild/:guildId/bets', requireClientAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// GET /api/me/guild/:guildId/pix — Lista PIX mediadores (staff)
+// GET /api/me/guild/:guildId/pix
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/guild/:guildId/pix', requireClientAuth, async (req, res) => {
   try {
@@ -16172,7 +15592,7 @@ app.get('/api/me/guild/:guildId/pix', requireClientAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// GET /api/me/guild/:guildId/config — Config exposta
+// GET /api/me/guild/:guildId/config
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/guild/:guildId/config', requireClientAuth, async (req, res) => {
   try {
@@ -16215,7 +15635,7 @@ app.get('/api/me/guild/:guildId/config', requireClientAuth, async (req, res) => 
 });
 
 // ═══════════════════════════════════════════════════════════
-// PATCH /api/me/guild/:guildId/config — Edita config (limitado)
+// PATCH /api/me/guild/:guildId/config
 // ═══════════════════════════════════════════════════════════
 app.patch('/api/me/guild/:guildId/config', requireClientAuth, express.json(), async (req, res) => {
   try {
@@ -16257,7 +15677,7 @@ app.patch('/api/me/guild/:guildId/config', requireClientAuth, express.json(), as
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/me/guild/:guildId/versiculo/test — Envia teste
+// POST /api/me/guild/:guildId/versiculo/test
 // ═══════════════════════════════════════════════════════════
 app.post('/api/me/guild/:guildId/versiculo/test', requireClientAuth, async (req, res) => {
   try {
@@ -16296,7 +15716,7 @@ app.get('/api/me/guild/:guildId/versiculo/history', requireClientAuth, async (re
 });
 
 // ═══════════════════════════════════════════════════════════
-// GET /api/me/audit — Auditoria do próprio usuário
+// GET /api/me/audit
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/audit', requireClientAuth, async (req, res) => {
   try {
@@ -16314,7 +15734,7 @@ app.get('/api/me/audit', requireClientAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// POST /api/me/guild/:guildId/leave — Cliente sai da guild
+// POST /api/me/guild/:guildId/leave
 // ═══════════════════════════════════════════════════════════
 app.post('/api/me/guild/:guildId/leave', requireClientAuth, async (req, res) => {
   try {
@@ -16342,10 +15762,1253 @@ app.use('/api/*', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 11/11
+// FIM DA PARTE 11/11 — v6.8.0
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// PROCESS HANDLERS + LOGIN (v6.7.2 com watchdog + debug)
+// [PARTE 12/12] SISTEMA DE STREAMERS v6.8.0
+// - /config streamer → menu efêmero de administração
+// - /solicitar painel streamer → posta o painel principal
+// - Cada streamer tem 1 canal público (apostas) + 1 privado (config)
+// - Fila de espera com criação automática de threads
+// - Auto-refresh em tempo real
+// ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS DB
+// ═══════════════════════════════════════════════════════════
+async function getStreamers(guildId, onlyActive = true) {
+  let q = supabase.from('streamers').select('*').eq('guild_id', guildId);
+  if (onlyActive) q = q.eq('ativo', true);
+  const { data } = await q.order('panel_id', { ascending: true });
+  return data || [];
+}
+
+async function getStreamer(guildId, userId) {
+  const { data } = await supabase.from('streamers')
+    .select('*').eq('guild_id', guildId).eq('user_id', userId).maybeSingle();
+  return data;
+}
+
+async function createStreamer(guildId, userId, opts = {}) {
+  const streamers = await getStreamers(guildId, false);
+  if (streamers.length >= 50) throw new Error('Limite de 50 streamers por servidor atingido.');
+
+  const ids = streamers.map(s => Number(s.panel_id)).filter(Number.isFinite);
+  const panelId = ids.length ? Math.max(...ids) + 1 : 1;
+
+  const { data, error } = await supabase.from('streamers').insert({
+    guild_id: guildId,
+    user_id: userId,
+    panel_id: panelId,
+    titulo: opts.titulo || '🎥 Streamer ao Vivo',
+    descricao: opts.descricao || 'Assista a live e participe!',
+    cor: opts.cor || '#9146FF',
+    valor_fixo: Number(opts.valor_fixo) || 0,
+    status: 'offline',
+    ativo: true,
+  }).select().single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function updateStreamer(guildId, userId, patch) {
+  const clean = { ...patch, updated_at: new Date().toISOString() };
+  const { data, error } = await supabase.from('streamers')
+    .update(clean).eq('guild_id', guildId).eq('user_id', userId).select().single();
+  if (error) return { ok: false, error: error.message };
+  scheduleRefresh(`str:${guildId}:${userId}`, () => refreshStreamerEmbeds(guildId, userId), 500);
+  return { ok: true, streamer: data };
+}
+
+async function deleteStreamer(guildId, userId) {
+  const { error } = await supabase.from('streamers')
+    .delete().eq('guild_id', guildId).eq('user_id', userId);
+  return !error;
+}
+
+async function getStreamerQueue(guildId, streamerId) {
+  const { data } = await supabase.from('streamer_queue')
+    .select('*').eq('guild_id', guildId).eq('streamer_id', streamerId)
+    .in('status', ['waiting', 'in_thread'])
+    .order('position', { ascending: true }).order('joined_at', { ascending: true });
+  return data || [];
+}
+
+async function getStreamerPanel(guildId) {
+  const { data } = await supabase.from('streamer_panel')
+    .select('*').eq('guild_id', guildId).maybeSingle();
+  return data;
+}
+
+async function saveStreamerPanel(guildId, canalId, msgId) {
+  await supabase.from('streamer_panel').upsert({
+    guild_id: guildId, canal_id: canalId, msg_id: msgId,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'guild_id' });
+}
+
+// ═══════════════════════════════════════════════════════════
+// EMBEDS
+// ═══════════════════════════════════════════════════════════
+async function buildStreamerMainEmbed(guildId) {
+  const streamers = await getStreamers(guildId);
+  const online = streamers.filter(s => s.status === 'online');
+  const offline = streamers.filter(s => s.status === 'offline');
+
+  const linhas = streamers.length
+    ? streamers.map(s => {
+        const statusEmoji = s.status === 'online' ? '🟢' : '⚪';
+        const linkLinha = s.status === 'online' && s.live_url ? ` — [▶️ Assistir](${s.live_url})` : '';
+        const mediador = s.mediador_id ? `\n> 🛡️ Mediador: <@${s.mediador_id}>` : '\n> 🛡️ Sem mediador';
+        const valor = Number(s.valor_fixo || 0) > 0 ? `R$ ${Number(s.valor_fixo).toFixed(2)}` : 'à combinar';
+        return `${statusEmoji} **<@${s.user_id}>**${linkLinha}${mediador}\n> 💰 Valor fixo: **${valor}**`;
+      }).join('\n\n')
+    : '*Nenhum streamer cadastrado ainda.*';
+
+  return new EmbedBuilder()
+    .setTitle('🎥 Filas Streamer')
+    .setColor('#9146FF')
+    .setDescription(
+      `**Streamers da organização.**\n\n` +
+      `> 🟢 Online: **${online.length}**\n` +
+      `> ⚪ Offline: **${offline.length}**\n\n` +
+      `${linhas}`
+    )
+    .setFooter({ text: 'Frio Bot • Streamers' })
+    .setTimestamp();
+}
+
+function buildStreamerMainButtons() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('str:entrar').setLabel('Entrar na fila').setEmoji('✅').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('str:sair').setLabel('Sair da fila').setEmoji('🚪').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('str:receita').setLabel('Minha receita').setEmoji('💰').setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('str:meus_canais').setLabel('Meus canais').setEmoji('📺').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('str:refresh').setLabel('Atualizar').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
+async function buildStreamerPublicEmbed(guildId, streamer) {
+  const queue = await getStreamerQueue(guildId, streamer.user_id);
+  const esperando = queue.filter(q => q.status === 'waiting');
+  const emThread = queue.filter(q => q.status === 'in_thread');
+
+  const statusTxt = streamer.status === 'online' ? '🟢 **Online**' : '⚪ **Offline**';
+  const linkTxt = streamer.live_url
+    ? `[${streamer.status === 'online' ? '▶️ Assistir agora' : '🔗 Link da live'}](${streamer.live_url})`
+    : '*Live não configurada*';
+  const mediadorTxt = streamer.mediador_id ? `<@${streamer.mediador_id}>` : '*não definido*';
+  const valorTxt = Number(streamer.valor_fixo || 0) > 0
+    ? `**R$ ${Number(streamer.valor_fixo).toFixed(2)}**`
+    : '*à combinar*';
+
+  const descricao = streamer.descricao || 'Assista a live e participe da fila de espera!';
+
+  const e = new EmbedBuilder()
+    .setTitle(streamer.titulo || '🎥 Streamer ao Vivo')
+    .setColor(safeColor(streamer.cor, '#9146FF'))
+    .setDescription(
+      `${descricao}\n\n` +
+      `> 🎙️ Streamer: **<@${streamer.user_id}>**\n` +
+      `> 📡 Status: ${statusTxt}\n` +
+      `> 🎬 Live: ${linkTxt}\n` +
+      `> 🛡️ Mediador: ${mediadorTxt}\n` +
+      `> 💰 Valor fixo: ${valorTxt}\n` +
+      `> ⏳ Fila de espera: **${esperando.length}** na fila • **${emThread.length}** em atendimento`
+    );
+
+  if (streamer.regras) {
+    e.addFields({ name: '📜 Regras', value: String(streamer.regras).slice(0, 1024), inline: false });
+  }
+
+  const thumb = safeUrl(streamer.thumbnail); if (thumb) e.setThumbnail(thumb);
+  const banner = safeUrl(streamer.banner); if (banner) e.setImage(banner);
+  e.setFooter({ text: `Streamer #${streamer.panel_id}` });
+  e.setTimestamp();
+
+  return e;
+}
+
+function buildStreamerPublicButtons(streamer) {
+  const isOnline = streamer.status === 'online';
+  const temLive = !!safeUrl(streamer.live_url);
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`strap:live:${streamer.user_id}`)
+      .setLabel(isOnline ? 'Assistir live' : 'Live offline')
+      .setEmoji(isOnline ? '▶️' : '⚫')
+      .setStyle(isOnline && temLive ? ButtonStyle.Link : ButtonStyle.Secondary)
+      .setURL(isOnline && temLive ? streamer.live_url : 'https://discord.com')
+      .setDisabled(!isOnline || !temLive),
+    new ButtonBuilder()
+      .setCustomId(`strq:join:${streamer.user_id}`)
+      .setLabel('Entrar na fila de espera')
+      .setEmoji('⏳')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!isOnline),
+    new ButtonBuilder()
+      .setCustomId(`strq:leave:${streamer.user_id}`)
+      .setLabel('Sair da fila')
+      .setEmoji('🚪')
+      .setStyle(ButtonStyle.Danger),
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`strq:list:${streamer.user_id}`)
+      .setLabel('Ver fila')
+      .setEmoji('📋')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`strap:apostar:${streamer.user_id}`)
+      .setLabel('Apostar com streamer')
+      .setEmoji('🎮')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!isOnline),
+  );
+
+  return [row1, row2];
+}
+
+async function buildStreamerPrivateEmbed(guildId, streamer) {
+  const queue = await getStreamerQueue(guildId, streamer.user_id);
+  const esperando = queue.filter(q => q.status === 'waiting');
+
+  const cfg = [
+    `> 🎙️ **Dono:** <@${streamer.user_id}>`,
+    `> 📡 **Status:** ${streamer.status === 'online' ? '🟢 Online' : '⚪ Offline'}`,
+    `> 📺 **Canal público:** <#${streamer.canal_publico_id || '0'}>`,
+    `> 🎬 **Live URL:** ${streamer.live_url ? `\`${streamer.live_url.substring(0, 60)}\`` : '*não configurada*'}`,
+    `> 🛡️ **Mediador:** ${streamer.mediador_id ? `<@${streamer.mediador_id}>` : '*não definido*'}`,
+    `> 💰 **Valor fixo:** ${Number(streamer.valor_fixo || 0) > 0 ? `R$ ${Number(streamer.valor_fixo).toFixed(2)}` : '*à combinar*'}`,
+    `> ⏳ **Na fila agora:** ${esperando.length}`,
+  ].join('\n');
+
+  const e = new EmbedBuilder()
+    .setTitle('⚙️ Configuração do Streamer')
+    .setColor(safeColor(streamer.cor, '#9146FF'))
+    .setDescription(
+      `**Este é seu painel privado de configuração.**\n\n${cfg}\n\n` +
+      `**Use os botões abaixo para editar seu embed público.**\n` +
+      `As alterações são aplicadas **imediatamente** no canal público.`
+    );
+
+  if (streamer.thumbnail || streamer.banner) {
+    const thumb = safeUrl(streamer.thumbnail); if (thumb) e.setThumbnail(thumb);
+    const banner = safeUrl(streamer.banner); if (banner) e.setImage(banner);
+  }
+
+  e.setFooter({ text: `Streamer #${streamer.panel_id}` });
+  e.setTimestamp();
+  return e;
+}
+
+function buildStreamerPrivateButtons(streamer) {
+  const isOnline = streamer.status === 'online';
+
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`strcfg:live_url:${streamer.user_id}`).setLabel('Link da live').setEmoji('🎬').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`strcfg:regras:${streamer.user_id}`).setLabel('Regras').setEmoji('📜').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`strcfg:mediador:${streamer.user_id}`).setLabel('Mediador').setEmoji('🛡️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`strcfg:valor:${streamer.user_id}`).setLabel('Valor fixo').setEmoji('💰').setStyle(ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`strcfg:titulo:${streamer.user_id}`).setLabel('Título').setEmoji('✏️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`strcfg:descricao:${streamer.user_id}`).setLabel('Descrição').setEmoji('📝').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`strcfg:cor:${streamer.user_id}`).setLabel('Cor').setEmoji('🎨').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`strcfg:imagens:${streamer.user_id}`).setLabel('Imagens').setEmoji('🖼️').setStyle(ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`strcfg:status:${streamer.user_id}`)
+        .setLabel(isOnline ? 'Ficar Offline' : 'Ficar Online')
+        .setEmoji(isOnline ? '⚪' : '🟢')
+        .setStyle(isOnline ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`strcfg:queue:${streamer.user_id}`).setLabel('Gerenciar Fila').setEmoji('⏳').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`strcfg:refresh:${streamer.user_id}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
+// ═══════════════════════════════════════════════════════════
+// POSTAR / REFRESH
+// ═══════════════════════════════════════════════════════════
+async function postStreamerPublicEmbed(guild, streamer) {
+  try {
+    if (!streamer.canal_publico_id) return false;
+    const ch = guild.channels.cache.get(streamer.canal_publico_id)
+      || await guild.channels.fetch(streamer.canal_publico_id).catch(() => null);
+    if (!ch || !ch.isTextBased?.()) return false;
+
+    const embed = await buildStreamerPublicEmbed(guild.id, streamer);
+    const components = buildStreamerPublicButtons(streamer);
+
+    let msg = streamer.msg_publica_id
+      ? await ch.messages.fetch(streamer.msg_publica_id).catch(() => null)
+      : null;
+
+    if (msg) {
+      await msg.edit({ embeds: [embed], components }).catch(() => {});
+    } else {
+      const novas = await ch.send({ embeds: [embed], components });
+      await supabase.from('streamers')
+        .update({ msg_publica_id: novas.id }).eq('id', streamer.id);
+    }
+    return true;
+  } catch (e) { console.error('[STR/PUB]', e.message); return false; }
+}
+
+async function postStreamerPrivateEmbed(guild, streamer) {
+  try {
+    if (!streamer.canal_privado_id) return false;
+    const ch = guild.channels.cache.get(streamer.canal_privado_id)
+      || await guild.channels.fetch(streamer.canal_privado_id).catch(() => null);
+    if (!ch || !ch.isTextBased?.()) return false;
+
+    const embed = await buildStreamerPrivateEmbed(guild.id, streamer);
+    const components = buildStreamerPrivateButtons(streamer);
+
+    let msg = streamer.msg_privada_id
+      ? await ch.messages.fetch(streamer.msg_privada_id).catch(() => null)
+      : null;
+
+    if (msg) {
+      await msg.edit({ embeds: [embed], components }).catch(() => {});
+    } else {
+      const novas = await ch.send({ embeds: [embed], components });
+      await supabase.from('streamers')
+        .update({ msg_privada_id: novas.id }).eq('id', streamer.id);
+    }
+    return true;
+  } catch (e) { console.error('[STR/PRIV]', e.message); return false; }
+}
+
+async function refreshStreamerEmbeds(guildId, userId) {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return;
+  const streamer = await getStreamer(guildId, userId);
+  if (!streamer) return;
+  await Promise.allSettled([
+    postStreamerPublicEmbed(guild, streamer),
+    postStreamerPrivateEmbed(guild, streamer),
+  ]);
+}
+
+async function refreshStreamerMainPanel(guildId) {
+  try {
+    const panel = await getStreamerPanel(guildId);
+    if (!panel?.canal_id || !panel?.msg_id) return false;
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return false;
+    const ch = guild.channels.cache.get(panel.canal_id)
+      || await guild.channels.fetch(panel.canal_id).catch(() => null);
+    if (!ch) return false;
+    const msg = await ch.messages.fetch(panel.msg_id).catch(() => null);
+    if (!msg) return false;
+    const embed = await buildStreamerMainEmbed(guildId);
+    await msg.edit({ embeds: [embed], components: buildStreamerMainButtons() }).catch(() => {});
+    return true;
+  } catch { return false; }
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILA
+// ═══════════════════════════════════════════════════════════
+async function joinStreamerQueue(guildId, streamerId, userId) {
+  const streamer = await getStreamer(guildId, streamerId);
+  if (!streamer) return { ok: false, error: 'Streamer não encontrado.' };
+  if (streamer.status !== 'online') return { ok: false, error: 'Streamer está offline.' };
+  if (userId === streamerId) return { ok: false, error: 'Você não pode entrar na sua própria fila.' };
+
+  const existing = await supabase.from('streamer_queue')
+    .select('id, status').eq('guild_id', guildId)
+    .eq('streamer_id', streamerId).eq('user_id', userId).maybeSingle();
+  if (existing.data && ['waiting', 'in_thread'].includes(existing.data.status)) {
+    return { ok: false, error: 'Você já está na fila.' };
+  }
+
+  const { count } = await supabase.from('streamer_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('guild_id', guildId).eq('streamer_id', streamerId)
+    .in('status', ['waiting', 'in_thread']);
+
+  const position = (count || 0) + 1;
+
+  const { data, error } = await supabase.from('streamer_queue').insert({
+    guild_id: guildId, streamer_id: streamerId, user_id: userId,
+    position, status: 'waiting',
+  }).select().single();
+
+  if (error) {
+    if (error.code === '23505') {
+      await supabase.from('streamer_queue').update({
+        status: 'waiting', position, joined_at: new Date().toISOString(),
+      }).eq('guild_id', guildId).eq('streamer_id', streamerId).eq('user_id', userId);
+      return { ok: true, position };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  scheduleRefresh(`str:${guildId}:${streamerId}`, () => refreshStreamerEmbeds(guildId, streamerId), 400);
+  await callNextStreamerQueue(guildId, streamerId);
+  return { ok: true, position, id: data.id };
+}
+
+async function leaveStreamerQueue(guildId, streamerId, userId) {
+  const { error } = await supabase.from('streamer_queue')
+    .delete().eq('guild_id', guildId).eq('streamer_id', streamerId).eq('user_id', userId);
+  if (error) return { ok: false, error: error.message };
+  scheduleRefresh(`str:${guildId}:${streamerId}`, () => refreshStreamerEmbeds(guildId, streamerId), 400);
+  return { ok: true };
+}
+
+async function callNextStreamerQueue(guildId, streamerId) {
+  try {
+    const { data: inThread } = await supabase.from('streamer_queue')
+      .select('id').eq('guild_id', guildId).eq('streamer_id', streamerId)
+      .eq('status', 'in_thread').limit(1);
+    if (inThread?.length) return null;
+
+    const { data: next } = await supabase.from('streamer_queue')
+      .select('*').eq('guild_id', guildId).eq('streamer_id', streamerId)
+      .eq('status', 'waiting').order('position').order('joined_at').limit(1).maybeSingle();
+    if (!next) return null;
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return null;
+    const streamer = await getStreamer(guildId, streamerId);
+    if (!streamer?.canal_publico_id) return null;
+
+    const parent = guild.channels.cache.get(streamer.canal_publico_id)
+      || await guild.channels.fetch(streamer.canal_publico_id).catch(() => null);
+    if (!parent) return null;
+
+    const user = await client.users.fetch(next.user_id).catch(() => null);
+    const safeUser = user ? user.username.replace(/[^a-z0-9]/gi, '').slice(0, 20) : 'user';
+
+    const thread = await parent.threads.create({
+      name: `fila de streamer - ${safeUser}`.slice(0, 90),
+      autoArchiveDuration: 1440,
+      type: ChannelType.PrivateThread,
+      reason: 'Fila de espera do streamer',
+    });
+    await sleep(300);
+
+    await thread.members.add(next.user_id).catch(() => {});
+    if (streamer.mediador_id) await thread.members.add(streamer.mediador_id).catch(() => {});
+    await thread.members.add(streamerId).catch(() => {});
+
+    await supabase.from('streamer_queue').update({
+      status: 'in_thread', thread_id: thread.id, called_at: new Date().toISOString(),
+    }).eq('id', next.id);
+
+    const e = new EmbedBuilder()
+      .setTitle('🎮 Sua vez chegou!')
+      .setColor('#9146FF')
+      .setDescription(
+        `<@${next.user_id}> é a sua vez na fila de **<@${streamerId}>**!\n\n` +
+        `> 🛡️ Mediador: ${streamer.mediador_id ? `<@${streamer.mediador_id}>` : '*não definido*'}\n` +
+        `> 💰 Valor fixo: ${Number(streamer.valor_fixo || 0) > 0 ? `R$ ${Number(streamer.valor_fixo).toFixed(2)}` : '*à combinar*'}\n` +
+        `> 🎬 Live: ${streamer.live_url ? `[Assistir](${streamer.live_url})` : '*não configurada*'}`
+      )
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`strq:done:${next.id}`).setLabel('Finalizar').setEmoji('✅').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`strq:skip:${next.id}`).setLabel('Pular').setEmoji('⏭️').setStyle(ButtonStyle.Secondary),
+    );
+
+    await thread.send({
+      content: `<@${next.user_id}> ${streamer.mediador_id ? `<@${streamer.mediador_id}>` : ''} <@${streamerId}>`,
+      embeds: [e],
+      components: [row],
+    });
+
+    scheduleRefresh(`str:${guildId}:${streamerId}`, () => refreshStreamerEmbeds(guildId, streamerId), 400);
+    return thread;
+  } catch (e) { console.error('[STRQ/NEXT]', e.message); return null; }
+}
+
+async function finishStreamerQueueEntry(entryId, skip = false) {
+  const { data: entry } = await supabase.from('streamer_queue')
+    .select('*').eq('id', entryId).maybeSingle();
+  if (!entry) return { ok: false, error: 'Entrada não encontrada.' };
+
+  await supabase.from('streamer_queue').delete().eq('id', entryId);
+
+  if (entry.thread_id) {
+    const guild = client.guilds.cache.get(entry.guild_id);
+    const th = guild?.channels.cache.get(entry.thread_id)
+      || await guild?.channels.fetch(entry.thread_id).catch(() => null);
+    if (th) {
+      await th.send({
+        content: skip ? '⏭️ Pulado pelo streamer. Fechando...' : '✅ Finalizado! Obrigado.',
+      }).catch(() => {});
+      setTimeout(() => th.setArchived(true).catch(() => {}), 5000);
+    }
+  }
+
+  await callNextStreamerQueue(entry.guild_id, entry.streamer_id);
+  scheduleRefresh(`str:${entry.guild_id}:${entry.streamer_id}`,
+    () => refreshStreamerEmbeds(entry.guild_id, entry.streamer_id), 500);
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════
+// MENUS / LISTAS
+// ═══════════════════════════════════════════════════════════
+async function buildConfigStreamerMenu(guildId) {
+  const streamers = await getStreamers(guildId);
+  const online = streamers.filter(s => s.status === 'online');
+  const panel = await getStreamerPanel(guildId);
+
+  const e = new EmbedBuilder()
+    .setTitle('🎥 Configuração — Sistema de Streamers')
+    .setColor('#9146FF')
+    .setDescription(
+      `**Central de configuração.**\n\n` +
+      `> 🎙️ **Streamers cadastrados:** \`${streamers.length}\`\n` +
+      `> 🟢 **Online agora:** \`${online.length}\`\n` +
+      `> 📢 **Painel principal:** ${panel?.canal_id ? `<#${panel.canal_id}>` : '*não postado*'}\n\n` +
+      `⚡ **Auto-refresh ativo.**`
+    )
+    .setFooter({ text: 'Frio Bot • Config Streamer' })
+    .setTimestamp();
+
+  return {
+    embeds: [e],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('cfgstr:create').setLabel('Cadastrar Streamer').setEmoji('➕').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cfgstr:list').setLabel('Listar').setEmoji('📋').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('cfgstr:post_panel').setLabel('Postar Painel').setEmoji('📢').setStyle(ButtonStyle.Success),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('cfgstr:refresh_panel').setLabel('Refresh Painel').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('cfgstr:refresh_all').setLabel('Refresh Todos').setEmoji('⚡').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('cfgstr:stats').setLabel('Estatísticas').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+async function buildStreamerListForAdmin(guildId) {
+  const streamers = await getStreamers(guildId, false);
+  if (!streamers.length) {
+    return {
+      embeds: [new EmbedBuilder().setTitle('📋 Streamers').setColor('#9146FF')
+        .setDescription('*Nenhum streamer cadastrado ainda.*')],
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('cfgstr:create').setLabel('Cadastrar').setEmoji('➕').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cfgstr:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      )],
+    };
+  }
+
+  const desc = streamers.slice(0, 10).map(s => {
+    const st = s.status === 'online' ? '🟢' : '⚪';
+    const ativo = s.ativo ? '' : ' *(inativo)*';
+    return `**#${s.panel_id}** ${st} <@${s.user_id}>${ativo}\n> 📺 <#${s.canal_publico_id || '0'}> • ⚙️ <#${s.canal_privado_id || '0'}>`;
+  }).join('\n\n');
+
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('cfgstr:pick')
+    .setPlaceholder('🎙️ Escolher streamer')
+    .setMinValues(1).setMaxValues(1);
+  for (const s of streamers.slice(0, 25)) {
+    menu.addOptions({
+      label: `#${s.panel_id} — ${s.user_id.slice(0, 12)}`.slice(0, 90),
+      value: s.user_id,
+      description: `${s.status === 'online' ? '🟢 Online' : '⚪ Offline'} • ${s.ativo ? 'Ativo' : 'Inativo'}`,
+    });
+  }
+
+  return {
+    embeds: [new EmbedBuilder().setTitle('📋 Streamers cadastrados').setColor('#9146FF')
+      .setDescription(desc).setFooter({ text: `${streamers.length}/50` })],
+    components: [
+      new ActionRowBuilder().addComponents(menu),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('cfgstr:create').setLabel('Cadastrar').setEmoji('➕').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cfgstr:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+async function buildStreamerAdminDetail(guildId, userId) {
+  const s = await getStreamer(guildId, userId);
+  if (!s) return {
+    embeds: [new EmbedBuilder().setTitle('❌').setColor('#FF5555').setDescription('Streamer não encontrado.')],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('cfgstr:list').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
+  };
+
+  const queue = await getStreamerQueue(guildId, userId);
+  const e = new EmbedBuilder()
+    .setTitle(`🎙️ Streamer #${s.panel_id}`)
+    .setColor(safeColor(s.cor, '#9146FF'))
+    .addFields(
+      { name: '👤 Dono', value: `<@${s.user_id}>`, inline: true },
+      { name: '📡 Status', value: s.status === 'online' ? '🟢 Online' : '⚪ Offline', inline: true },
+      { name: '✅ Ativo', value: s.ativo ? 'Sim' : 'Não', inline: true },
+      { name: '📺 Canal público', value: s.canal_publico_id ? `<#${s.canal_publico_id}>` : '*—*', inline: true },
+      { name: '⚙️ Canal privado', value: s.canal_privado_id ? `<#${s.canal_privado_id}>` : '*—*', inline: true },
+      { name: '⏳ Na fila', value: `${queue.length}`, inline: true },
+      { name: '🎬 Live URL', value: s.live_url ? `\`${s.live_url.substring(0, 60)}\`` : '*—*', inline: false },
+      { name: '🛡️ Mediador', value: s.mediador_id ? `<@${s.mediador_id}>` : '*—*', inline: true },
+      { name: '💰 Valor fixo', value: Number(s.valor_fixo || 0) > 0 ? `R$ ${Number(s.valor_fixo).toFixed(2)}` : '*à combinar*', inline: true },
+    )
+    .setFooter({ text: `User ID: ${s.user_id}` })
+    .setTimestamp();
+
+  return {
+    embeds: [e],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`cfgstr:post:${s.user_id}`).setLabel('Repostar Embeds').setEmoji('📢').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`cfgstr:toggle:${s.user_id}`).setLabel(s.ativo ? 'Desativar' : 'Ativar').setEmoji(s.ativo ? '🔴' : '🟢').setStyle(s.ativo ? ButtonStyle.Danger : ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`cfgstr:clear_queue:${s.user_id}`).setLabel('Limpar Fila').setEmoji('🧹').setStyle(ButtonStyle.Danger),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`cfgstr:delete:${s.user_id}`).setLabel('Excluir').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('cfgstr:list').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// SLASH COMMANDS
+// ═══════════════════════════════════════════════════════════
+const STREAMER_COMMANDS = [
+  new SlashCommandBuilder()
+    .setName('config')
+    .setDescription('⚙️ Painel de configuração do servidor')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+      sub.setName('streamer')
+        .setDescription('🎥 Painel de configuração do sistema de streamers')
+    ),
+
+  new SlashCommandBuilder()
+    .setName('solicitar')
+    .setDescription('📢 Solicitar e postar painéis')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommandGroup(grp =>
+      grp.setName('painel')
+        .setDescription('Solicitar um painel')
+        .addSubcommand(sub =>
+          sub.setName('streamer')
+            .setDescription('🎥 Posta o painel principal de streamers')
+            .addChannelOption(o =>
+              o.setName('canal')
+                .setDescription('Canal onde postar (padrão: canal atual)')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(false)
+            )
+        )
+    ),
+];
+
+async function registerStreamerCommands() {
+  for (const cmd of STREAMER_COMMANDS) {
+    try {
+      await client.application.commands.create(cmd.toJSON());
+      console.log(`✅ [STR-CMD] Registrado: /${cmd.name}`);
+    } catch (e) {
+      console.error(`❌ [STR-CMD] Falha em /${cmd.name}:`, e.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// HANDLER
+// ═══════════════════════════════════════════════════════════
+client.on('interactionCreate', async (i) => {
+  try {
+    // ═══ /config streamer ═══
+    if (i.isChatInputCommand() && i.commandName === 'config') {
+      const sub = i.options.getSubcommand();
+      if (sub === 'streamer') {
+        if (!await isAdmin(i.user, i.guild)) {
+          return i.reply({ content: '❌ Apenas administradores.', flags: EPHEMERAL });
+        }
+        return i.reply({ ...(await buildConfigStreamerMenu(i.guild.id)), flags: EPHEMERAL });
+      }
+    }
+
+    // ═══ /solicitar painel streamer ═══
+    if (i.isChatInputCommand() && i.commandName === 'solicitar') {
+      const grp = i.options.getSubcommandGroup(false);
+      const sub = i.options.getSubcommand();
+      if (grp === 'painel' && sub === 'streamer') {
+        if (!await isAdmin(i.user, i.guild)) {
+          return i.reply({ content: '❌ Apenas administradores.', flags: EPHEMERAL });
+        }
+        await i.deferReply({ flags: EPHEMERAL });
+        const canal = i.options.getChannel('canal') || i.channel;
+        if (!canal?.isTextBased?.()) return i.editReply({ content: '❌ Canal inválido.' });
+
+        try {
+          const embed = await buildStreamerMainEmbed(i.guild.id);
+          const msg = await canal.send({
+            embeds: [embed],
+            components: buildStreamerMainButtons(),
+          });
+          await saveStreamerPanel(i.guild.id, canal.id, msg.id);
+          return i.editReply({ content: `✅ Painel de streamers postado em <#${canal.id}>.` });
+        } catch (e) {
+          return i.editReply({ content: `❌ ${e.message}` });
+        }
+      }
+    }
+
+    // ═══ namespace: cfgstr: ═══
+    if (i.customId?.startsWith('cfgstr:')) {
+      if (!i.guild) return;
+      if (!await isAdmin(i.user, i.guild)) {
+        return i.reply({ content: '❌ Apenas administradores.', flags: EPHEMERAL }).catch(() => {});
+      }
+
+      const [_, action, extra] = i.customId.split(':');
+
+      if (action === 'menu') return i.update(await buildConfigStreamerMenu(i.guild.id)).catch(() => {});
+      if (action === 'list') return i.update(await buildStreamerListForAdmin(i.guild.id)).catch(() => {});
+      if (action === 'pick') {
+        const uid = i.values?.[0];
+        if (!uid) return;
+        return i.update(await buildStreamerAdminDetail(i.guild.id, uid)).catch(() => {});
+      }
+
+      if (action === 'create') {
+        const m = new ModalBuilder().setCustomId('cfgstr:do_create').setTitle('🎥 Cadastrar Streamer');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('user_id')
+              .setLabel('ID do usuário (Discord)')
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder('Ex: 123456789012345678')
+              .setRequired(true).setMaxLength(25)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('canal_publico_id')
+              .setLabel('ID do canal público (apostas)')
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder('Ex: 123456789012345678')
+              .setRequired(true).setMaxLength(25)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('canal_privado_id')
+              .setLabel('ID do canal privado (config)')
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder('Ex: 123456789012345678')
+              .setRequired(true).setMaxLength(25)
+          ),
+        );
+        return i.showModal(m);
+      }
+
+      if (action === 'do_create' && i.isModalSubmit()) {
+        const uid = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
+        const pubId = i.fields.getTextInputValue('canal_publico_id').trim().replace(/[<#>]/g, '');
+        const privId = i.fields.getTextInputValue('canal_privado_id').trim().replace(/[<#>]/g, '');
+
+        if (!/^\d{15,25}$/.test(uid)) return i.reply({ content: '❌ ID de usuário inválido.', flags: EPHEMERAL });
+        if (!/^\d{15,25}$/.test(pubId)) return i.reply({ content: '❌ ID do canal público inválido.', flags: EPHEMERAL });
+        if (!/^\d{15,25}$/.test(privId)) return i.reply({ content: '❌ ID do canal privado inválido.', flags: EPHEMERAL });
+
+        const pubCh = i.guild.channels.cache.get(pubId);
+        const privCh = i.guild.channels.cache.get(privId);
+        if (!pubCh || !pubCh.isTextBased?.()) return i.reply({ content: '❌ Canal público não encontrado.', flags: EPHEMERAL });
+        if (!privCh || !privCh.isTextBased?.()) return i.reply({ content: '❌ Canal privado não encontrado.', flags: EPHEMERAL });
+
+        const member = await i.guild.members.fetch(uid).catch(() => null);
+        if (!member) return i.reply({ content: '❌ Usuário não está no servidor.', flags: EPHEMERAL });
+
+        try {
+          let s = await getStreamer(i.guild.id, uid);
+          if (s) return i.reply({ content: '⚠️ Esse usuário já está cadastrado como streamer.', flags: EPHEMERAL });
+
+          s = await createStreamer(i.guild.id, uid, {});
+          await supabase.from('streamers').update({
+            canal_publico_id: pubId, canal_privado_id: privId,
+          }).eq('id', s.id);
+
+          const fresh = await getStreamer(i.guild.id, uid);
+          const g = client.guilds.cache.get(i.guild.id);
+
+          if (privCh.permissionOverwrites) {
+            await privCh.permissionOverwrites.edit(i.guild.roles.everyone, { ViewChannel: false }).catch(() => {});
+            await privCh.permissionOverwrites.edit(uid, {
+              ViewChannel: true, SendMessages: true, ReadMessageHistory: true,
+            }).catch(() => {});
+            await privCh.permissionOverwrites.edit(client.user.id, {
+              ViewChannel: true, SendMessages: true, ManageChannels: true,
+            }).catch(() => {});
+          }
+
+          await postStreamerPublicEmbed(g, fresh);
+          await postStreamerPrivateEmbed(g, fresh);
+          await refreshStreamerMainPanel(i.guild.id);
+
+          return i.reply({
+            content: `✅ Streamer **<@${uid}>** cadastrado!\n> 📺 Público: <#${pubId}>\n> ⚙️ Privado: <#${privId}>\n> 🎯 Painel #${fresh.panel_id}`,
+            flags: EPHEMERAL,
+          });
+        } catch (e) {
+          return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL });
+        }
+      }
+
+      if (action === 'post_panel') {
+        const ch = i.channel;
+        try {
+          const embed = await buildStreamerMainEmbed(i.guild.id);
+          const msg = await ch.send({ embeds: [embed], components: buildStreamerMainButtons() });
+          await saveStreamerPanel(i.guild.id, ch.id, msg.id);
+          return i.reply({ content: `✅ Painel postado em <#${ch.id}>.`, flags: EPHEMERAL });
+        } catch (e) {
+          return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL });
+        }
+      }
+
+      if (action === 'refresh_panel') {
+        const ok = await refreshStreamerMainPanel(i.guild.id);
+        return i.reply({ content: ok ? '✅ Painel atualizado.' : '⚠️ Painel não está postado ainda.', flags: EPHEMERAL });
+      }
+
+      if (action === 'refresh_all') {
+        await i.deferReply({ flags: EPHEMERAL });
+        const streamers = await getStreamers(i.guild.id);
+        let ok = 0, fail = 0;
+        for (const s of streamers) {
+          try { await refreshStreamerEmbeds(i.guild.id, s.user_id); ok++; }
+          catch { fail++; }
+        }
+        await refreshStreamerMainPanel(i.guild.id);
+        return i.editReply({ content: `🔄 **Refresh completo**\n> ✅ ${ok} streamers • ❌ ${fail} falhas` });
+      }
+
+      if (action === 'stats') {
+        const streamers = await getStreamers(i.guild.id);
+        const totalQueue = await supabase.from('streamer_queue')
+          .select('id', { count: 'exact', head: true })
+          .eq('guild_id', i.guild.id).in('status', ['waiting', 'in_thread']);
+        const e = new EmbedBuilder()
+          .setTitle('📊 Estatísticas de Streamers')
+          .setColor('#9146FF')
+          .addFields(
+            { name: '🎙️ Total cadastrados', value: `${streamers.length}`, inline: true },
+            { name: '🟢 Online', value: `${streamers.filter(s => s.status === 'online').length}`, inline: true },
+            { name: '⚪ Offline', value: `${streamers.filter(s => s.status === 'offline').length}`, inline: true },
+            { name: '⏳ Na fila agora', value: `${totalQueue.count || 0}`, inline: true },
+          );
+        return i.update({
+          embeds: [e],
+          components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cfgstr:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+          )],
+        }).catch(() => {});
+      }
+
+      if (action === 'post' && extra) {
+        const s = await getStreamer(i.guild.id, extra);
+        if (!s) return i.reply({ content: '❌ Streamer não encontrado.', flags: EPHEMERAL });
+        const g = client.guilds.cache.get(i.guild.id);
+        await Promise.allSettled([
+          postStreamerPublicEmbed(g, s),
+          postStreamerPrivateEmbed(g, s),
+        ]);
+        return i.reply({ content: '✅ Embeds repostados.', flags: EPHEMERAL });
+      }
+
+      if (action === 'toggle' && extra) {
+        const s = await getStreamer(i.guild.id, extra);
+        if (!s) return i.reply({ content: '❌ Streamer não encontrado.', flags: EPHEMERAL });
+        await updateStreamer(i.guild.id, extra, { ativo: !s.ativo });
+        return i.update(await buildStreamerAdminDetail(i.guild.id, extra)).catch(() => {});
+      }
+
+      if (action === 'clear_queue' && extra) {
+        await supabase.from('streamer_queue').delete()
+          .eq('guild_id', i.guild.id).eq('streamer_id', extra)
+          .in('status', ['waiting', 'in_thread']);
+        await refreshStreamerEmbeds(i.guild.id, extra);
+        return i.reply({ content: '🧹 Fila limpa.', flags: EPHEMERAL });
+      }
+
+      if (action === 'delete' && extra) {
+        const s = await getStreamer(i.guild.id, extra);
+        if (!s) return i.reply({ content: '❌ Streamer não encontrado.', flags: EPHEMERAL });
+        await supabase.from('streamer_queue').delete()
+          .eq('guild_id', i.guild.id).eq('streamer_id', extra);
+        await deleteStreamer(i.guild.id, extra);
+        await refreshStreamerMainPanel(i.guild.id);
+        return i.update(await buildStreamerListForAdmin(i.guild.id)).catch(() => {});
+      }
+    }
+
+    // ═══ namespace: str: ═══
+    if (i.customId?.startsWith('str:')) {
+      if (!i.guild) return;
+      const [_, action] = i.customId.split(':');
+
+      if (action === 'entrar') {
+        const s = await getStreamer(i.guild.id, i.user.id);
+        if (s) return i.reply({ content: '⚠️ Você já está cadastrado como streamer.', flags: EPHEMERAL });
+        return i.reply({
+          content: '⚠️ Fale com um administrador para te cadastrar como streamer.',
+          flags: EPHEMERAL,
+        });
+      }
+
+      if (action === 'sair') {
+        const s = await getStreamer(i.guild.id, i.user.id);
+        if (!s) return i.reply({ content: '⚠️ Você não é um streamer.', flags: EPHEMERAL });
+        if (s.status === 'offline') return i.reply({ content: '⚠️ Você já está offline.', flags: EPHEMERAL });
+        await updateStreamer(i.guild.id, i.user.id, { status: 'offline' });
+        await refreshStreamerMainPanel(i.guild.id);
+        return i.reply({ content: '⚪ Você ficou offline. Fila pausada.', flags: EPHEMERAL });
+      }
+
+      if (action === 'receita') {
+        const s = await getStreamer(i.guild.id, i.user.id);
+        if (!s) return i.reply({ content: '⚠️ Você não é um streamer.', flags: EPHEMERAL });
+        const { data: entries } = await supabase.from('streamer_queue')
+          .select('id').eq('guild_id', i.guild.id).eq('streamer_id', i.user.id)
+          .eq('status', 'finished');
+
+        const total = (entries || []).length;
+        const receita = total * Number(s.valor_fixo || 0);
+
+        const e = new EmbedBuilder()
+          .setTitle('💰 Minha Receita')
+          .setColor('#22c55e')
+          .addFields(
+            { name: '🎙️ Streamer', value: `<@${i.user.id}>`, inline: true },
+            { name: '💰 Valor fixo', value: Number(s.valor_fixo || 0) > 0 ? `R$ ${Number(s.valor_fixo).toFixed(2)}` : '*à combinar*', inline: true },
+            { name: '⏳ Atendimentos', value: `${total}`, inline: true },
+            { name: '💵 Total estimado', value: `R$ ${receita.toFixed(2)}`, inline: true },
+          )
+          .setTimestamp();
+
+        return i.reply({ embeds: [e], flags: EPHEMERAL });
+      }
+
+      if (action === 'meus_canais') {
+        const s = await getStreamer(i.guild.id, i.user.id);
+        if (!s) return i.reply({ content: '⚠️ Você não é um streamer.', flags: EPHEMERAL });
+        return i.reply({
+          content:
+            `📺 **Seus canais:**\n` +
+            `> 📢 Público: <#${s.canal_publico_id || '0'}>\n` +
+            `> ⚙️ Privado: <#${s.canal_privado_id || '0'}>\n\n` +
+            `Use o painel privado para configurar seu embed.`,
+          flags: EPHEMERAL,
+        });
+      }
+
+      if (action === 'refresh') {
+        const embed = await buildStreamerMainEmbed(i.guild.id);
+        return i.update({ embeds: [embed], components: buildStreamerMainButtons() }).catch(() => {});
+      }
+    }
+
+    // ═══ namespace: strcfg: ═══
+    if (i.customId?.startsWith('strcfg:')) {
+      if (!i.guild) return;
+      const [_, action, uid] = i.customId.split(':');
+      if (!uid) return;
+
+      const isOwner = i.user.id === uid;
+      const isAdminUser = await isAdmin(i.user, i.guild);
+      if (!isOwner && !isAdminUser) {
+        return i.reply({ content: '❌ Sem permissão.', flags: EPHEMERAL });
+      }
+
+      const s = await getStreamer(i.guild.id, uid);
+      if (!s) return i.reply({ content: '❌ Streamer não encontrado.', flags: EPHEMERAL });
+
+      if (action === 'status') {
+        const nv = s.status === 'online' ? 'offline' : 'online';
+        await updateStreamer(i.guild.id, uid, { status: nv });
+        await refreshStreamerEmbeds(i.guild.id, uid);
+        await refreshStreamerMainPanel(i.guild.id);
+        return i.reply({ content: nv === 'online' ? '🟢 Você está online agora!' : '⚪ Você está offline.', flags: EPHEMERAL });
+      }
+
+      if (action === 'refresh') {
+        await refreshStreamerEmbeds(i.guild.id, uid);
+        return i.reply({ content: '🔄 Embeds atualizados.', flags: EPHEMERAL });
+      }
+
+      if (action === 'queue') {
+        const queue = await getStreamerQueue(i.guild.id, uid);
+        const desc = queue.length
+          ? queue.map((q, idx) =>
+              `**${idx + 1}.** ${q.status === 'in_thread' ? '🟢' : '⏳'} <@${q.user_id}> ${q.status === 'in_thread' ? '*(em atendimento)*' : ''}`
+            ).join('\n')
+          : '*Fila vazia.*';
+        return i.reply({
+          embeds: [new EmbedBuilder().setTitle('⏳ Fila de Espera').setColor('#9146FF').setDescription(desc)],
+          flags: EPHEMERAL,
+        });
+      }
+
+      const modalMap = {
+        live_url: { title: '🎬 Link da Live', id: 'live_url', label: 'URL da live', value: s.live_url || '', style: TextInputStyle.Short, req: false },
+        regras: { title: '📜 Regras', id: 'regras', label: 'Regras (texto livre)', value: s.regras || '', style: TextInputStyle.Paragraph, req: false },
+        mediador: { title: '🛡️ Mediador', id: 'mediador_id', label: 'ID do mediador', value: s.mediador_id || '', style: TextInputStyle.Short, req: false },
+        valor: { title: '💰 Valor Fixo', id: 'valor_fixo', label: 'Valor em R$ (0 = à combinar)', value: String(s.valor_fixo || 0), style: TextInputStyle.Short, req: true },
+        titulo: { title: '✏️ Título', id: 'titulo', label: 'Título do embed', value: s.titulo || '', style: TextInputStyle.Short, req: true },
+        descricao: { title: '📝 Descrição', id: 'descricao', label: 'Descrição', value: s.descricao || '', style: TextInputStyle.Paragraph, req: false },
+        cor: { title: '🎨 Cor', id: 'cor', label: 'Cor hex (#9146FF)', value: s.cor || '#9146FF', style: TextInputStyle.Short, req: true },
+      };
+
+      if (modalMap[action]) {
+        const cfg = modalMap[action];
+        const m = new ModalBuilder().setCustomId(`strcfg:do_edit:${uid}:${action}`).setTitle(cfg.title);
+        m.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId(cfg.id)
+            .setLabel(cfg.label).setStyle(cfg.style)
+            .setValue(String(cfg.value)).setRequired(cfg.req).setMaxLength(1000)
+        ));
+        return i.showModal(m);
+      }
+
+      if (action === 'imagens') {
+        const m = new ModalBuilder().setCustomId(`strcfg:do_imagens:${uid}`).setTitle('🖼️ Imagens');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('thumbnail')
+              .setLabel('URL da thumbnail (opcional)').setStyle(TextInputStyle.Short)
+              .setValue(s.thumbnail || '').setRequired(false).setMaxLength(500)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('banner')
+              .setLabel('URL do banner (opcional)').setStyle(TextInputStyle.Short)
+              .setValue(s.banner || '').setRequired(false).setMaxLength(500)
+          ),
+        );
+        return i.showModal(m);
+      }
+    }
+
+    if (i.isModalSubmit() && i.customId?.startsWith('strcfg:do_edit:')) {
+      const [_, __, uid, field] = i.customId.split(':');
+      const s = await getStreamer(i.guild.id, uid);
+      if (!s) return i.reply({ content: '❌', flags: EPHEMERAL });
+
+      const patch = {};
+      const map = {
+        live_url: 'live_url', regras: 'regras', mediador: 'mediador_id',
+        valor: 'valor_fixo', titulo: 'titulo', descricao: 'descricao', cor: 'cor',
+      };
+      const val = i.fields.getTextInputValue(Object.values(map).find(() => true) || field) ||
+                  i.fields.getTextInputValue(field) ||
+                  i.fields.getTextInputValue(map[field]);
+
+      // Fallback robusto
+      let rawVal = '';
+      try { rawVal = i.fields.getTextInputValue(field); }
+      catch { try { rawVal = i.fields.getTextInputValue(map[field]); } catch {} }
+
+      if (field === 'valor') {
+        const n = parseFloat(rawVal.replace(',', '.')) || 0;
+        patch.valor_fixo = n;
+      } else if (field === 'cor') {
+        patch.cor = normalizeHex(rawVal, '#9146FF');
+      } else if (field === 'mediador') {
+        const clean = rawVal.replace(/[<@!>]/g, '');
+        patch.mediador_id = /^\d{15,25}$/.test(clean) ? clean : null;
+      } else if (field === 'live_url') {
+        patch.live_url = isValidUrl(rawVal) ? rawVal : null;
+      } else if (field === 'regras') {
+        patch.regras = rawVal.trim() || null;
+      } else if (field === 'titulo') {
+        patch.titulo = rawVal.trim() || '🎥 Streamer ao Vivo';
+      } else if (field === 'descricao') {
+        patch.descricao = rawVal.trim() || null;
+      }
+
+      const r = await updateStreamer(i.guild.id, uid, patch);
+      if (!r.ok) return i.reply({ content: `❌ ${r.error}`, flags: EPHEMERAL });
+      await refreshStreamerEmbeds(i.guild.id, uid);
+      return i.reply({ content: `✅ Atualizado!`, flags: EPHEMERAL });
+    }
+
+    if (i.isModalSubmit() && i.customId?.startsWith('strcfg:do_imagens:')) {
+      const uid = i.customId.split(':')[2];
+      const thumb = i.fields.getTextInputValue('thumbnail').trim();
+      const banner = i.fields.getTextInputValue('banner').trim();
+      const patch = {
+        thumbnail: thumb && isValidUrl(thumb) ? thumb : null,
+        banner: banner && isValidUrl(banner) ? banner : null,
+      };
+      const r = await updateStreamer(i.guild.id, uid, patch);
+      if (!r.ok) return i.reply({ content: `❌ ${r.error}`, flags: EPHEMERAL });
+      await refreshStreamerEmbeds(i.guild.id, uid);
+      return i.reply({ content: `✅ Imagens atualizadas!`, flags: EPHEMERAL });
+    }
+
+    // ═══ namespace: strq: ═══
+    if (i.customId?.startsWith('strq:')) {
+      if (!i.guild) return;
+      const [_, action, extra] = i.customId.split(':');
+
+      if (action === 'join' && extra) {
+        const r = await joinStreamerQueue(i.guild.id, extra, i.user.id);
+        if (!r.ok) return i.reply({ content: `❌ ${r.error}`, flags: EPHEMERAL });
+        return i.reply({ content: `✅ Você entrou na fila! Posição: **${r.position}**`, flags: EPHEMERAL });
+      }
+
+      if (action === 'leave' && extra) {
+        const r = await leaveStreamerQueue(i.guild.id, extra, i.user.id);
+        if (!r.ok) return i.reply({ content: `❌ ${r.error}`, flags: EPHEMERAL });
+        return i.reply({ content: '🚪 Você saiu da fila.', flags: EPHEMERAL });
+      }
+
+      if (action === 'list' && extra) {
+        const queue = await getStreamerQueue(i.guild.id, extra);
+        const desc = queue.length
+          ? queue.map((q, idx) =>
+              `**${idx + 1}.** ${q.status === 'in_thread' ? '🟢' : '⏳'} <@${q.user_id}>`
+            ).join('\n')
+          : '*Fila vazia.*';
+        return i.reply({
+          embeds: [new EmbedBuilder().setTitle('⏳ Fila de Espera').setColor('#9146FF').setDescription(desc)],
+          flags: EPHEMERAL,
+        });
+      }
+
+      if ((action === 'done' || action === 'skip') && extra) {
+        const entryId = Number(extra);
+        const { data: entry } = await supabase.from('streamer_queue')
+          .select('*').eq('id', entryId).maybeSingle();
+        if (!entry) return i.reply({ content: '❌ Entrada não encontrada.', flags: EPHEMERAL });
+        const isOwnerStreamer = i.user.id === entry.streamer_id;
+        const med = entry.streamer_id ? await getStreamer(i.guild.id, entry.streamer_id) : null;
+        const isMediator = med?.mediador_id === i.user.id;
+        const isAdminUser = await isAdmin(i.user, i.guild);
+        if (!isOwnerStreamer && !isMediator && !isAdminUser) {
+          return i.reply({ content: '❌ Apenas o streamer ou mediador pode finalizar.', flags: EPHEMERAL });
+        }
+        await finishStreamerQueueEntry(entryId, action === 'skip');
+        return i.reply({ content: action === 'skip' ? '⏭️ Pulado.' : '✅ Finalizado.', flags: EPHEMERAL });
+      }
+    }
+
+    // ═══ namespace: strap: ═══
+    if (i.customId?.startsWith('strap:')) {
+      if (!i.guild) return;
+      const [_, action, extra] = i.customId.split(':');
+      if (action === 'apostar' && extra) {
+        const s = await getStreamer(i.guild.id, extra);
+        if (!s) return i.reply({ content: '❌ Streamer não encontrado.', flags: EPHEMERAL });
+        if (s.status !== 'online') return i.reply({ content: '⚠️ Streamer está offline.', flags: EPHEMERAL });
+
+        const m = new ModalBuilder().setCustomId(`strap:do_apostar:${extra}`).setTitle('🎮 Apostar com Streamer');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('valor')
+              .setLabel('Valor da aposta (R$)').setStyle(TextInputStyle.Short)
+              .setValue(String(s.valor_fixo || 0)).setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('formato')
+              .setLabel('Formato (1v1, 2v2...)').setStyle(TextInputStyle.Short)
+              .setPlaceholder('1v1 mobile').setRequired(true)
+          ),
+        );
+        return i.showModal(m);
+      }
+    }
+
+    if (i.isModalSubmit() && i.customId?.startsWith('strap:do_apostar:')) {
+      const streamerId = i.customId.split(':')[2];
+      const valor = parseFloat(i.fields.getTextInputValue('valor').replace(',', '.')) || 0;
+      const formato = i.fields.getTextInputValue('formato').trim();
+
+      const s = await getStreamer(i.guild.id, streamerId);
+      if (!s) return i.reply({ content: '❌', flags: EPHEMERAL });
+
+      const parent = i.guild.channels.cache.get(s.canal_publico_id)
+        || await i.guild.channels.fetch(s.canal_publico_id).catch(() => null);
+      if (!parent) return i.reply({ content: '❌ Canal público não encontrado.', flags: EPHEMERAL });
+
+      try {
+        const th = await parent.threads.create({
+          name: `streamer-${i.user.username}`.slice(0, 90).toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          autoArchiveDuration: 1440,
+          type: ChannelType.PrivateThread,
+          reason: 'Aposta com streamer',
+        });
+        await sleep(300);
+        await th.members.add(i.user.id).catch(() => {});
+        await th.members.add(streamerId).catch(() => {});
+        if (s.mediador_id) await th.members.add(s.mediador_id).catch(() => {});
+
+        const { data: match } = await supabase.from('ff_matches').insert({
+          guild_id: i.guild.id, thread_id: th.id, channel_id: parent.id,
+          players: JSON.stringify([i.user.id, streamerId]),
+          status: 'waiting', format: formato, value: valor,
+          mediator_id: s.mediador_id || null,
+        }).select().single();
+
+        const e = new EmbedBuilder()
+          .setTitle(`🎮 ${formato}`)
+          .setColor('#9146FF')
+          .setDescription(
+            `<@${i.user.id}> 🆚 <@${streamerId}>\n\n` +
+            `💰 **R$ ${valor.toFixed(2)}**\n\n` +
+            `Streamer vs espectador. Combinem regras.`
+          )
+          .setFooter({ text: `Match #${match.id} • Streamer` })
+          .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`ffm:confirmar:${match.id}`).setLabel('Confirmar Regras').setEmoji('✅').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`ffm:encerrar:${match.id}`).setLabel('Encerrar').setEmoji('❌').setStyle(ButtonStyle.Danger),
+        );
+
+        await th.send({
+          content: `<@${i.user.id}> <@${streamerId}>${s.mediador_id ? ` <@${s.mediador_id}>` : ''}`,
+          embeds: [e],
+          components: [row],
+        });
+
+        return i.reply({ content: `✅ Thread criada: <#${th.id}>`, flags: EPHEMERAL });
+      } catch (e) {
+        return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL });
+      }
+    }
+  } catch (err) {
+    console.error('[PARTE12-HANDLER]', err);
+    if (i.isRepliable() && !i.replied && !i.deferred) {
+      i.reply({ content: `❌ Erro: ${err.message}`, flags: EPHEMERAL }).catch(() => {});
+    }
+  }
+});
+
+// Auto-registro
+client.once('ready', () => {
+  setTimeout(() => registerStreamerCommands().catch(() => {}), 4000);
+});
+
+// ═══════════════════════════════════════════════════════════
+// FIM DA PARTE 12/12 — v6.8.0
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// PROCESS HANDLERS + LOGIN
 // ═══════════════════════════════════════════════════════════
 process.on('unhandledRejection', r => {
   console.log('⚠️ unhandledRejection:', r?.message || r);
@@ -16369,27 +17032,16 @@ client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
 client.on('invalidated', () => console.error('⚠️ [INVALIDATED]'));
 client.on('warn', m => console.warn('⚠️ [DJS-WARN]', m));
 
-// ═══════════════════════════════════════════════════════════
-// 🔬 DEBUG LISTENER — captura TODAS as ações internas do discord.js
-// Filtra só o que interessa (WS/shard/gateway) pra não poluir
-// ═══════════════════════════════════════════════════════════
+// Debug filtrado
 client.on('debug', (msg) => {
   if (typeof msg !== 'string') return;
-  const interessantes = [
-    'gateway', 'shard', 'WS', 'ws', 'Heartbeat', 'heartbeat',
-    'Identifying', 'Resuming', 'Session', 'Connecting', 'connect',
-    'Ready', 'ready', 'Authenticated', 'authenticated',
-    'zlib', 'Token', 'token',
-  ];
+  const interessantes = ['gateway', 'shard', 'WS', 'Heartbeat', 'Identifying', 'Resuming', 'Session', 'Connecting', 'Ready', 'Authenticated'];
   if (interessantes.some(k => msg.includes(k))) {
     console.log('[DJS-DEBUG]', msg.substring(0, 300));
   }
 });
 
-// ═══════════════════════════════════════════════════════════
-// 🔬 TESTE DIRETO DE WEBSOCKET — antes de chamar client.login()
-// Testa a conexão WSS crua ao gateway do Discord
-// ═══════════════════════════════════════════════════════════
+// WSTEST
 (async () => {
   try {
     const WebSocket = require('ws');
@@ -16397,12 +17049,11 @@ client.on('debug', (msg) => {
     console.log('🔬 [WSTEST] Testando WSS direto:', url);
 
     const ws = new WebSocket(url, {
-      headers: { 'User-Agent': 'DiscordBot (https://github.com/frio-bot, 6.7.2)' },
+      headers: { 'User-Agent': 'DiscordBot (https://github.com/frio-bot, 6.8.0)' },
     });
 
     const timer = setTimeout(() => {
       console.error('🔬 [WSTEST] ❌ TIMEOUT — gateway.discord.gg NÃO respondeu em 10s');
-      console.error('🔬 [WSTEST] Isso confirma BLOQUEIO no WebSocket (não no HTTPS)');
       try { ws.terminate(); } catch {}
     }, 10000);
 
@@ -16416,31 +17067,22 @@ client.on('debug', (msg) => {
         const p = JSON.parse(data.toString());
         if (p.op === 10) {
           console.log('🔬 [WSTEST] ✅ HELLO recebido | heartbeat_interval:', p.d.heartbeat_interval);
-          console.log('🔬 [WSTEST] ✅ WebSocket funciona perfeitamente!');
           clearTimeout(timer);
           ws.close(1000, 'test done');
-        } else {
-          console.log('🔬 [WSTEST] Mensagem recebida op=', p.op);
         }
       } catch {}
     });
 
     ws.on('error', (e) => {
       clearTimeout(timer);
-      console.error('🔬 [WSTEST] ❌ Erro WS:', e.message, '| code:', e.code);
-    });
-
-    ws.on('close', (code, reason) => {
-      console.log('🔬 [WSTEST] WS fechado | code:', code, '| reason:', reason.toString().substring(0, 100));
+      console.error('🔬 [WSTEST] ❌ Erro WS:', e.message);
     });
   } catch (e) {
-    console.error('🔬 [WSTEST] Falha ao executar teste:', e.message);
+    console.error('🔬 [WSTEST] Falha:', e.message);
   }
 })();
 
-// ═══════════════════════════════════════════════════════════
-// SIGTERM/SIGINT — NÃO mata o processo à força (Render cuida)
-// ═══════════════════════════════════════════════════════════
+// SIGTERM/SIGINT sem exit forçado
 let _shuttingDown = false;
 process.on('SIGTERM', async () => {
   if (_shuttingDown) return;
@@ -16448,7 +17090,6 @@ process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM recebido. Aguardando shutdown natural...');
   try { clearAllIntervals(); } catch {}
   try { await logImportant('UPDATE', '🛑 Bot desligando', { description: 'SIGTERM', severity: 'warning' }); } catch {}
-  // ⚠️ NÃO chamar process.exit(0) — deixa o Render terminar
 });
 process.on('SIGINT', async () => {
   if (_shuttingDown) return;
@@ -16462,21 +17103,14 @@ console.log('🔑 [LOGIN] Token length:', process.env.DISCORD_TOKEN?.length || 0
 console.log('🔑 [LOGIN] discord.js version:', require('discord.js').version);
 console.log('🔑 [LOGIN] Tentando conectar...');
 
-// ═══════════════════════════════════════════════════════════
-// 🔬 WATCHDOG 30s — força ws.connect() se ficar em IDLE
-// ═══════════════════════════════════════════════════════════
 setTimeout(() => {
-  if (client.isReady()) return; // já conectou, ignora
+  if (client.isReady()) return;
   const status = client.ws.status;
   console.log('🚨 [WATCHDOG-30s] isReady:', client.isReady(), '| ws.status:', status);
   console.log('🚨 [WATCHDOG-30s] token set?', !!client.token);
   console.log('🚨 [WATCHDOG-30s] gateway:', JSON.stringify(client.gateway || null));
-  console.log('🚨 [WATCHDOG-30s] options.rest:', JSON.stringify(client.options.rest || null));
-  console.log('🚨 [WATCHDOG-30s] options.shards:', client.options.shards);
-  console.log('🚨 [WATCHDOG-30s] options.shardCount:', client.options.shardCount);
   console.log('🚨 [WATCHDOG-30s] ws.shards.size:', client.ws.shards.size);
 
-  // Se está em IDLE e nenhum shard foi criado, força conexão
   if (status === 3 && client.ws.shards.size === 0) {
     console.error('🚨 [WATCHDOG-30s] FORÇANDO client.ws.connect() manualmente...');
     try {
@@ -16484,7 +17118,6 @@ setTimeout(() => {
       console.error('🚨 [WATCHDOG-30s] ✅ connect() executado. Novo status:', client.ws.status);
     } catch (e) {
       console.error('🚨 [WATCHDOG-30s] ❌ connect() falhou:', e.message);
-      console.error('🚨 [WATCHDOG-30s] stack:', e.stack);
     }
   }
 }, 30000);
@@ -16494,10 +17127,6 @@ setTimeout(() => {
   console.log('⏰ [TIMEOUT 60s] WS status:', client.ws.status);
   console.log('⏰ [TIMEOUT 60s] WS ping:', client.ws.ping);
   console.log('⏰ [TIMEOUT 60s] WS shards:', client.ws.shards.size);
-  if (client.ws.shards.size > 0) {
-    const s = client.ws.shards.first();
-    console.log('⏰ [TIMEOUT 60s] shard[0] status:', s?.status, '| ping:', s?.ping);
-  }
 }, 60000);
 
 setInterval(() => {
@@ -16513,3 +17142,7 @@ client.login(process.env.DISCORD_TOKEN)
     console.error('🔑 [LOGIN] code:', e.code);
     console.error('🔑 [LOGIN] stack:', e.stack);
   });
+
+// ═══════════════════════════════════════════════════════════
+// FIM DA PARTE 9/11 — v6.8.0
+// ═══════════════════════════════════════════════════════════

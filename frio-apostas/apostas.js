@@ -6739,13 +6739,16 @@ client.on('guildMemberRemove', async (m) => {
 // REGISTRO DE COMANDOS
 // ═══════════════════════════════════════════════════════════
 async function registerCommands() {
+  // 1) LIMPA comandos globais antigos
   try {
-    console.log('🧹 [CMDS] Limpando comandos antigos...');
     await client.application.commands.set([]);
     await sleep(2000);
-    console.log('✅ [CMDS] Comandos antigos limpos');
-  } catch (e) {
-    console.error('❌ [CMDS] Erro limpando:', e.message);
+  } catch (e) { console.error('❌ [CMDS] global clear:', e.message); }
+
+  // 2) LIMPA comandos por guild antigos
+  for (const g of client.guilds.cache.values()) {
+    await g.commands.set([]).catch(() => {});
+    await sleep(200);
   }
 
   const cmds = [
@@ -6788,16 +6791,10 @@ async function registerCommands() {
       .toJSON(),
   ];
 
+  // 3) REGISTRA SÓ GLOBAL (aparece em todos os servidores)
   try {
     await client.application.commands.set(cmds);
     console.log(`✅ [CMDS] ${cmds.length} comandos registrados globalmente`);
-
-    // Registra também nos servidores (aparece na hora)
-    for (const g of client.guilds.cache.values()) {
-      await g.commands.set(cmds).catch(e => console.error(`[CMDS] ${g.id}:`, e.message));
-      await sleep(300);
-    }
-    console.log(`✅ [CMDS] Também registrados em ${client.guilds.cache.size} servidores`);
   } catch (e) {
     console.error('❌ [CMDS]', e.message);
   }

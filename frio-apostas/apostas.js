@@ -6891,6 +6891,172 @@ client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'co
 client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
 client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
 // ═══════════════════════════════════════════════════════════
+// [ADDON] /emoji — add + informacoes
+// ═══════════════════════════════════════════════════════════
+client.on('interactionCreate', async (i) => {
+  if (!i.isChatInputCommand()) return;
+  if (i.commandName !== 'emoji') return;
+  if (!i.guild) return;
+
+  try {
+    if (!i.member) {
+      try { i.member = await i.guild.members.fetch(i.user.id); } catch {}
+    }
+    const perms = i.member?.permissions;
+    const canManage =
+      i.user.id === i.guild.ownerId ||
+      isDeveloper(i.user.id) ||
+      perms?.has(PermissionFlagsBits.Administrator) ||
+      (PermissionFlagsBits.ManageGuildExpressions && perms?.has(PermissionFlagsBits.ManageGuildExpressions)) ||
+      (PermissionFlagsBits.ManageEmojisAndStickers && perms?.has(PermissionFlagsBits.ManageEmojisAndStickers));
+
+    if (!canManage) {
+      return i.reply({ content: '❌ Você precisa da permissão **Gerenciar Emojis e Figurinhas**.', flags: EPHEMERAL });
+    }
+
+    const sub = i.options.getSubcommand();
+
+    // ─── /emoji add ───
+    if (sub === 'add') {
+      await i.deferReply({ flags: EPHEMERAL });
+      const arquivo = i.options.getAttachment('arquivo');
+      const nome = i.options.getString('nome').trim();
+      const tipo = i.options.getString('tipo') || 'emoji';
+
+      if (!arquivo) return i.editReply({ content: '❌ Anexe um arquivo.' });
+
+      if (tipo === 'emoji') {
+        const cleanName = nome.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 32);
+        if (cleanName.length < 2) return i.editReply({ content: '❌ Nome precisa ter pelo menos **2 caracteres** (letras/números/underline).' });
+
+        const ok = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+        if (!ok.includes(arquivo.contentType)) return i.editReply({ content: '❌ Use **PNG, JPG, GIF ou WEBP**.' });
+        if (arquivo.size > 256 * 1024) return i.editReply({ content: `❌ Arquivo muito grande (\`${(arquivo.size/1024).toFixed(1)} KB\`). Limite: **256 KB**.` });
+
+        try {
+          const created = await i.guild.emojis.create({
+            attachment: arquivo.url,
+            name: cleanName,
+            reason: `Adicionado por ${i.user.tag}`,
+          });
+          return i.editReply({
+            embeds: [new EmbedBuilder()
+              .setTitle('✅ Emoji adicionado!')
+              .setColor('#22c55e')
+              .setThumbnail(created.imageURL())
+              .addFields(
+                { name: '📛 Nome', value: `\`${created.name}\``, inline: true },
+                { name: '🆔 ID', value: `\`${created.id}\``, inline: true },
+                { name: '✨ Animado', value: created.animated ? '✅' : '❌', inline: true },
+                { name: '🔗 Uso', value: created.toString(), inline: false },
+              ).setTimestamp()],
+          });
+        } catch (err) {
+          return i.editReply({ content: `❌ Não consegui criar: \`${err.message}\`` });
+        }
+      }
+
+      if (tipo === 'figurinha') {
+        const cleanName = nome.slice(0, 30);
+        if (cleanName.length < 2) return i.editReply({ content: '❌ Nome muito curto.' });
+
+        const ok = ['image/png', 'application/json'];
+        if (!ok.includes(arquivo.contentType)) return i.editReply({ content: '❌ Figurinhas precisam ser **PNG** ou **Lottie JSON**.' });
+        if (arquivo.size > 512 * 1024) return i.editReply({ content: `❌ Arquivo muito grande. Limite: **512 KB**.` });
+
+        try {
+          const created = await i.guild.stickers.create({
+            file: arquivo.url,
+            name: cleanName,
+            tags: 'raposa',
+            reason: `Adicionado por ${i.user.tag}`,
+          });
+          return i.editReply({
+            embeds: [new EmbedBuilder()
+              .setTitle('✅ Figurinha adicionada!')
+              .setColor('#22c55e')
+              .addFields(
+                { name: '📛 Nome', value: `\`${created.name}\``, inline: true },
+                { name: '🆔 ID', value: `\`${created.id}\``, inline: true },
+                { name: '📁 Formato', value: `\`${created.format}\``, inline: true },
+              ).setTimestamp()],
+          });
+        } catch (err) {
+          return i.editReply({ content: `❌ Não consegui criar: \`${err.message}\`` });
+        }
+      }
+    }
+
+    // ─── /emoji informacoes ───
+    if (sub === 'informacoes') {
+      await i.deferReply({ flags: EPHEMERAL });
+      const query = i.options.getString('emoji').trim();
+
+      // Tenta emoji
+      let emoji = null;
+      const match = query.match(/^<a?:(\w+):(\d+)>$/);
+      if (match) {
+        emoji = client.emojis.cache.get(match[2]) || await client.emojis.fetch(match[2]).catch(() => null);
+      } else if (/^\d{15,25}$/.test(query)) {
+        emoji = client.emojis.cache.get(query) || await client.emojis.fetch(query).catch(() => null);
+      } else {
+        const cn = query.replace(/^:/, '').replace(/:$/, '');
+        emoji = client.emojis.cache.find(e => e.name === cn);
+      }
+
+      if (emoji) {
+        const e = new EmbedBuilder()
+          .setTitle(`✨ ${emoji.name}`)
+          .setColor('#5865F2')
+          .setThumbnail(emoji.imageURL({ size: 256 }))
+          .addFields(
+            { name: '🆔 ID', value: `\`${emoji.id}\``, inline: true },
+            { name: '📛 Nome', value: `\`${emoji.name}\``, inline: true },
+            { name: '✨ Animado', value: emoji.animated ? '✅ Sim' : '❌ Não', inline: true },
+            { name: '🌐 Servidor', value: emoji.guild ? `**${emoji.guild.name}**` : '*Global*', inline: true },
+            { name: '👤 Autor', value: emoji.author ? `<@${emoji.author.id}>` : '*desconhecido*', inline: true },
+            { name: '📅 Criado', value: emoji.createdAt ? `<t:${Math.floor(emoji.createdAt.getTime()/1000)}:R>` : '—', inline: true },
+            { name: '🔗 Uso', value: emoji.toString(), inline: false },
+          )
+          .setTimestamp();
+        return i.editReply({ embeds: [e] });
+      }
+
+      // Tenta figurinha
+      let sticker = null;
+      if (/^\d{15,25}$/.test(query)) {
+        sticker = client.stickers.cache.get(query) || await client.stickers.fetch(query).catch(() => null);
+      } else {
+        sticker = client.stickers.cache.find(s => s.name === query);
+      }
+
+      if (sticker) {
+        const e = new EmbedBuilder()
+          .setTitle(`🎨 ${sticker.name}`)
+          .setColor('#5865F2')
+          .addFields(
+            { name: '🆔 ID', value: `\`${sticker.id}\``, inline: true },
+            { name: '📛 Nome', value: `\`${sticker.name}\``, inline: true },
+            { name: '📁 Formato', value: `\`${sticker.format}\``, inline: true },
+            { name: '🏷️ Tags', value: sticker.tags ? `\`${sticker.tags}\`` : '—', inline: true },
+            { name: '🌐 Servidor', value: sticker.guild ? `**${sticker.guild.name}**` : '*Global*', inline: true },
+            { name: '📅 Criado', value: sticker.createdAt ? `<t:${Math.floor(sticker.createdAt.getTime()/1000)}:R>` : '—', inline: true },
+          );
+        if (sticker.url) e.setThumbnail(sticker.url);
+        return i.editReply({ embeds: [e] });
+      }
+
+      return i.editReply({ content: `❌ Não encontrei \`${query}\` neste servidor.` });
+    }
+  } catch (err) {
+    console.error('[/emoji]', err);
+    try {
+      if (i.deferred || i.replied) await i.editReply({ content: `❌ ${err.message}` });
+      else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+    } catch {}
+  }
+});
+// ═══════════════════════════════════════════════════════════
 // [ADDON] Handler robusto — /dev + /apostas
 // ═══════════════════════════════════════════════════════════
 client.on('interactionCreate', async (i) => {

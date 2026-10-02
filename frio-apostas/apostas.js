@@ -6505,125 +6505,309 @@ client.on('interactionCreate', async (i) => {
   }
 });
 
-colocar aqui o registre commands
-
-                      setInterval(() => {
-    console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | ready=${client.isReady()} | ws=${client.ws.status} | ping=${client.ws.ping}ms | guilds=${client.guilds.cache.size}`);
-  }, 60000);
-
-  client.user.setPresence({
-    activities: [{ name: '🎮 /apostas painel', type: ActivityType.Watching }],
-    status: 'online',
-  });
-
-  console.log(`[READY] ✅ ${BOT_VERSION} pronto.`);
-});
-
 // ═══════════════════════════════════════════════════════════
-// EVENTOS DE GUILD
-// ═══════════════════════════════════════════════════════════
-client.on('guildCreate', async (g) => {
-  await ensureGuild(g).catch(() => {});
-  console.log(`🟢 [GUILD] Bot entrou em ${g.name} (${g.id})`);
-});
-
-client.on('guildDelete', async (g) => {
-  console.log(`🔴 [GUILD] Bot saiu de ${g.name} (${g.id})`);
-});
-
-client.on('guildMemberAdd', async (m) => {
-  try {
-    const c = await getConfig(m.guild.id);
-    if (c.autorole_role) {
-      const r = m.guild.roles.cache.get(c.autorole_role);
-      if (r) await m.roles.add(r).catch(() => {});
-    }
-  } catch {}
-});
-
-client.on('guildMemberRemove', async (m) => {
-  try { await checkTicketsMemberLeave(m.guild, m); } catch (e) { console.error('[LEAVE]', e.message); }
-});
-
-// ═══════════════════════════════════════════════════════════
-// REGISTRO DE COMANDOS (com /enviar incluso)
+// REGISTRO DE COMANDOS
 // ═══════════════════════════════════════════════════════════
 async function registerCommands() {
-  // LIMPA tudo antes
   try {
+    console.log('🧹 [CMDS] Limpando comandos globais antigos...');
     await client.application.commands.set([]);
     await sleep(2500);
+    console.log('✅ [CMDS] Globais limpos');
+  } catch (e) {
+    console.error('❌ [CMDS] Erro limpando globais:', e.message);
+  }
+
+  try {
     for (const g of client.guilds.cache.values()) {
       await g.commands.set([]).catch(() => {});
-      await sleep(200);
+      await sleep(150);
     }
-    console.log('🧹 [CMDS] Tudo limpo');
-  } catch (e) { console.error('❌ [CMDS]', e.message); }
+    console.log('✅ [CMDS] Guild commands limpos');
+  } catch (e) {
+    console.error('❌ [CMDS] Erro limpando guild:', e.message);
+  }
 
   const cmds = [
-    new SlashCommandBuilder().setName('dev').setDescription('👑 Painel de desenvolvedor').toJSON(),
-    new SlashCommandBuilder().setName('apostas').setDescription('🎮 Apostas Free Fire')
+    new SlashCommandBuilder()
+      .setName('dev')
+      .setDescription('👑 Painel de desenvolvedor')
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('apostas')
+      .setDescription('🎮 Sistema de apostas Free Fire')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(s => s.setName('painel').setDescription('Abrir painel FF')).toJSON(),
-    new SlashCommandBuilder().setName('config').setDescription('⚙️ Configuração')
+      .addSubcommand(s => s
+        .setName('painel')
+        .setDescription('Abrir painel FF'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('config')
+      .setDescription('⚙️ Painel de configuração do servidor')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(s => s.setName('ticket').setDescription('🎫 Configurar tickets'))
-      .addSubcommand(s => s.setName('streamer').setDescription('🎥 Configurar streamers')).toJSON(),
-    new SlashCommandBuilder().setName('solicitar').setDescription('📢 Postar painéis')
+      .addSubcommand(s => s
+        .setName('ticket')
+        .setDescription('🎫 Configurar sistema de tickets'))
+      .addSubcommand(s => s
+        .setName('streamer')
+        .setDescription('🎥 Configurar sistema de streamers'))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('solicitar')
+      .setDescription('📢 Postar painéis')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommandGroup(g => g.setName('painel').setDescription('Postar painel')
-        .addSubcommand(s => s.setName('ticket').setDescription('🎫 Painel de tickets')
-          .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText))
-          .addIntegerOption(o => o.setName('painel_id').setDescription('ID do painel')))
-        .addSubcommand(s => s.setName('streamer').setDescription('🎥 Painel de streamers')
-          .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText)))).toJSON(),
-    new SlashCommandBuilder().setName('enviar').setDescription('📤 Enviar mensagem ou embed')
+      .addSubcommandGroup(g => g
+        .setName('painel')
+        .setDescription('Postar um painel')
+        .addSubcommand(s => s
+          .setName('ticket')
+          .setDescription('🎫 Postar painel de tickets')
+          .addChannelOption(o => o
+            .setName('canal')
+            .setDescription('Canal (padrão: atual)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false))
+          .addIntegerOption(o => o
+            .setName('painel_id')
+            .setDescription('ID do painel')
+            .setRequired(false)))
+        .addSubcommand(s => s
+          .setName('streamer')
+          .setDescription('🎥 Postar painel de streamers')
+          .addChannelOption(o => o
+            .setName('canal')
+            .setDescription('Canal (padrão: atual)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false))))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('enviar')
+      .setDescription('📤 Enviar mensagem ou embed em um canal')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(s => s.setName('say').setDescription('💬 Mensagem simples')
-        .addStringOption(o => o.setName('mensagem').setDescription('Texto').setRequired(true).setMaxLength(2000))
-        .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText)))
-      .addSubcommand(s => s.setName('embed').setDescription('🎨 Embed customizado')
-        .addStringOption(o => o.setName('descricao').setDescription('Descrição').setRequired(true).setMaxLength(4000))
-        .addStringOption(o => o.setName('titulo').setDescription('Título').setMaxLength(250))
-        .addStringOption(o => o.setName('cor').setDescription('Cor hex'))
-        .addStringOption(o => o.setName('imagem').setDescription('URL imagem'))
-        .addStringOption(o => o.setName('thumbnail').setDescription('URL thumbnail'))
-        .addStringOption(o => o.setName('rodape').setDescription('Rodapé'))
-        .addStringOption(o => o.setName('autor').setDescription('Autor'))
-        .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText))).toJSON(),
+      .addSubcommand(s => s
+        .setName('say')
+        .setDescription('💬 Enviar mensagem de texto simples')
+        .addStringOption(o => o
+          .setName('mensagem')
+          .setDescription('Mensagem a enviar')
+          .setRequired(true)
+          .setMaxLength(2000))
+        .addChannelOption(o => o
+          .setName('canal')
+          .setDescription('Canal destino (padrão: atual)')
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)))
+      .addSubcommand(s => s
+        .setName('embed')
+        .setDescription('🎨 Enviar embed customizado')
+        .addStringOption(o => o
+          .setName('descricao')
+          .setDescription('Descrição do embed')
+          .setRequired(true)
+          .setMaxLength(4000))
+        .addStringOption(o => o
+          .setName('titulo')
+          .setDescription('Título')
+          .setRequired(false)
+          .setMaxLength(250))
+        .addStringOption(o => o
+          .setName('cor')
+          .setDescription('Cor hex (ex: #5865F2)')
+          .setRequired(false))
+        .addStringOption(o => o
+          .setName('imagem')
+          .setDescription('URL de imagem')
+          .setRequired(false))
+        .addStringOption(o => o
+          .setName('thumbnail')
+          .setDescription('URL de thumbnail')
+          .setRequired(false))
+        .addStringOption(o => o
+          .setName('rodape')
+          .setDescription('Texto do rodapé')
+          .setRequired(false))
+        .addStringOption(o => o
+          .setName('autor')
+          .setDescription('Nome do autor')
+          .setRequired(false))
+        .addChannelOption(o => o
+          .setName('canal')
+          .setDescription('Canal destino (padrão: atual)')
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)))
+      .toJSON(),
+
+    new SlashCommandBuilder()
+      .setName('emoji')
+      .setDescription('✨ Gerenciar emojis e figurinhas do servidor')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuildExpressions)
+      .addSubcommand(s => s
+        .setName('add')
+        .setDescription('➕ Adicionar um emoji ou figurinha')
+        .addAttachmentOption(o => o
+          .setName('arquivo')
+          .setDescription('Arquivo (PNG/JPG/GIF/WEBP para emoji, PNG/JSON para figurinha)')
+          .setRequired(true))
+        .addStringOption(o => o
+          .setName('nome')
+          .setDescription('Nome do emoji/figurinha (letras, números e _)')
+          .setRequired(true)
+          .setMaxLength(32))
+        .addStringOption(o => o
+          .setName('tipo')
+          .setDescription('Emoji ou figurinha (padrão: emoji)')
+          .setRequired(false)
+          .addChoices(
+            { name: '😀 Emoji', value: 'emoji' },
+            { name: '🎨 Figurinha', value: 'figurinha' },
+          )))
+      .addSubcommand(s => s
+        .setName('informacoes')
+        .setDescription('ℹ️ Mostra informações de um emoji ou figurinha')
+        .addStringOption(o => o
+          .setName('emoji')
+          .setDescription('Nome, ID ou o próprio emoji')
+          .setRequired(true)))
+      .toJSON(),
   ];
 
-  // ✅ SÓ GLOBAL — sem duplicação
   try {
     await client.application.commands.set(cmds);
-    console.log(`✅ [CMDS] ${cmds.length} registrados globalmente: ${cmds.map(c => '/' + c.name).join(', ')}`);
-  } catch (e) { console.error('❌ [CMDS]', e.message); }
+    console.log(`✅ [CMDS] ${cmds.length} comandos registrados globalmente`);
+    console.log(`✅ [CMDS] Lista: ${cmds.map(c => '/' + c.name).join(', ')}`);
+  } catch (e) {
+    console.error('❌ [CMDS] Erro ao registrar globais:', e.message);
+  }
 }
-// ═══════════════════════════════════════════════════════════
-// PROCESS HANDLERS
-// ═══════════════════════════════════════════════════════════
-process.on('unhandledRejection', r => console.error('⚠️ unhandledRejection:', r?.message || r));
-process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', e?.message || e));
 
-let _shuttingDown = false;
-async function gracefulShutdown(sig) {
-  if (_shuttingDown) return;
-  _shuttingDown = true;
-  console.log(`🛑 [${sig}] Encerrando...`);
-  try { clearAllIntervals(); } catch {}
-  try { client.destroy(); } catch {}
-  setTimeout(() => process.exit(0), 2000);
-}
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-client.on('error', e => console.error('🔴 [CLIENT ERROR]', e.message));
-client.on('warn', m => console.warn('⚠️ [DJS-WARN]', m));
-client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'code:', e?.code));
-client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
-client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
 // ═══════════════════════════════════════════════════════════
-// [ADDON] /emoji — add + informacoes
+// HANDLER — /dev + /apostas
+// ═══════════════════════════════════════════════════════════
+client.on('interactionCreate', async (i) => {
+  if (!i.isChatInputCommand()) return;
+  if (!i.guild) return;
+
+  if (i.commandName === 'dev') {
+    try {
+      console.log(`[/dev] User: ${i.user.id} | Guild: ${i.guild.name}`);
+      if (!isDeveloper(i.user.id)) {
+        console.log(`[/dev] ❌ Não é dev. IDs=[${DEVELOPER_IDS.join(',')}] OWNER=${OWNER_ID || 'nada'}`);
+        return await i.reply({ content: '❌ Apenas devs.', flags: EPHEMERAL });
+      }
+      const hub = devHub();
+      await i.reply({ ...hub, flags: EPHEMERAL });
+      console.log('[/dev] ✅ Respondido');
+      return;
+    } catch (err) {
+      console.error('[/dev] ❌ Erro:', err.message, err.stack);
+      try {
+        if (i.deferred || i.replied) await i.followUp({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+        else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+      } catch {}
+      return;
+    }
+  }
+
+  if (i.commandName === 'apostas') {
+    try {
+      const sub = i.options.getSubcommand();
+      if (sub === 'painel') {
+        if (!await isAdmin(i.user, i.guild)) {
+          return await i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
+        }
+        const panel = await ffConfigPanel(i.guild.id);
+        await i.reply({ ...panel, flags: EPHEMERAL });
+        return;
+      }
+    } catch (err) {
+      console.error('[/apostas]', err.message, err.stack);
+      try {
+        if (i.deferred || i.replied) await i.followUp({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+        else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+      } catch {}
+      return;
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// HANDLER — /enviar (say + embed)
+// ═══════════════════════════════════════════════════════════
+client.on('interactionCreate', async (i) => {
+  if (!i.isChatInputCommand()) return;
+  if (i.commandName !== 'enviar') return;
+  if (!i.guild) return;
+
+  try {
+    if (!await isAdmin(i.user, i.guild)) {
+      return i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
+    }
+    const sub = i.options.getSubcommand();
+
+    if (sub === 'say') {
+      const mensagem = i.options.getString('mensagem');
+      const canal = i.options.getChannel('canal') || i.channel;
+      if (!canal?.isTextBased?.()) return i.reply({ content: '❌ Canal inválido.', flags: EPHEMERAL });
+      try {
+        const msg = await canal.send({ content: mensagem.slice(0, 2000) });
+        if (i.channel?.id === canal.id) {
+          await i.reply({ content: '✅ Mensagem enviada.', flags: EPHEMERAL });
+        } else {
+          await i.reply({ content: `✅ Enviado em ${canal}\n> [Ir para mensagem](${msg.url})`, flags: EPHEMERAL });
+        }
+      } catch (e) {
+        return i.reply({ content: `❌ ${e.message}`, flags: EPHEMERAL });
+      }
+      return;
+    }
+
+    if (sub === 'embed') {
+      const titulo = i.options.getString('titulo');
+      const descricao = i.options.getString('descricao');
+      const corRaw = i.options.getString('cor');
+      const imagem = i.options.getString('imagem');
+      const thumbnail = i.options.getString('thumbnail');
+      const rodape = i.options.getString('rodape');
+      const autor = i.options.getString('autor');
+      const canal = i.options.getChannel('canal') || i.channel;
+      if (!canal?.isTextBased?.()) return i.reply({ content: '❌ Canal inválido.', flags: EPHEMERAL });
+
+      const e = new EmbedBuilder();
+      if (titulo) e.setTitle(titulo.slice(0, 256));
+      if (descricao) e.setDescription(descricao.slice(0, 4096));
+      if (corRaw && /^#?[0-9A-Fa-f]{6}$/.test(corRaw)) {
+        e.setColor(corRaw.startsWith('#') ? corRaw : `#${corRaw}`);
+      } else {
+        e.setColor('#5865F2');
+      }
+      if (imagem && /^https?:\/\//.test(imagem)) e.setImage(imagem);
+      if (thumbnail && /^https?:\/\//.test(thumbnail)) e.setThumbnail(thumbnail);
+      if (rodape) e.setFooter({ text: rodape.slice(0, 2048) });
+      if (autor) e.setAuthor({ name: autor.slice(0, 256), iconURL: i.guild.iconURL() || undefined });
+      e.setTimestamp();
+
+      try {
+        const msg = await canal.send({ embeds: [e] });
+        await i.reply({ content: `✅ Embed enviado em ${canal}\n> [Ir para mensagem](${msg.url})`, flags: EPHEMERAL });
+      } catch (err) {
+        return i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+      }
+      return;
+    }
+  } catch (err) {
+    console.error('[/enviar]', err);
+    if (i.isRepliable() && !i.replied && !i.deferred) {
+      i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }).catch(() => {});
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// HANDLER — /emoji (add + informacoes)
 // ═══════════════════════════════════════════════════════════
 client.on('interactionCreate', async (i) => {
   if (!i.isChatInputCommand()) return;
@@ -6639,8 +6823,8 @@ client.on('interactionCreate', async (i) => {
       i.user.id === i.guild.ownerId ||
       isDeveloper(i.user.id) ||
       perms?.has(PermissionFlagsBits.Administrator) ||
-      (PermissionFlagsBits.ManageGuildExpressions && perms?.has(PermissionFlagsBits.ManageGuildExpressions)) ||
-      (PermissionFlagsBits.ManageEmojisAndStickers && perms?.has(PermissionFlagsBits.ManageEmojisAndStickers));
+      perms?.has(PermissionFlagsBits.ManageGuildExpressions) ||
+      perms?.has(PermissionFlagsBits.ManageEmojisAndStickers);
 
     if (!canManage) {
       return i.reply({ content: '❌ Você precisa da permissão **Gerenciar Emojis e Figurinhas**.', flags: EPHEMERAL });
@@ -6648,7 +6832,6 @@ client.on('interactionCreate', async (i) => {
 
     const sub = i.options.getSubcommand();
 
-    // ─── /emoji add ───
     if (sub === 'add') {
       await i.deferReply({ flags: EPHEMERAL });
       const arquivo = i.options.getAttachment('arquivo');
@@ -6719,12 +6902,10 @@ client.on('interactionCreate', async (i) => {
       }
     }
 
-    // ─── /emoji informacoes ───
     if (sub === 'informacoes') {
       await i.deferReply({ flags: EPHEMERAL });
       const query = i.options.getString('emoji').trim();
 
-      // Tenta emoji
       let emoji = null;
       const match = query.match(/^<a?:(\w+):(\d+)>$/);
       if (match) {
@@ -6754,7 +6935,6 @@ client.on('interactionCreate', async (i) => {
         return i.editReply({ embeds: [e] });
       }
 
-      // Tenta figurinha
       let sticker = null;
       if (/^\d{15,25}$/.test(query)) {
         sticker = client.stickers.cache.get(query) || await client.stickers.fetch(query).catch(() => null);
@@ -6788,59 +6968,90 @@ client.on('interactionCreate', async (i) => {
     } catch {}
   }
 });
+
 // ═══════════════════════════════════════════════════════════
-// [ADDON] Handler robusto — /dev + /apostas
+// READY
 // ═══════════════════════════════════════════════════════════
-client.on('interactionCreate', async (i) => {
-  if (!i.isChatInputCommand()) return;
-  if (!i.guild) return;
+client.once('ready', async () => {
+  console.log(`✅ ${client.user.tag} online!`);
+  console.log(`🔍 [READY] ${client.guilds.cache.size} guilds`);
 
-  // ─── /dev ───
-  if (i.commandName === 'dev') {
-    try {
-      console.log(`[/dev] User: ${i.user.id} | Guild: ${i.guild.name}`);
-
-      if (!isDeveloper(i.user.id)) {
-        console.log(`[/dev] ❌ Não é dev. IDs=[${DEVELOPER_IDS.join(',')}] OWNER=${OWNER_ID || 'nada'}`);
-        return await i.reply({ content: '❌ Apenas devs.', flags: EPHEMERAL });
-      }
-
-      const hub = devHub();
-      await i.reply({ ...hub, flags: EPHEMERAL });
-      console.log('[/dev] ✅ Respondido');
-      return;
-    } catch (err) {
-      console.error('[/dev] ❌ Erro:', err.message, err.stack);
-      try {
-        if (i.deferred || i.replied) await i.followUp({ content: `❌ ${err.message}`, flags: EPHEMERAL });
-        else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
-      } catch {}
-      return;
-    }
+  const guilds = [...client.guilds.cache.values()];
+  for (let i = 0; i < guilds.length; i += 20) {
+    await Promise.allSettled(guilds.slice(i, i + 20).map(async (g) => {
+      await ensureGuild(g).catch(() => {});
+    }));
+    await sleep(500);
   }
 
-  // ─── /apostas ───
-  if (i.commandName === 'apostas') {
-    try {
-      const sub = i.options.getSubcommand();
-      if (sub === 'painel') {
-        if (!await isAdmin(i.user, i.guild)) {
-          return await i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
-        }
-        const panel = await ffConfigPanel(i.guild.id);
-        await i.reply({ ...panel, flags: EPHEMERAL });
-        return;
-      }
-    } catch (err) {
-      console.error('[/apostas]', err.message, err.stack);
-      try {
-        if (i.deferred || i.replied) await i.followUp({ content: `❌ ${err.message}`, flags: EPHEMERAL });
-        else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
-      } catch {}
-      return;
-    }
-  }
+  await registerCommands();
+  safeInterval(checkTicketsAutoClose, 5 * 60 * 1000, 'TICKETS-AUTO-CLOSE');
+
+  setInterval(() => {
+    console.log(`💓 [HEARTBEAT] ${new Date().toISOString()} | ready=${client.isReady()} | ws=${client.ws.status} | ping=${client.ws.ping}ms | guilds=${client.guilds.cache.size}`);
+  }, 60000);
+
+  client.user.setPresence({
+    activities: [{ name: '🎮 /apostas painel', type: ActivityType.Watching }],
+    status: 'online',
+  });
+
+  console.log(`[READY] ✅ ${BOT_VERSION} pronto.`);
 });
+
+// ═══════════════════════════════════════════════════════════
+// EVENTOS DE GUILD
+// ═══════════════════════════════════════════════════════════
+client.on('guildCreate', async (g) => {
+  await ensureGuild(g).catch(() => {});
+  console.log(`🟢 [GUILD] Bot entrou em ${g.name} (${g.id})`);
+});
+
+client.on('guildDelete', async (g) => {
+  console.log(`🔴 [GUILD] Bot saiu de ${g.name} (${g.id})`);
+});
+
+client.on('guildMemberAdd', async (m) => {
+  try {
+    const c = await getConfig(m.guild.id);
+    if (c.autorole_role) {
+      const r = m.guild.roles.cache.get(c.autorole_role);
+      if (r) await m.roles.add(r).catch(() => {});
+    }
+  } catch {}
+});
+
+client.on('guildMemberRemove', async (m) => {
+  try { await checkTicketsMemberLeave(m.guild, m); } catch (e) { console.error('[LEAVE]', e.message); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// PROCESS HANDLERS
+// ═══════════════════════════════════════════════════════════
+process.on('unhandledRejection', r => console.error('⚠️ unhandledRejection:', r?.message || r));
+process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', e?.message || e));
+
+let _shuttingDown = false;
+async function gracefulShutdown(sig) {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  console.log(`🛑 [${sig}] Encerrando...`);
+  try { clearAllIntervals(); } catch {}
+  try { client.destroy(); } catch {}
+  setTimeout(() => process.exit(0), 2000);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// ═══════════════════════════════════════════════════════════
+// CLIENT ERROR HANDLERS
+// ═══════════════════════════════════════════════════════════
+client.on('error', e => console.error('🔴 [CLIENT ERROR]', e.message));
+client.on('warn', m => console.warn('⚠️ [DJS-WARN]', m));
+client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'code:', e?.code));
+client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
+client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
+
 // ═══════════════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════════════
@@ -6858,5 +7069,5 @@ client.login(DISCORD_TOKEN)
   });
 
 // ═══════════════════════════════════════════════════════════
-// FIM DA PARTE 7/7 — BOT COMPLETO
+// FIM DO ARQUIVO
 // ═══════════════════════════════════════════════════════════

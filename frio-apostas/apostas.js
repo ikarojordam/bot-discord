@@ -6890,7 +6890,59 @@ client.on('warn', m => console.warn('⚠️ [DJS-WARN]', m));
 client.on('shardDisconnect', (e, id) => console.log('🔌 [DISCONNECT]', id, 'code:', e?.code));
 client.on('shardReconnecting', id => console.log('🔄 [RECONNECT]', id));
 client.on('shardResume', (id, r) => console.log('✅ [RESUME]', id, r));
+// ═══════════════════════════════════════════════════════════
+// [ADDON] Handler robusto — /dev + /apostas
+// ═══════════════════════════════════════════════════════════
+client.on('interactionCreate', async (i) => {
+  if (!i.isChatInputCommand()) return;
+  if (!i.guild) return;
 
+  // ─── /dev ───
+  if (i.commandName === 'dev') {
+    try {
+      console.log(`[/dev] User: ${i.user.id} | Guild: ${i.guild.name}`);
+
+      if (!isDeveloper(i.user.id)) {
+        console.log(`[/dev] ❌ Não é dev. IDs=[${DEVELOPER_IDS.join(',')}] OWNER=${OWNER_ID || 'nada'}`);
+        return await i.reply({ content: '❌ Apenas devs.', flags: EPHEMERAL });
+      }
+
+      const hub = devHub();
+      await i.reply({ ...hub, flags: EPHEMERAL });
+      console.log('[/dev] ✅ Respondido');
+      return;
+    } catch (err) {
+      console.error('[/dev] ❌ Erro:', err.message, err.stack);
+      try {
+        if (i.deferred || i.replied) await i.followUp({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+        else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+      } catch {}
+      return;
+    }
+  }
+
+  // ─── /apostas ───
+  if (i.commandName === 'apostas') {
+    try {
+      const sub = i.options.getSubcommand();
+      if (sub === 'painel') {
+        if (!await isAdmin(i.user, i.guild)) {
+          return await i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
+        }
+        const panel = await ffConfigPanel(i.guild.id);
+        await i.reply({ ...panel, flags: EPHEMERAL });
+        return;
+      }
+    } catch (err) {
+      console.error('[/apostas]', err.message, err.stack);
+      try {
+        if (i.deferred || i.replied) await i.followUp({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+        else await i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL });
+      } catch {}
+      return;
+    }
+  }
+});
 // ═══════════════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════════════

@@ -6951,170 +6951,56 @@ client.on('guildMemberRemove', async (m) => {
 // REGISTRO DE COMANDOS (com /enviar incluso)
 // ═══════════════════════════════════════════════════════════
 async function registerCommands() {
-  // ─── 1) LIMPA comandos globais antigos ───
+  // LIMPA tudo antes
   try {
-    console.log('🧹 [CMDS] Limpando comandos globais antigos...');
     await client.application.commands.set([]);
-    await sleep(2000);
-    console.log('✅ [CMDS] Globais limpos');
-  } catch (e) {
-    console.error('❌ [CMDS] Erro limpando globais:', e.message);
-  }
-
-  // ─── 2) LIMPA comandos por guild antigos ───
-  try {
+    await sleep(2500);
     for (const g of client.guilds.cache.values()) {
       await g.commands.set([]).catch(() => {});
       await sleep(200);
     }
-    console.log('✅ [CMDS] Guild commands limpos');
-  } catch (e) {
-    console.error('❌ [CMDS] Erro limpando guild:', e.message);
-  }
+    console.log('🧹 [CMDS] Tudo limpo');
+  } catch (e) { console.error('❌ [CMDS]', e.message); }
 
-  // ─── 3) DEFINE os comandos ───
   const cmds = [
-    // /dev
-    new SlashCommandBuilder()
-      .setName('dev')
-      .setDescription('👑 Painel de desenvolvedor')
-      .toJSON(),
-
-    // /apostas
-    new SlashCommandBuilder()
-      .setName('apostas')
-      .setDescription('🎮 Sistema de apostas Free Fire')
+    new SlashCommandBuilder().setName('dev').setDescription('👑 Painel de desenvolvedor').toJSON(),
+    new SlashCommandBuilder().setName('apostas').setDescription('🎮 Apostas Free Fire')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(s => s
-        .setName('painel')
-        .setDescription('Abrir painel FF'))
-      .toJSON(),
-
-    // /config
-    new SlashCommandBuilder()
-      .setName('config')
-      .setDescription('⚙️ Painel de configuração do servidor')
+      .addSubcommand(s => s.setName('painel').setDescription('Abrir painel FF')).toJSON(),
+    new SlashCommandBuilder().setName('config').setDescription('⚙️ Configuração')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(s => s
-        .setName('ticket')
-        .setDescription('🎫 Configurar sistema de tickets'))
-      .addSubcommand(s => s
-        .setName('streamer')
-        .setDescription('🎥 Configurar sistema de streamers'))
-      .toJSON(),
-
-    // /solicitar
-    new SlashCommandBuilder()
-      .setName('solicitar')
-      .setDescription('📢 Postar painéis')
+      .addSubcommand(s => s.setName('ticket').setDescription('🎫 Configurar tickets'))
+      .addSubcommand(s => s.setName('streamer').setDescription('🎥 Configurar streamers')).toJSON(),
+    new SlashCommandBuilder().setName('solicitar').setDescription('📢 Postar painéis')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommandGroup(g => g
-        .setName('painel')
-        .setDescription('Postar um painel')
-        .addSubcommand(s => s
-          .setName('ticket')
-          .setDescription('🎫 Postar painel de tickets')
-          .addChannelOption(o => o
-            .setName('canal')
-            .setDescription('Canal (padrão: atual)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false))
-          .addIntegerOption(o => o
-            .setName('painel_id')
-            .setDescription('ID do painel')
-            .setRequired(false)))
-        .addSubcommand(s => s
-          .setName('streamer')
-          .setDescription('🎥 Postar painel de streamers')
-          .addChannelOption(o => o
-            .setName('canal')
-            .setDescription('Canal (padrão: atual)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false))))
-      .toJSON(),
-
-    // /enviar ✅ NOVO
-    new SlashCommandBuilder()
-      .setName('enviar')
-      .setDescription('📤 Enviar mensagem ou embed em um canal')
+      .addSubcommandGroup(g => g.setName('painel').setDescription('Postar painel')
+        .addSubcommand(s => s.setName('ticket').setDescription('🎫 Painel de tickets')
+          .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText))
+          .addIntegerOption(o => o.setName('painel_id').setDescription('ID do painel')))
+        .addSubcommand(s => s.setName('streamer').setDescription('🎥 Painel de streamers')
+          .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText)))).toJSON(),
+    new SlashCommandBuilder().setName('enviar').setDescription('📤 Enviar mensagem ou embed')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(s => s
-        .setName('say')
-        .setDescription('💬 Enviar mensagem de texto simples')
-        .addStringOption(o => o
-          .setName('mensagem')
-          .setDescription('Mensagem a enviar')
-          .setRequired(true)
-          .setMaxLength(2000))
-        .addChannelOption(o => o
-          .setName('canal')
-          .setDescription('Canal destino (padrão: atual)')
-          .addChannelTypes(ChannelType.GuildText)
-          .setRequired(false)))
-      .addSubcommand(s => s
-        .setName('embed')
-        .setDescription('🎨 Enviar embed customizado')
-        .addStringOption(o => o
-          .setName('descricao')
-          .setDescription('Descrição do embed')
-          .setRequired(true)
-          .setMaxLength(4000))
-        .addStringOption(o => o
-          .setName('titulo')
-          .setDescription('Título')
-          .setRequired(false)
-          .setMaxLength(250))
-        .addStringOption(o => o
-          .setName('cor')
-          .setDescription('Cor hex (ex: #5865F2)')
-          .setRequired(false))
-        .addStringOption(o => o
-          .setName('imagem')
-          .setDescription('URL de imagem')
-          .setRequired(false))
-        .addStringOption(o => o
-          .setName('thumbnail')
-          .setDescription('URL de thumbnail')
-          .setRequired(false))
-        .addStringOption(o => o
-          .setName('rodape')
-          .setDescription('Texto do rodapé')
-          .setRequired(false))
-        .addStringOption(o => o
-          .setName('autor')
-          .setDescription('Nome do autor')
-          .setRequired(false))
-        .addChannelOption(o => o
-          .setName('canal')
-          .setDescription('Canal destino (padrão: atual)')
-          .addChannelTypes(ChannelType.GuildText)
-          .setRequired(false)))
-      .toJSON(),
+      .addSubcommand(s => s.setName('say').setDescription('💬 Mensagem simples')
+        .addStringOption(o => o.setName('mensagem').setDescription('Texto').setRequired(true).setMaxLength(2000))
+        .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText)))
+      .addSubcommand(s => s.setName('embed').setDescription('🎨 Embed customizado')
+        .addStringOption(o => o.setName('descricao').setDescription('Descrição').setRequired(true).setMaxLength(4000))
+        .addStringOption(o => o.setName('titulo').setDescription('Título').setMaxLength(250))
+        .addStringOption(o => o.setName('cor').setDescription('Cor hex'))
+        .addStringOption(o => o.setName('imagem').setDescription('URL imagem'))
+        .addStringOption(o => o.setName('thumbnail').setDescription('URL thumbnail'))
+        .addStringOption(o => o.setName('rodape').setDescription('Rodapé'))
+        .addStringOption(o => o.setName('autor').setDescription('Autor'))
+        .addChannelOption(o => o.setName('canal').setDescription('Canal').addChannelTypes(ChannelType.GuildText))).toJSON(),
   ];
 
-  // ─── 4) REGISTRA SÓ GLOBAL (sem duplicar) ───
+  // ✅ SÓ GLOBAL — sem duplicação
   try {
     await client.application.commands.set(cmds);
-    console.log(`✅ [CMDS] ${cmds.length} comandos registrados globalmente`);
-    console.log(`✅ [CMDS] Lista: ${cmds.map(c => '/' + c.name).join(', ')}`);
-  } catch (e) {
-    console.error('❌ [CMDS] Erro ao registrar globais:', e.message);
-  }
-
-  // ─── 5) REGISTRA POR GUILD também (aparece na hora) ───
-  try {
-    for (const g of client.guilds.cache.values()) {
-      await g.commands.set(cmds).catch(e =>
-        console.error(`[CMDS] ${g.name}:`, e.message)
-      );
-      await sleep(400);
-    }
-    console.log(`✅ [CMDS] Registrados por guild em ${client.guilds.cache.size} servidores`);
-  } catch (e) {
-    console.error('❌ [CMDS] Erro ao registrar por guild:', e.message);
-  }
-                     }
-
+    console.log(`✅ [CMDS] ${cmds.length} registrados globalmente: ${cmds.map(c => '/' + c.name).join(', ')}`);
+  } catch (e) { console.error('❌ [CMDS]', e.message); }
+}
 // ═══════════════════════════════════════════════════════════
 // PROCESS HANDLERS
 // ═══════════════════════════════════════════════════════════

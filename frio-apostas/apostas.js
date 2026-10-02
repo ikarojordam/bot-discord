@@ -7115,6 +7115,524 @@ client.on('messageCreate', async (m) => {
 // [PARTE 7/7] READY · EVENTOS · COMANDOS CHAT · REGISTRO · LOGIN
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
+// [ADDON] .VK — Org completa SEM postar embeds
+// ✅ Cria todos os canais (filas, staff, streamers, análise)
+// ❌ Não posta painéis/embeds automaticamente
+// ═══════════════════════════════════════════════════════════
+
+const PENGUIN = '🐧';
+
+const VK_ROLES = [
+  { name: '・owner',               color: '#FFD700', perms: [PermissionFlagsBits.Administrator], hoist: true },
+  { name: '• DIRETOR 👑',          color: '#FFAA00', perms: [PermissionFlagsBits.Administrator], hoist: true },
+  { name: '• GERENTE 👑',          color: '#FF8800', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.ManageRoles, PermissionFlagsBits.KickMembers,
+      PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.MentionEveryone,
+      PermissionFlagsBits.ViewAuditLog,
+    ], hoist: true },
+  { name: 'DIRETOR | SS',          color: '#FF5555', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ModerateMembers,
+      PermissionFlagsBits.MoveMembers,
+    ], hoist: true },
+  { name: 'SUPORTE',               color: '#00AAFF', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+    ], hoist: true },
+  { name: '・SS | MOB',            color: '#00CCFF', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+    ], hoist: true },
+  { name: '・SS | EMU',            color: '#00DDFF', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+    ], hoist: true },
+  { name: '・MEDIADOR',            color: '#9B59B6', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+    ], hoist: true },
+  { name: '• FILAS',               color: '#3498DB', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages,
+    ], hoist: true },
+  { name: '/👁️‍🗨️',                 color: '#808080', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+    ], hoist: true },
+  { name: 'view logs',             color: '#4A4A4A', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory,
+    ], hoist: false },
+  { name: 'BOTS',                  color: '#7289DA', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles,
+      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AddReactions,
+    ], hoist: true },
+  { name: '・gg/[nome da sua org]', color: '#5865F2', perms: [
+      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.Connect,
+      PermissionFlagsBits.Speak, PermissionFlagsBits.CreateInstantInvite,
+      PermissionFlagsBits.AddReactions,
+    ], hoist: true },
+  { name: '・@Criador De Conteúdo', color: '#FF69B4', perms: [], hoist: false },
+  { name: '・@STREAMING',          color: '#9146FF', perms: [], hoist: false },
+  { name: '・Magnata',             color: '#FFD700', perms: [], hoist: false },
+  { name: '・rei do 2,90',         color: '#FFA500', perms: [], hoist: false },
+  { name: '・Girl 🎀',             color: '#FFB6C1', perms: [], hoist: false },
+  { name: '・Trem 🚂',             color: '#8B4513', perms: [], hoist: false },
+  { name: '・Rei Dos Clips',       color: '#E74C3C', perms: [], hoist: false },
+  { name: '・GREEN',               color: '#00FF00', perms: [], hoist: false },
+  { name: '・@RICO DA ORG',        color: '#F1C40F', perms: [], hoist: false },
+  { name: '・CRIA DA DG',          color: '#2ECC71', perms: [], hoist: false },
+  { name: '・REI DOS AP',          color: '#E67E22', perms: [], hoist: false },
+  { name: '・REI DA 2X',           color: '#C0392B', perms: [], hoist: false },
+];
+
+async function vkSetup(guild, logFn = () => {}) {
+  const t0 = Date.now();
+  const errors = [];
+  const log = async (msg) => {
+    try { logFn(msg); } catch {}
+    console.log(`[.VK] ${msg}`);
+  };
+
+  const createWithRetry = async (fn, label, retries = 4) => {
+    for (let a = 0; a < retries; a++) {
+      try { const r = await fn(); await sleep(900); return r; }
+      catch (e) {
+        const isRL = e?.status === 429 || e?.httpStatus === 429 || e?.code === 429;
+        if (isRL) {
+          const wait = Math.ceil((e?.retry_after || e?.rawError?.retry_after || 5)) * 1000;
+          console.warn(`[.VK] ⏳ rate limit em "${label}", esperando ${wait}ms`);
+          await sleep(wait + 500); continue;
+        }
+        if (a < retries - 1) { await sleep(1200 * (a + 1)); continue; }
+        errors.push(`${label}: ${e.message}`); return null;
+      }
+    }
+    errors.push(`${label}: máx retries`); return null;
+  };
+
+  // 1. PERMISSÕES
+  await log('🔍 Verificando permissões...');
+  const me = guild.members.me;
+  if (!me) throw new Error('Bot não conseguiu se identificar.');
+  if (!me.permissions.has(PermissionFlagsBits.Administrator)) throw new Error('Bot precisa ser **Administrador**.');
+
+  // 2. DELETAR CANAIS
+  await log('🗑️ Deletando canais...');
+  const channels = [...guild.channels.cache.values()].filter(c => c.deletable);
+  for (let i = 0; i < channels.length; i += 3) {
+    await Promise.allSettled(channels.slice(i, i + 3).map(c => c.delete().catch(() => {})));
+    await sleep(700);
+  }
+
+  // 3. DELETAR ROLES
+  await log('🗑️ Deletando roles...');
+  const rolesToDelete = [...guild.roles.cache.values()].filter(r =>
+    r.id !== guild.roles.everyone.id && !r.managed && r.name !== DEV_ROLE_NAME
+  );
+  for (let i = 0; i < rolesToDelete.length; i += 3) {
+    await Promise.allSettled(rolesToDelete.slice(i, i + 3).map(r => r.delete().catch(() => {})));
+    await sleep(700);
+  }
+
+  // 4. SUBIR CARGO DO BOT
+  await log('⬆️ Subindo cargo do bot...');
+  try {
+    await guild.roles.fetch();
+    const botRole = me.roles.highest;
+    const top = guild.roles.cache.size - 1;
+    if (botRole.position < top) {
+      await botRole.setPosition(top, { reason: 'Setup .VK' }).catch(() => {});
+      await sleep(1500);
+    }
+  } catch (e) { errors.push(`bot role: ${e.message}`); }
+
+  // 5. CRIAR ROLES
+  await log('🎭 Criando roles...');
+  const roles = {};
+  const createOrder = [...VK_ROLES].reverse();
+  for (const rd of createOrder) {
+    const r = await createWithRetry(() => guild.roles.create({
+      name: rd.name, color: rd.color, permissions: rd.perms || [], hoist: !!rd.hoist,
+      reason: 'Setup .VK',
+    }), `role ${rd.name}`);
+    if (r) roles[rd.name] = r;
+  }
+
+  // 6. CARGO DEV
+  let devRole = guild.roles.cache.find(r => r.name === DEV_ROLE_NAME);
+  if (!devRole) {
+    devRole = await createWithRetry(() => guild.roles.create({
+      name: DEV_ROLE_NAME, color: '#FFD700',
+      permissions: [PermissionFlagsBits.Administrator], hoist: true, reason: 'Setup .VK',
+    }), 'dev role');
+  }
+  if (devRole) {
+    for (const devId of DEVELOPER_IDS) {
+      const m = await guild.members.fetch(devId).catch(() => null);
+      if (m && !m.roles.cache.has(devRole.id)) await m.roles.add(devRole, 'Dev identificado').catch(() => {});
+    }
+  }
+
+  // 7. HIERARQUIA
+  await log('⬆️ Ajustando hierarquia...');
+  try {
+    await guild.roles.fetch();
+    const me2 = guild.members.me;
+    const botRole = me2.roles.highest;
+    const maxPos = guild.roles.cache.size - 1;
+    if (botRole.position < maxPos) {
+      await botRole.setPosition(maxPos, { reason: 'Setup .VK' }).catch(() => {});
+      await sleep(1500);
+      await guild.roles.fetch();
+    }
+
+    const ourIds = new Set(Object.values(roles).map(r => r.id));
+    const positions = [{ role: guild.roles.everyone.id, position: 0 }];
+    let pos = 1;
+
+    for (const r of guild.roles.cache.values()) {
+      if (r.id === guild.roles.everyone.id) continue;
+      if (ourIds.has(r.id)) continue;
+      if (devRole && r.id === devRole.id) continue;
+      if (r.id === botRole.id) continue;
+      positions.push({ role: r.id, position: pos++ });
+    }
+
+    for (let i = VK_ROLES.length - 1; i >= 0; i--) {
+      const r = roles[VK_ROLES[i].name];
+      if (!r) continue;
+      positions.push({ role: r.id, position: pos++ });
+    }
+
+    if (devRole) positions.push({ role: devRole.id, position: pos++ });
+    positions.push({ role: botRole.id, position: pos++ });
+
+    await guild.roles.setPositions(positions);
+    await guild.roles.fetch();
+  } catch (e) { errors.push(`hierarchy: ${e.message}`); }
+
+  // 8. PERMISSÕES
+  const everyone = guild.roles.everyone;
+  const botId = client.user.id;
+  const adminRoles = [roles['・owner'], roles['• DIRETOR 👑'], roles['• GERENTE 👑'], roles['DIRETOR | SS']].filter(Boolean);
+  const staffRoles = [...adminRoles, roles['SUPORTE'], roles['・SS | MOB'], roles['・SS | EMU'], roles['・MEDIADOR'], roles['• FILAS'], roles['/👁️‍🗨️']].filter(Boolean);
+  const analiseRoles = [...adminRoles, roles['SUPORTE'], roles['・SS | MOB'], roles['・SS | EMU'], roles['・MEDIADOR'], roles['/👁️‍🗨️']].filter(Boolean);
+  const streamerRoles = [...staffRoles, roles['・@STREAMING'], roles['・@Criador De Conteúdo']].filter(Boolean);
+  const logRoles = [...adminRoles, roles['view logs']].filter(Boolean);
+
+  const buildPrivOW = (allowed) => {
+    const ow = [
+      { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages] },
+    ];
+    for (const r of allowed) {
+      if (!r) continue;
+      ow.push({ id: r.id, allow: [
+        PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions,
+        PermissionFlagsBits.Connect, PermissionFlagsBits.Speak,
+      ] });
+    }
+    return ow;
+  };
+
+  const buildROOW = () => {
+    const ow = [
+      { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+    ];
+    for (const r of adminRoles) {
+      ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] });
+    }
+    return ow;
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // 9. ESTRUTURA COMPLETA (com filas, staff, streamers, análise)
+  // ═══════════════════════════════════════════════════════════
+  await log('📁 Criando canais...');
+  const created = {};
+  const catMap = {};
+
+  const STRUCTURE = [
+    // ─── Topo ───
+    { cat: null, channels: [
+      { name: '🔒・gg-apostado', type: 'text', priv: true, allow: adminRoles },
+    ]},
+
+    // ─── Atendimento ───
+    { cat: 'Atendimento', channels: [
+      { name: '🐧・suporte', type: 'text' },
+    ]},
+
+    // ─── Partidas (chat geral de partidas) ───
+    { cat: 'Partidas', channels: [
+      { name: '🐧・clown', type: 'text' },
+    ]},
+
+    // ─── Informações ───
+    { cat: 'Informações', channels: [
+      { name: '🐧・regras',     type: 'text', ro: true },
+      { name: '🐧・termos',     type: 'text', ro: true },
+      { name: '🐧・avisos',     type: 'text', ro: true },
+      { name: '🐧・invites',    type: 'text', ro: true },
+      { name: '🐧・divulgação', type: 'text', ro: true },
+      { name: '🐧・feedbacks',  type: 'text', ro: true },
+    ]},
+
+    // ─── Eventos ───
+    { cat: 'Eventos', channels: [
+      { name: '🐧・evento-invites', type: 'text', ro: true },
+      { name: '🐧・30c-por-kill',   type: 'text', ro: true },
+      { name: '🐧・pagamentos',     type: 'text', ro: true },
+    ]},
+
+    // ─── Mobile ───
+    { cat: 'Mobile', channels: [
+      { name: '🐧・1x1-mob',    type: 'text' },
+      { name: '🐧・2x2-mob',    type: 'text' },
+      { name: '🐧・3x3-mob',    type: 'text' },
+      { name: '🐧・4x4-mob',    type: 'text' },
+      { name: '💰・pix-gratis', type: 'text' },
+    ]},
+
+    // ─── Mistas ───
+    { cat: 'Mistas', channels: [
+      { name: '🐧・2x2-misto', type: 'text' },
+      { name: '🐧・3x3-misto', type: 'text' },
+      { name: '🐧・4x4-misto', type: 'text' },
+    ]},
+
+    // ─── Emulador ───
+    { cat: 'Emulador', channels: [
+      { name: '🐧・1x1-emu', type: 'text' },
+      { name: '🐧・2x2-emu', type: 'text' },
+      { name: '🐧・3x3-emu', type: 'text' },
+      { name: '🐧・4x4-emu', type: 'text' },
+    ]},
+
+    // ─── Coins ───
+    { cat: 'Coins', channels: [
+      { name: '🐧・roleta', type: 'text' },
+      { name: '🐧・coins',  type: 'text', ro: true },
+    ]},
+
+    // ─── Análise (privado, sem 🐧) ───
+    { cat: 'Análise', priv: true, allow: analiseRoles, channels: [
+      { name: 'regras',  type: 'text', ro: true },
+      { name: 'exposed', type: 'text', ro: true },
+      { name: 'telagem', type: 'text' },
+    ]},
+
+    // ─── Staff (fila mediador/analista/pix/blacklist) ───
+    { cat: 'Staff', priv: true, allow: staffRoles, channels: [
+      { name: '🐧・fila-mediador',  type: 'text' },
+      { name: '🐧・fila-analistas', type: 'text' },
+      { name: '🐧・pix-mediadores', type: 'text' },
+      { name: '🐧・blacklist',      type: 'text' },
+      { name: '🐧・fila-streamer',  type: 'text' },
+    ]},
+
+    // ─── Streamers (privado) ───
+    { cat: 'Streamers', priv: true, allow: streamerRoles, channels: [
+      { name: '🐧・live-on',       type: 'text' },
+      { name: '🐧・divulgação',    type: 'text' },
+      { name: '🐧・chat-streamer', type: 'text' },
+    ]},
+
+    // ─── Logs (privado) ───
+    { cat: 'Logs', priv: true, allow: logRoles, channels: [
+      { name: '🐧・log-suporte',    type: 'text' },
+      { name: '🐧・log-apostas',    type: 'text' },
+      { name: '🐧・log-mediadores', type: 'text' },
+      { name: '🐧・log-coins',      type: 'text' },
+      { name: '🐧・log-config',     type: 'text' },
+    ]},
+  ];
+
+  // Categorias
+  for (const it of STRUCTURE) {
+    if (!it.cat) continue;
+    const cat = await createWithRetry(() => guild.channels.create({
+      name: it.cat, type: ChannelType.GuildCategory,
+      permissionOverwrites: it.priv ? buildPrivOW(it.allow || adminRoles) : [],
+      reason: 'Setup .VK',
+    }), `cat ${it.cat}`);
+    if (cat) catMap[it.cat] = cat;
+  }
+
+  // Canais
+  for (const it of STRUCTURE) {
+    const cat = it.cat ? catMap[it.cat] : null;
+    if (it.cat && !cat) continue;
+    for (const d of it.channels) {
+      const type = d.type === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
+      let ow = [];
+      if (d.priv)       ow = buildPrivOW(d.allow || adminRoles);
+      else if (it.priv) ow = buildPrivOW(it.allow || adminRoles);
+      else if (d.ro)    ow = buildROOW();
+
+      const ch = await createWithRetry(() => guild.channels.create({
+        name: d.name, type, parent: cat?.id || null,
+        permissionOverwrites: ow, reason: 'Setup .VK',
+      }), `ch ${d.name}`);
+      if (ch) created[d.name] = ch;
+    }
+  }
+
+  await log(`✅ ${Object.keys(created).length} canais criados`);
+
+  // ═══════════════════════════════════════════════════════════
+  // 10. CONFIG (só salva os IDs, sem postar nada)
+  // ═══════════════════════════════════════════════════════════
+  await log('⚙️ Salvando configs...');
+
+  const cfg = await getConfig(guild.id);
+  Object.assign(cfg, {
+    server_type: 'organizacao',
+    admin_role: roles['• GERENTE 👑']?.id || '',
+    membro_role: roles['・gg/[nome da sua org]']?.id || '',
+    ticket_cargo: roles['SUPORTE']?.id || '',
+    autorole_role: roles['・gg/[nome da sua org]']?.id || '',
+    log_channel: created['🐧・log-apostas']?.id || '',
+    ticket_log_channel: created['🐧・log-suporte']?.id || '',
+    welcome_channel: created['🐧・avisos']?.id || '',
+    suggestion_channel: created['🐧・suporte']?.id || '',
+  });
+  await setConfig(guild.id, cfg);
+
+  await ffPatchConfig(guild.id, {
+    topic_channel_id: created['🐧・1x1-mob']?.id || null,
+    log_channel_id: created['🐧・log-apostas']?.id || null,
+    mediator_role_id: roles['・MEDIADOR']?.id || null,
+    analyst_role_id: roles['/👁️‍🗨️']?.id || null,
+    olhinho_role_id: roles['/👁️‍🗨️']?.id || null,
+    admin_role_id: roles['• GERENTE 👑']?.id || null,
+    pix_mediator_channel_id: created['🐧・pix-mediadores']?.id || null,
+    analyst_panel_channel_id: created['🐧・fila-analistas']?.id || null,
+    blacklist_channel_id: created['🐧・blacklist']?.id || null,
+    streamer_channel_id: created['🐧・fila-streamer']?.id || null,
+    value_options: FF_DEFAULT_VALUES,
+    mediator_fee: 0.15,
+    coin_prize: 1,
+    valor_minimo: 0.50,
+    valor_maximo: 1000,
+    auto_thread: true,
+    require_mediator_confirm: true,
+    block_blacklist: true,
+  });
+
+  // Mapear canais de aposta (sem postar)
+  const canalMap = {
+    '1x1_mobile': created['🐧・1x1-mob']?.id,
+    '2x2_mobile': created['🐧・2x2-mob']?.id,
+    '3x3_mobile': created['🐧・3x3-mob']?.id,
+    '4x4_mobile': created['🐧・4x4-mob']?.id,
+    '1x1_emu':    created['🐧・1x1-emu']?.id,
+    '2x2_emu':    created['🐧・2x2-emu']?.id,
+    '3x3_emu':    created['🐧・3x3-emo']?.id || created['🐧・3x3-emu']?.id,
+    '4x4_emu':    created['🐧・4x4-emu']?.id,
+    '2x2_misto':  created['🐧・2x2-misto']?.id,
+    '3x3_misto':  created['🐧・3x3-misto']?.id,
+    '4x4_misto':  created['🐧・4x4-misto']?.id,
+  };
+  for (const [formato, canalId] of Object.entries(canalMap)) {
+    if (canalId) await ffSetCanal(guild.id, formato, canalId).catch(() => {});
+  }
+
+  const duration = ((Date.now() - t0) / 1000).toFixed(1);
+  return { ok: true, duration, errors, stats: {
+    roles: Object.keys(roles).length,
+    categories: Object.values(catMap).length,
+    channels: Object.keys(created).length,
+  }};
+}
+
+// ═══════════════════════════════════════════════════════════
+// HANDLER — .VK
+// ═══════════════════════════════════════════════════════════
+client.on('messageCreate', async (m) => {
+  if (m.author.bot || !m.guild) return;
+  const content = (m.content || '').trim();
+  const lower = content.toLowerCase();
+  if (lower !== '.vk' && lower !== '.vk confirmar') return;
+
+  if (!isDeveloper(m.author.id)) {
+    await m.reply({ content: '❌ Apenas devs.' }).catch(() => {});
+    return;
+  }
+
+  if (lower === '.vk') {
+    const e = new EmbedBuilder()
+      .setTitle('⚠️ ATENÇÃO — .VK é destrutivo')
+      .setColor('#FF0000')
+      .setDescription(
+        `Você está prestes a rodar **.VK** em **${m.guild.name}**.\n\n` +
+        `**Vai DELETAR:**\n` +
+        `> 🗑️ TODOS os canais\n` +
+        `> 🗑️ TODAS as roles (exceto @everyone, bots e dev)\n\n` +
+        `**Vai CRIAR (só canais, SEM postar embeds):**\n` +
+        `> 🎭 ~25 roles\n` +
+        `> 📁 13 categorias\n` +
+        `> 📢 ~40 canais com 🐧\n` +
+        `> 📝 Filas, staff, streamers, análise\n` +
+        `> ⚙️ Config básica salva\n\n` +
+        `**Sem postar:** painéis, embeds de apostas, loja de coins\n` +
+        `_(depois use \`/apostas painel\` e \`/solicitar painel\` pra postar)_\n\n` +
+        `**Confirme:** \`.VK confirmar\`\n\n` +
+        `*Você tem 60 segundos.*`
+      )
+      .setTimestamp();
+    await m.reply({ embeds: [e] }).catch(() => {});
+    setTimeout(() => m.delete().catch(() => {}), 60000);
+    return;
+  }
+
+  let progressMsg = null;
+  try { progressMsg = await m.reply({ content: '🏗️ Iniciando .VK...' }).catch(() => null); } catch {}
+  const logFn = async (msg) => { if (!progressMsg) return; try { await progressMsg.edit(`🏗️ **.VK rodando...**\n> ${msg}`); } catch {} };
+
+  try {
+    const result = await vkSetup(m.guild, logFn);
+    const e = new EmbedBuilder()
+      .setTitle('✅ .VK concluído!')
+      .setColor(result.errors.length ? '#FFA500' : '#22c55e')
+      .setDescription(
+        `**Org criada em ${m.guild.name}!**\n\n` +
+        `> ⏱️ Duração: **${result.duration}s**\n` +
+        `> 🎭 Roles: **${result.stats.roles}**\n` +
+        `> 📁 Categorias: **${result.stats.categories}**\n` +
+        `> 📢 Canais: **${result.stats.channels}**\n` +
+        `> ⚠️ Avisos: **${result.errors.length}**\n\n` +
+        `**Nenhum embed foi postado.** Use:\n` +
+        `> \`/apostas painel\` — configurar e postar apostas\n` +
+        `> \`/config ticket\` — postar painéis de ticket\n` +
+        `> \`/config streamer\` — postar painel de streamers\n` +
+        `> \`/solicitar painel ticket\` / \`streamer\` — postar manualmente`
+      )
+      .setFooter({ text: 'Raposa Apostas • .VK' })
+      .setTimestamp();
+
+    if (result.errors.length) {
+      e.addFields({ name: '⚠️ Avisos', value: result.errors.slice(0, 8).map(x => `• ${x}`).join('\n').substring(0, 1000) });
+    }
+
+    if (progressMsg) await progressMsg.edit({ content: null, embeds: [e] }).catch(() => {});
+    else await m.reply({ embeds: [e] }).catch(() => {});
+  } catch (err) {
+    console.error('[.VK]', err);
+    const e = new EmbedBuilder().setTitle('❌ Falha no .VK').setColor('#FF0000')
+      .setDescription(`\`\`\`\n${err.message.substring(0, 1800)}\n\`\`\``);
+    if (progressMsg) await progressMsg.edit({ content: null, embeds: [e] }).catch(() => {});
+    else await m.reply({ embeds: [e] }).catch(() => {});
+  }
+});
+// ═══════════════════════════════════════════════════════════
 // [ADDON] /enviar — say & embed
 // ═══════════════════════════════════════════════════════════
 

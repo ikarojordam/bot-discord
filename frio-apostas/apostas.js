@@ -3975,7 +3975,118 @@ async function ticketBlocksPanel(guildId, panelId) {
     )],
   };
 }
+// ═══════════════════════════════════════════════════════════
+// MENUS CONFIG — TICKET (faltaram na PARTE 4)
+// ═══════════════════════════════════════════════════════════
 
+async function buildConfigTicketMenu(guildId) {
+  const panels = await getTicketPanels(guildId);
+  const postados = panels.filter(p => p.canal_id && p.mensagem_id).length;
+  const totalTipos = panels.reduce((a, p) => a + (p.tipos?.length || 0), 0);
+
+  let abertos = 0;
+  try {
+    const { count } = await supabase.from('ticket_data')
+      .select('id', { count: 'exact', head: true })
+      .eq('guild_id', guildId).is('closed_at', null);
+    abertos = count || 0;
+  } catch {}
+
+  const e = new EmbedBuilder()
+    .setTitle('⚙️ Configuração — Tickets')
+    .setColor('#9B59B6')
+    .setDescription(
+      `**Central de configuração.**\n\n` +
+      `> 🎫 **Painéis:** \`${panels.length}/${MAX_TICKET_PANELS}\`\n` +
+      `> 📢 **Postados:** \`${postados}\`\n` +
+      `> 🎯 **Tipos totais:** \`${totalTipos}\`\n` +
+      `> 📬 **Abertos agora:** \`${abertos}\`\n\n` +
+      `⚡ **Auto-refresh ativo.**`
+    )
+    .setFooter({ text: 'Raposa Apostas • Config Ticket' })
+    .setTimestamp();
+
+  return {
+    embeds: [e],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('cfgtkt:panels').setLabel('Gerenciar Painéis').setEmoji('📋').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('cfgtkt:create').setLabel('Criar Novo').setEmoji('➕').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cfgtkt:stats').setLabel('Estatísticas').setEmoji('📊').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('cfgtkt:refresh').setLabel('Force Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+async function buildConfigTicketPanelsList(guildId) {
+  const panels = await getTicketPanels(guildId);
+  const desc = panels.length
+    ? panels.slice(0, 10).map(p =>
+        `**#${p.id} — ${p.nome}**\n` +
+        `> 🎯 Tipos: \`${p.tipos?.length || 0}\` • 📢 ${p.canal_id ? `<#${p.canal_id}>` : '*não postado*'}`
+      ).join('\n\n')
+    : '*Nenhum painel criado ainda.*';
+
+  const e = new EmbedBuilder()
+    .setTitle('📋 Painéis de Ticket')
+    .setColor('#9B59B6')
+    .setDescription(desc)
+    .setFooter({ text: `${panels.length}/${MAX_TICKET_PANELS}` })
+    .setTimestamp();
+
+  const rows = [];
+  if (panels.length) {
+    const menu = new StringSelectMenuBuilder().setCustomId('cfgtkt:pick_panel').setPlaceholder('🎫 Escolher painel');
+    for (const p of panels.slice(0, 25)) {
+      menu.addOptions({
+        label: `#${p.id} — ${p.nome}`.slice(0, 90),
+        value: String(p.id),
+        description: `${p.tipos?.length || 0} tipos • ${p.canal_id ? '✅ postado' : '❌ não postado'}`,
+      });
+    }
+    rows.push(new ActionRowBuilder().addComponents(menu));
+  }
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('cfgtkt:create').setLabel('Criar Novo').setEmoji('➕').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('cfgtkt:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+  ));
+  return { embeds: [e], components: rows };
+}
+
+async function buildTicketStats(guildId) {
+  const [open, closed, total, ratings] = await Promise.allSettled([
+    supabase.from('ticket_data').select('id', { count: 'exact', head: true }).eq('guild_id', guildId).is('closed_at', null),
+    supabase.from('ticket_data').select('id', { count: 'exact', head: true }).eq('guild_id', guildId).not('closed_at', 'is', null),
+    supabase.from('ticket_data').select('id', { count: 'exact', head: true }).eq('guild_id', guildId),
+    supabase.from('ticket_ratings').select('rating').eq('guild_id', guildId).limit(500),
+  ]);
+  const openN = open.status === 'fulfilled' ? (open.value.count || 0) : 0;
+  const closedN = closed.status === 'fulfilled' ? (closed.value.count || 0) : 0;
+  const totalN = total.status === 'fulfilled' ? (total.value.count || 0) : 0;
+  const ratingsData = ratings.status === 'fulfilled' ? (ratings.value.data || []) : [];
+  const avg = ratingsData.length
+    ? (ratingsData.reduce((a, r) => a + Number(r.rating || 0), 0) / ratingsData.length).toFixed(2)
+    : '—';
+
+  const e = new EmbedBuilder()
+    .setTitle('📊 Estatísticas de Tickets')
+    .setColor('#9B59B6')
+    .addFields(
+      { name: '🟢 Abertos', value: `\`${openN}\``, inline: true },
+      { name: '🔴 Fechados', value: `\`${closedN}\``, inline: true },
+      { name: '📋 Total', value: `\`${totalN}\``, inline: true },
+      { name: '⭐ Média', value: `\`${avg}\` (${ratingsData.length})`, inline: true },
+    )
+    .setTimestamp();
+
+  return {
+    embeds: [e],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('cfgtkt:menu').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
 // ═══════════════════════════════════════════════════════════
 // AUTOMAÇÕES
 // ═══════════════════════════════════════════════════════════

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0b12">
+<title>Criar conta — Frio Panel</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/auth.css?v=1">
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="auth-body">
+
+<div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+
+<header class="auth-top">
+  <a href="/" class="auth-top-brand">
+    <img src="/assets/logo.png" alt="Frio Panel">
+    <span>Frio Panel</span>
+  </a>
+  <a href="/login" class="auth-top-link">
+    Já tenho conta <i data-lucide="arrow-right"></i>
+  </a>
+</header>
+
+<main class="auth-shell">
+  <!-- Lado esquerdo (branding) -->
+  <aside class="auth-aside">
+    <span class="auth-pill">
+      <i data-lucide="user-plus"></i>
+      <span>Cadastro gratuito</span>
+    </span>
+
+    <h2>Crie sua conta no <span class="grad">Frio Panel</span></h2>
+    <p class="auth-aside-sub">
+      Cadastre-se, confirme o e-mail e aguarde a aprovação do desenvolvedor
+      para liberar o acesso ao painel.
+    </p>
+
+    <div class="auth-steps">
+      <div class="auth-step">
+        <div class="auth-step-num">1</div>
+        <div>
+          <h4>Cadastre-se</h4>
+          <p>Preencha e-mail, senha e seu ID do Discord.</p>
+        </div>
+      </div>
+      <div class="auth-step">
+        <div class="auth-step-num">2</div>
+        <div>
+          <h4>Confirme o e-mail</h4>
+          <p>Verifique sua caixa de entrada.</p>
+        </div>
+      </div>
+      <div class="auth-step">
+        <div class="auth-step-num">3</div>
+        <div>
+          <h4>Aguarde aprovação</h4>
+          <p>O desenvolvedor libera sua conta.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-note">
+      <i data-lucide="info"></i>
+      <p>Não usamos login por Discord. Seu ID é usado apenas para vincular servidores depois.</p>
+    </div>
+  </aside>
+
+  <!-- Card do formulário -->
+  <section class="auth-card">
+    <div class="auth-card-head">
+      <h1>Criar conta</h1>
+      <p class="auth-sub">Preencha os dados abaixo.</p>
+    </div>
+
+    <form id="registerForm" novalidate autocomplete="on">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <div class="input-wrap">
+          <i data-lucide="mail"></i>
+          <input type="email" id="email" autocomplete="email" inputmode="email"
+                 placeholder="voce@exemplo.com" required maxlength="254">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="username">Nome de usuário <span class="opt">(opcional)</span></label>
+        <div class="input-wrap">
+          <i data-lucide="user"></i>
+          <input type="text" id="username" autocomplete="nickname"
+                 placeholder="Seu nome" maxlength="40">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="discordId">
+          ID do Discord <span class="req">obrigatório</span>
+        </label>
+        <div class="input-wrap">
+          <i data-lucide="message-circle"></i>
+          <input type="text" id="discordId"
+                 inputmode="numeric" autocomplete="off"
+                 placeholder="Ex: 123456789012345678"
+                 pattern="\d{15,25}" required maxlength="25">
+        </div>
+        <p class="field-hint">
+          Discord → <strong>Configurações</strong> → <strong>Avançado</strong> →
+          ative <strong>Modo Desenvolvedor</strong>. Depois clique com o botão direito
+          no seu nome e escolha <strong>Copiar ID</strong>.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="password">
+          Senha <span class="req">mín. 8 caracteres</span>
+        </label>
+        <div class="input-wrap">
+          <i data-lucide="lock"></i>
+          <input type="password" id="password" autocomplete="new-password"
+                 placeholder="••••••••" required minlength="8" maxlength="128">
+          <button type="button" class="btn-eye" id="togglePw1" aria-label="Mostrar senha">
+            <i data-lucide="eye"></i>
+          </button>
+        </div>
+        <div id="strengthBar" class="strength-bar" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div id="strengthLabel" class="strength-label"></div>
+      </div>
+
+      <div class="field">
+        <label for="confirm">Confirmar senha</label>
+        <div class="input-wrap">
+          <i data-lucide="lock"></i>
+          <input type="password" id="confirm" autocomplete="new-password"
+                 placeholder="••••••••" required minlength="8" maxlength="128">
+          <button type="button" class="btn-eye" id="togglePw2" aria-label="Mostrar senha">
+            <i data-lucide="eye"></i>
+          </button>
+        </div>
+        <div id="matchLabel" class="strength-label"></div>
+      </div>
+
+      <label class="check accept">
+        <input type="checkbox" id="acceptTerms">
+        <span class="check-box"></span>
+        <span class="check-txt">
+          Li e aceito os <a href="/terms" target="_blank" rel="noopener">Termos de Uso</a>
+          e a <a href="/privacy" target="_blank" rel="noopener">Política de Privacidade</a>.
+          Tenho no mínimo 13 anos.
+        </span>
+      </label>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="btnRegister">
+        <i data-lucide="user-plus"></i>
+        <span id="btnRegisterText">Criar minha conta</span>
+      </button>
+
+      <div id="formMsg" class="msg" role="alert" aria-live="polite"></div>
+    </form>
+
+    <div class="auth-divider"><span>ou</span></div>
+
+    <a href="/login" class="btn btn-ghost btn-block">
+      <i data-lucide="log-in"></i>
+      Já tenho conta — entrar
+    </a>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- Modal: sucesso -->
+<div id="modalSuccess" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-box modal-center">
+    <div class="modal-icon-big success">
+      <i data-lucide="mail-check"></i>
+    </div>
+    <h2>Conta criada!</h2>
+    <p class="modal-sub">
+      Enviamos um link de confirmação para<br>
+      <strong id="successEmail">seu e-mail</strong>.<br><br>
+      Depois de confirmar, aguarde a <strong>aprovação do desenvolvedor</strong>
+      para liberar o acesso ao painel.
+    </p>
+    <div class="modal-btns center">
+      <a href="/login" class="btn btn-primary">
+        <i data-lucide="log-in"></i>
+        Ir para o login
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  if (window.lucide) { try { window.lucide.createIcons(); } catch (e) {} }
+
+  const $ = (id) => document.getElementById(id);
+
+  function setMsg(el, text, type = 'error') {
+    if (!el) return;
+    if (!text) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.textContent = text;
+    el.className = `msg ${type}`;
+    el.style.display = 'block';
+  }
+
+  let _toastT = null;
+  function toast(text, type = 'ok') {
+    const t = $('toast');
+    if (!t) return;
+    t.textContent = text;
+    t.className = `toast ${type} active`;
+    clearTimeout(_toastT);
+    _toastT = setTimeout(() => t.classList.remove('active'), 3200);
+  }
+
+  function getCookie(name) {
+    const m = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[2]) : null;
+  }
+
+  async function api(path, opts = {}) {
+    const method = (opts.method || 'GET').toUpperCase();
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) {
+      const csrf = getCookie('frio_csrf');
+      if (csrf) headers['x-csrf-token'] = csrf;
+    }
+    try {
+      const r = await fetch(path, { credentials: 'include', ...opts, method, headers });
+      let data;
+      try { data = await r.json(); } catch { data = { ok: false, error: 'Resposta inválida.' }; }
+      if (!r.ok && typeof data === 'object' && data && data.ok === undefined) data.ok = false;
+      return { status: r.status, ...data };
+    } catch {
+      return { ok: false, error: 'Erro de conexão.' };
+    }
+  }
+
+  // ═══ Toggle senhas ═══
+  function bindToggle(btnId, inputId) {
+    const btn = $(btnId);
+    const inp = $(inputId);
+    if (!btn || !inp) return;
+    btn.addEventListener('click', () => {
+      const isPw = inp.type === 'password';
+      inp.type = isPw ? 'text' : 'password';
+      btn.innerHTML = `<i data-lucide="${isPw ? 'eye-off' : 'eye'}"></i>`;
+      if (window.lucide) try { window.lucide.createIcons(); } catch {}
+    });
+  }
+  bindToggle('togglePw1', 'password');
+  bindToggle('togglePw2', 'confirm');
+
+  // ═══ Força da senha ═══
+  $('password')?.addEventListener('input', () => {
+    const v = $('password').value;
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (v.length >= 12) score++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+    if (/\d/.test(v) && /[^A-Za-z0-9]/.test(v)) score++;
+
+    const bar = $('strengthBar');
+    bar.className = 'strength-bar';
+    if (score) bar.classList.add('s' + score);
+
+    const labels = ['', 'Fraca', 'Média', 'Boa', 'Forte'];
+    const colors = ['', '#ef4444', '#f59e0b', '#3b82f6', '#22c55e'];
+    const lab = $('strengthLabel');
+    if (lab) {
+      lab.textContent = v ? labels[score] || '' : '';
+      lab.style.color = colors[score] || '';
+    }
+    checkMatch();
+  });
+
+  $('confirm')?.addEventListener('input', checkMatch);
+
+  function checkMatch() {
+    const p1 = $('password').value, p2 = $('confirm').value;
+    const lab = $('matchLabel');
+    if (!lab) return;
+    if (!p2) { lab.textContent = ''; return; }
+    if (p1 === p2 && p2.length >= 8) { lab.textContent = 'As senhas coincidem'; lab.style.color = '#22c55e'; }
+    else if (p1 !== p2) { lab.textContent = 'As senhas não coincidem'; lab.style.color = '#ef4444'; }
+    else { lab.textContent = ''; }
+  }
+
+  // ═══ Submit ═══
+  $('registerForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setMsg($('formMsg'), '');
+
+    const email = ($('email').value || '').trim();
+    const username = ($('username').value || '').trim();
+    const discordId = ($('discordId').value || '').trim();
+    const password = $('password').value || '';
+    const confirm = $('confirm').value || '';
+
+    if (!email) return setMsg($('formMsg'), 'Informe seu e-mail.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setMsg($('formMsg'), 'E-mail inválido.');
+    if (!/^\d{15,25}$/.test(discordId)) return setMsg($('formMsg'), 'ID do Discord inválido (15 a 25 dígitos).');
+    if (!password || password.length < 8) return setMsg($('formMsg'), 'A senha deve ter pelo menos 8 caracteres.');
+    if (password !== confirm) return setMsg($('formMsg'), 'As senhas não coincidem.');
+    if (!$('acceptTerms').checked) return setMsg($('formMsg'), 'Você precisa aceitar os Termos e a Política de Privacidade.');
+
+    const btn = $('btnRegister');
+    const label = $('btnRegisterText');
+    btn.disabled = true;
+    label.textContent = 'Criando conta...';
+
+    const r = await api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password,
+        discord_id: discordId,
+        username: username || undefined,
+      }),
+    });
+
+    if (!r.ok) {
+      let msg = r.error || 'Não foi possível criar a conta.';
+      if (r.code === 'DISCORD_ID_TAKEN' || /discord.*cadastrad/i.test(msg)) {
+        msg = 'Este ID do Discord já está vinculado a outra conta.';
+      } else if (r.code === 'PENDING_EXISTS' || /já existe/i.test(msg)) {
+        msg = 'Já existe um cadastro com este e-mail. Confirme o e-mail ou fale com o suporte.';
+      } else if (/já cadastrado/i.test(msg)) {
+        msg = 'Este e-mail já está cadastrado.';
+      }
+      setMsg($('formMsg'), msg);
+      btn.disabled = false;
+      label.textContent = 'Criar minha conta';
+      return;
+    }
+
+    $('successEmail').textContent = email;
+    $('modalSuccess').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    toast('Conta criada!');
+  });
+})();
+</script>
+</body>
+</html>

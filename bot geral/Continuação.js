@@ -8486,3 +8486,504 @@ async function devPanelFFStreamer(guildId) {
 // ═══════════════════════════════════════════════════════════
 // FIM DA PARTE 7/12 — v6.8.0
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// [PARTE 8.5/12] ROLETA DE PRÊMIOS
+// Painel público + botão Girar + prêmios editáveis + add/remove giros/coins
+// ═══════════════════════════════════════════════════════════
+
+// ─────────────── DB HELPERS ───────────────
+async function roletaGetPrizes(gid, onlyActive = false) {
+  try {
+    let q = supabase.from('ff_roulette_prizes').select('*').eq('guild_id', gid).order('weight', { ascending: false });
+    if (onlyActive) q = q.eq('active', true);
+    const { data } = await q;
+    return data || [];
+  } catch { return []; }
+}
+
+async function roletaGetPrize(gid, prizeId) {
+  const { data } = await supabase.from('ff_roulette_prizes').select('*').eq('guild_id', gid).eq('id', prizeId).maybeSingle();
+  return data;
+}
+
+async function roletaCreatePrize(gid, opts) {
+  const { data, error } = await supabase.from('ff_roulette_prizes').insert({
+    guild_id: gid,
+    name: safeStr(opts.name, 80) || 'Prêmio',
+    emoji: safeStr(opts.emoji, 8) || '🎁',
+    type: ['nothing', 'coins', 'spins', 'custom'].includes(opts.type) ? opts.type : 'nothing',
+    value: Number(opts.value) || 0,
+    weight: Math.max(1, Number(opts.weight) || 10),
+    color: safeColor(opts.color, '#FF0000'),
+    active: opts.active !== false,
+  }).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function roletaUpdatePrize(gid, prizeId, patch) {
+  const clean = {};
+  if (patch.name !== undefined) clean.name = safeStr(patch.name, 80);
+  if (patch.emoji !== undefined) clean.emoji = safeStr(patch.emoji, 8) || '🎁';
+  if (patch.type !== undefined) clean.type = ['nothing', 'coins', 'spins', 'custom'].includes(patch.type) ? patch.type : 'nothing';
+  if (patch.value !== undefined) clean.value = Number(patch.value) || 0;
+  if (patch.weight !== undefined) clean.weight = Math.max(1, Number(patch.weight) || 10);
+  if (patch.color !== undefined) clean.color = safeColor(patch.color, '#FF0000');
+  if (patch.active !== undefined) clean.active = !!patch.active;
+  const { error } = await supabase.from('ff_roulette_prizes').update(clean).eq('guild_id', gid).eq('id', prizeId);
+  if (error) throw new Error(error.message);
+  return true;
+}
+
+async function roletaDeletePrize(gid, prizeId) {
+  await supabase.from('ff_roulette_prizes').delete().eq('guild_id', gid).eq('id', prizeId);
+}
+
+async function roletaGetSpins(gid, uid) {
+  const { data } = await supabase.from('ff_roulette_spins').select('*').eq('guild_id', gid).eq('user_id', uid).maybeSingle();
+  return data || { guild_id: gid, user_id: uid, spins: 0, total_spun: 0 };
+}
+
+async function roletaAddSpins(gid, uid, qty) {
+  const cur = await roletaGetSpins(gid, uid);
+  const newSpins = Math.max(0, Number(cur.spins || 0) + Number(qty));
+  await supabase.from('ff_roulette_spins').upsert({
+    guild_id: gid, user_id: uid,
+    spins: newSpins,
+    total_spun: Number(cur.total_spun || 0),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'guild_id,user_id' });
+  return newSpins;
+}
+
+async function roletaUseSpin(gid, uid) {
+  const cur = await roletaGetSpins(gid, uid);
+  if (Number(cur.spins || 0) <= 0) return { ok: false, error: 'Sem giros disponíveis.' };
+  await supabase.from('ff_roulette_spins').update({
+    spins: Number(cur.spins) - 1,
+    total_spun: Number(cur.total_spun || 0) + 1,
+    updated_at: new Date().toISOString(),
+  }).eq('guild_id', gid).eq('user_id', uid);
+  return { ok: true, remaining: Number(cur.spins) - 1 };
+}
+
+async function roletaAddCoins(gid, uid, qty) {
+  try {
+    await supabase.from('ff_players').upsert({ guild_id: gid, user_id: uid, coins: 0 }, { onConflict: 'guild_id,user_id', ignoreDuplicates: true });
+  } catch {}
+  const { data } = await supabase.from('ff_players').select('coins').eq('guild_id', gid).eq('user_id', uid).maybeSingle();
+  const novo = Math.max(0, Number(data?.coins || 0) + Number(qty));
+  await supabase.from('ff_players').update({ coins: novo }).eq('guild_id', gid).eq('user_id', uid);
+  return novo;
+}
+
+async function roletaLogHistory(gid, uid, prize) {
+  try {
+    await supabase.from('ff_roulette_history').insert({
+      guild_id: gid, user_id: uid,
+      prize_id: prize?.id || null,
+      prize_name: prize?.name || '?',
+    });
+  } catch {}
+}
+
+function roletaSpin(prizes) {
+  const ativos = prizes.filter(p => p.active);
+  if (!ativos.length) return null;
+  const total = ativos.reduce((a, p) => a + Number(p.weight || 1), 0);
+  let r = Math.random() * total;
+  for (const p of ativos) {
+    r -= Number(p.weight || 1);
+    if (r <= 0) return p;
+  }
+  return ativos[ativos.length - 1];
+}
+
+// ─────────────── EMBEDS ───────────────
+function roletaBuildPublicEmbed(prizes, extras = {}) {
+  const ativos = prizes.filter(p => p.active);
+  const totalWeight = ativos.reduce((a, x) => a + Number(x.weight || 1), 0);
+  const linhas = ativos.length
+    ? ativos.map(p => {
+        let val = '';
+        if (p.type === 'coins') val = ` — 🪙 ${p.value} coins`;
+        if (p.type === 'spins') val = ` — 🎡 ${p.value} giro(s)`;
+        const chance = totalWeight ? ((Number(p.weight) / totalWeight) * 100).toFixed(1) : '0';
+        return `${p.emoji || '🎁'} **${p.name}**${val}\n> 🎯 Chance: **${chance}%**`;
+      }).join('\n\n')
+    : '*Nenhum prêmio configurado ainda.*';
+
+  return new EmbedBuilder()
+    .setTitle(extras.title || '🎡 Roleta de Prêmios')
+    .setColor('#FF0000')
+    .setDescription(
+      `${extras.desc || 'Clique em **Girar** pra tentar a sorte!'}\n\n` +
+      `> 🎟️ **Seus giros:** ${extras.userSpins ?? 0}\n` +
+      `> 🎡 **Total girado:** ${extras.userTotal ?? 0}`
+    )
+    .addFields({ name: '🏆 Prêmios disponíveis', value: linhas.slice(0, 1024), inline: false })
+    .setFooter({ text: 'Frio Bot • Roleta' })
+    .setTimestamp();
+}
+
+function roletaBuildPublicButtons() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('roleta:girar').setLabel('Girar').setEmoji('🎡').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('roleta:meus_giros').setLabel('Meus giros').setEmoji('🎟️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('roleta:historico').setLabel('Histórico').setEmoji('📜').setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
+async function roletaPostPanel(g, channelId) {
+  try {
+    const ch = g.channels.cache.get(channelId) || await g.channels.fetch(channelId).catch(() => null);
+    if (!ch?.isTextBased?.()) return { ok: false, error: 'Canal inválido.' };
+    const prizes = await roletaGetPrizes(g.id);
+    const e = roletaBuildPublicEmbed(prizes, { userSpins: 0, userTotal: 0 });
+    const msg = await ch.send({ embeds: [e], components: roletaBuildPublicButtons() }).catch(() => null);
+    if (!msg) return { ok: false, error: 'Falha ao enviar.' };
+    await ffPatchConfig(g.id, { roulette_channel_id: ch.id, roulette_embed_id: msg.id });
+    return { ok: true, channelId: ch.id, messageId: msg.id };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// ─────────────── PAINÉIS ───────────────
+async function roletaConfigPanel(gid) {
+  const prizes = await roletaGetPrizes(gid);
+  const ativos = prizes.filter(p => p.active).length;
+  return {
+    embeds: [new EmbedBuilder().setTitle('⚙️ Config — Roleta').setColor('#FF0000')
+      .setDescription(`**Prêmios:** ${ativos}/${prizes.length} ativos\n\n> Adicione, edite ou remova prêmios.\n> **Peso maior = mais chance.**`)
+      .setFooter({ text: 'Frio Bot • Roleta' })],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('roleta_cfg:add_prize').setLabel('Adicionar prêmio').setEmoji('➕').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('roleta_cfg:list_prizes').setLabel('Listar').setEmoji('📋').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('roleta_cfg:post_panel').setLabel('Postar painel').setEmoji('📢').setStyle(ButtonStyle.Success),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('roleta_cfg:manage_users').setLabel('Gerenciar users').setEmoji('👥').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('roleta_cfg:history').setLabel('Histórico').setEmoji('📜').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('roleta_cfg:reset_defaults').setLabel('Prêmios padrão').setEmoji('📦').setStyle(ButtonStyle.Secondary),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('roleta_cfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+async function roletaPrizeListPanel(gid, page = 0) {
+  const prizes = await roletaGetPrizes(gid);
+  const perPage = 8;
+  const total = prizes.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const start = page * perPage;
+  const slice = prizes.slice(start, start + perPage);
+  const desc = slice.length
+    ? slice.map((p, i) => {
+        const pos = start + i + 1;
+        let val = '';
+        if (p.type === 'coins') val = ` (🪙 ${p.value})`;
+        if (p.type === 'spins') val = ` (🎡 ${p.value})`;
+        return `**${pos}.** ${p.emoji || '🎁'} **${p.name}**${val}\n> ⚖️ Peso: \`${p.weight}\` • ${p.active ? '🟢' : '🔴'}`;
+      }).join('\n\n')
+    : '*Nenhum prêmio cadastrado.*';
+  const e = new EmbedBuilder().setTitle('📋 Prêmios da Roleta').setColor('#FF0000')
+    .setDescription(desc.slice(0, 4000))
+    .setFooter({ text: `Página ${page + 1}/${totalPages} • ${total} prêmios` });
+  const nav = new ActionRowBuilder();
+  if (page > 0) nav.addComponents(new ButtonBuilder().setCustomId(`roleta_cfg:page:${page - 1}`).setLabel('Anterior').setEmoji('⬅️').setStyle(ButtonStyle.Secondary));
+  if (page < totalPages - 1) nav.addComponents(new ButtonBuilder().setCustomId(`roleta_cfg:page:${page + 1}`).setLabel('Próximo').setEmoji('➡️').setStyle(ButtonStyle.Secondary));
+  nav.addComponents(
+    new ButtonBuilder().setCustomId('roleta_cfg:edit_pick').setLabel('Editar').setEmoji('✏️').setStyle(ButtonStyle.Primary).setDisabled(!slice.length),
+    new ButtonBuilder().setCustomId('roleta_cfg:del_pick').setLabel('Excluir').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!slice.length),
+    new ButtonBuilder().setCustomId('roleta_cfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+  );
+  return { embeds: [e], components: [nav] };
+}
+
+async function roletaManageUsersPanel() {
+  return {
+    embeds: [new EmbedBuilder().setTitle('👥 Gerenciar Giros / Coins').setColor('#FF0000').setDescription('Escolha uma ação:')],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('roleta_usr:add_spins').setLabel('Adicionar giros').setEmoji('🎟️').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('roleta_usr:remove_spins').setLabel('Remover giros').setEmoji('➖').setStyle(ButtonStyle.Danger),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('roleta_usr:add_coins').setLabel('Adicionar coins').setEmoji('🪙').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('roleta_usr:remove_coins').setLabel('Remover coins').setEmoji('💸').setStyle(ButtonStyle.Danger),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('roleta_cfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+async function roletaHistoryPanel(gid, page = 0) {
+  const perPage = 15;
+  const { data } = await supabase.from('ff_roulette_history')
+    .select('*').eq('guild_id', gid).order('spun_at', { ascending: false })
+    .range(page * perPage, (page + 1) * perPage - 1);
+  const e = new EmbedBuilder().setTitle('📜 Histórico da Roleta').setColor('#FF0000')
+    .setDescription(data?.length
+      ? data.map(h => `• <@${h.user_id}> ganhou **${h.prize_name}** <t:${Math.floor(new Date(h.spun_at).getTime() / 1000)}:R>`).join('\n')
+      : '*Nenhum giro registrado.*')
+    .setFooter({ text: `Página ${page + 1}` });
+  const nav = new ActionRowBuilder();
+  if (page > 0) nav.addComponents(new ButtonBuilder().setCustomId(`roleta_cfg:hpage:${page - 1}`).setLabel('Anterior').setEmoji('⬅️').setStyle(ButtonStyle.Secondary));
+  if (data?.length === perPage) nav.addComponents(new ButtonBuilder().setCustomId(`roleta_cfg:hpage:${page + 1}`).setLabel('Próximo').setEmoji('➡️').setStyle(ButtonStyle.Secondary));
+  nav.addComponents(new ButtonBuilder().setCustomId('roleta_cfg:back').setLabel('Voltar').setEmoji('↩️').setStyle(ButtonStyle.Secondary));
+  return { embeds: [e], components: [nav] };
+}
+
+// ─────────────── AÇÃO DE GIRAR ───────────────
+async function roletaGirar(i) {
+  await i.deferReply({ flags: i.isButton() ? undefined : EPHEMERAL });
+  const gid = i.guild.id, uid = i.user.id;
+  const prizes = await roletaGetPrizes(gid, true);
+  if (!prizes.length) return i.editReply({ content: '❌ Nenhum prêmio configurado.' });
+  const sp = await roletaGetSpins(gid, uid);
+  if (Number(sp.spins || 0) <= 0) return i.editReply({ content: '❌ Você não tem giros. Peça pra staff.' });
+  const use = await roletaUseSpin(gid, uid);
+  if (!use.ok) return i.editReply({ content: `❌ ${use.error}` });
+  const prize = roletaSpin(prizes);
+  let detalhe = '';
+  if (prize.type === 'coins' && Number(prize.value) > 0) {
+    const novo = await roletaAddCoins(gid, uid, Number(prize.value));
+    await logCoins(i.guild, uid, Number(prize.value), `[ROLETA] Prêmio: ${prize.name}`, null);
+    detalhe = `\n> 🪙 Ganhou **${prize.value} coins** (saldo: ${novo})`;
+  } else if (prize.type === 'spins' && Number(prize.value) > 0) {
+    const novo = await roletaAddSpins(gid, uid, Number(prize.value));
+    detalhe = `\n> 🎡 Ganhou **${prize.value} giro(s)** (saldo: ${novo})`;
+  } else if (prize.type === 'custom' && prize.value) {
+    detalhe = `\n> 🎁 Prêmio: **${prize.value}**`;
+  } else {
+    detalhe = `\n> 💤 Não foi dessa vez.`;
+  }
+  await roletaLogHistory(gid, uid, prize);
+  const e = new EmbedBuilder().setTitle('🎡 Roleta de Prêmios').setColor(prize.color || '#FF0000')
+    .setDescription(`${prize.emoji || '🎁'} **${prize.name}**${detalhe}\n\n> 🎟️ Giros restantes: **${use.remaining}**`)
+    .setFooter({ text: `${i.user.username} • ${new Date().toLocaleString('pt-BR')}` }).setTimestamp();
+  return i.editReply({ embeds: [e] });
+}
+
+// ─────────────── SLASH + BOTÕES ───────────────
+client.on('interactionCreate', async (i) => {
+  if (!i.customId && !i.isChatInputCommand()) return;
+  if (!i.guild) return;
+
+  try {
+    // /roleta ...
+    if (i.isChatInputCommand() && i.commandName === 'roleta') {
+      const sub = i.options.getSubcommand();
+
+      if (sub === 'painel') {
+        if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
+        return i.reply({ ...(await roletaConfigPanel(i.guild.id)), flags: EPHEMERAL });
+      }
+      if (sub === 'girar') return roletaGirar(i);
+      if (sub === 'ver') {
+        const user = i.options.getUser('user') || i.user;
+        const sp = await roletaGetSpins(i.guild.id, user.id);
+        const { data: p } = await supabase.from('ff_players').select('coins').eq('guild_id', i.guild.id).eq('user_id', user.id).maybeSingle();
+        return i.reply({ embeds: [new EmbedBuilder().setTitle(`🎟️ ${user.username}`).setColor('#FF0000').setThumbnail(user.displayAvatarURL())
+          .addFields(
+            { name: '🎟️ Giros', value: `${sp.spins}`, inline: true },
+            { name: '🎡 Total girado', value: `${sp.total_spun}`, inline: true },
+            { name: '🪙 Coins', value: `${p?.coins || 0}`, inline: true },
+          )], flags: EPHEMERAL });
+      }
+      if (sub === 'giros') {
+        if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
+        const act = i.options.getString('acao');
+        const user = i.options.getUser('user');
+        const qty = i.options.getInteger('quantidade');
+        const novo = await roletaAddSpins(i.guild.id, user.id, act === 'add' ? qty : -qty);
+        return i.reply({ content: `✅ <@${user.id}> ${act === 'add' ? '+' : '-'}${qty} giros\n> 🎟️ Saldo: **${novo}**`, flags: EPHEMERAL });
+      }
+      if (sub === 'coins') {
+        if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌ Apenas admins.', flags: EPHEMERAL });
+        const act = i.options.getString('acao');
+        const user = i.options.getUser('user');
+        const qty = i.options.getInteger('quantidade');
+        const delta = act === 'add' ? qty : -qty;
+        const novo = await roletaAddCoins(i.guild.id, user.id, delta);
+        await logCoins(i.guild, user.id, delta, `[ADMIN] ${i.user.tag}`, i.user.id);
+        return i.reply({ content: `✅ <@${user.id}> ${act === 'add' ? '+' : '-'}${qty} coins\n> 🪙 Saldo: **${novo}**`, flags: EPHEMERAL });
+      }
+    }
+
+    // Botões públicos: roleta:xxx
+    if (i.customId?.startsWith('roleta:')) {
+      const action = i.customId.split(':')[1];
+      if (action === 'girar') return roletaGirar(i);
+      if (action === 'meus_giros') {
+        const sp = await roletaGetSpins(i.guild.id, i.user.id);
+        return i.reply({ embeds: [new EmbedBuilder().setTitle('🎟️ Meus Giros').setColor('#FF0000')
+          .setDescription(`> 🎟️ **Disponíveis:** ${sp.spins}\n> 🎡 **Total girado:** ${sp.total_spun}`)], flags: EPHEMERAL });
+      }
+      if (action === 'historico') return i.reply({ ...(await roletaHistoryPanel(i.guild.id, 0)), flags: EPHEMERAL });
+    }
+
+    // Botões admin: roleta_cfg:xxx
+    if (i.customId?.startsWith('roleta_cfg:')) {
+      if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+      const parts = i.customId.split(':');
+      const action = parts[1], arg = parts[2];
+
+      if (action === 'back') return i.update(await roletaConfigPanel(i.guild.id));
+      if (action === 'page') return i.update(await roletaPrizeListPanel(i.guild.id, parseInt(arg) || 0));
+      if (action === 'hpage') return i.update(await roletaHistoryPanel(i.guild.id, parseInt(arg) || 0));
+      if (action === 'list_prizes') return i.update(await roletaPrizeListPanel(i.guild.id, 0));
+      if (action === 'manage_users') return i.update(await roletaManageUsersPanel());
+      if (action === 'history') return i.update(await roletaHistoryPanel(i.guild.id, 0));
+
+      if (action === 'add_prize') {
+        const m = new ModalBuilder().setCustomId('roleta_modal:add_prize').setTitle('➕ Novo prêmio');
+        m.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji (ex: 🎁)').setStyle(TextInputStyle.Short).setValue('🎁').setRequired(false)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('Tipo (nothing/coins/spins/custom)').setStyle(TextInputStyle.Short).setValue('nothing').setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('value').setLabel('Valor (0 = nada)').setStyle(TextInputStyle.Short).setValue('0').setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('weight').setLabel('Peso (chance)').setStyle(TextInputStyle.Short).setValue('10').setRequired(true)),
+        );
+        return i.showModal(m);
+      }
+
+      if (action === 'edit_pick') {
+        const prizes = await roletaGetPrizes(i.guild.id);
+        if (!prizes.length) return i.reply({ content: '❌ Sem prêmios.', flags: EPHEMERAL });
+        const menu = new StringSelectMenuBuilder().setCustomId('roleta_edit:pick').setPlaceholder('Escolha um prêmio');
+        for (const p of prizes.slice(0, 25)) menu.addOptions({ label: `${p.emoji || '🎁'} ${p.name}`.slice(0, 90), value: String(p.id), description: `Peso ${p.weight} • ${p.type}` });
+        return i.reply({ embeds: [new EmbedBuilder().setTitle('✏️ Editar prêmio').setColor('#FF0000')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+      }
+
+      if (action === 'del_pick') {
+        const prizes = await roletaGetPrizes(i.guild.id);
+        if (!prizes.length) return i.reply({ content: '❌ Sem prêmios.', flags: EPHEMERAL });
+        const menu = new StringSelectMenuBuilder().setCustomId('roleta_del:pick').setPlaceholder('Excluir');
+        for (const p of prizes.slice(0, 25)) menu.addOptions({ label: `${p.emoji || '🎁'} ${p.name}`.slice(0, 90), value: String(p.id) });
+        return i.reply({ embeds: [new EmbedBuilder().setTitle('🗑️ Excluir prêmio').setColor('#FF0000')], components: [new ActionRowBuilder().addComponents(menu)], flags: EPHEMERAL });
+      }
+
+      if (action === 'post_panel') {
+        const r = await roletaPostPanel(i.guild, i.channel.id);
+        if (!r.ok) return i.reply({ content: `❌ ${r.error}`, flags: EPHEMERAL });
+        return i.reply({ content: `✅ Painel postado em <#${i.channel.id}>.`, flags: EPHEMERAL });
+      }
+
+      if (action === 'reset_defaults') {
+        await supabase.from('ff_roulette_prizes').delete().eq('guild_id', i.guild.id);
+        const defs = [
+          { name: 'Nada', emoji: '❌', type: 'nothing', value: 0, weight: 40 },
+          { name: '1 Coin', emoji: '🪙', type: 'coins', value: 1, weight: 25 },
+          { name: '5 Coins', emoji: '💰', type: 'coins', value: 5, weight: 15 },
+          { name: '10 Coins', emoji: '💎', type: 'coins', value: 10, weight: 10 },
+          { name: '1 Giro Extra', emoji: '🎡', type: 'spins', value: 1, weight: 7 },
+          { name: '50 Coins', emoji: '🏆', type: 'coins', value: 50, weight: 2 },
+          { name: '100 Coins JACKPOT', emoji: '🎰', type: 'coins', value: 100, weight: 1 },
+        ];
+        for (const d of defs) await roletaCreatePrize(i.guild.id, d);
+        return i.update(await roletaConfigPanel(i.guild.id));
+      }
+    }
+
+    // Botões admin: roleta_usr:xxx
+    if (i.customId?.startsWith('roleta_usr:')) {
+      if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+      const action = i.customId.split(':')[1];
+      const titles = { add_spins: '🎟️ Adicionar giros', remove_spins: '🎟️ Remover giros', add_coins: '🪙 Adicionar coins', remove_coins: '💸 Remover coins' };
+      const m = new ModalBuilder().setCustomId(`roleta_usr_modal:${action}`).setTitle(titles[action] || 'Ação');
+      m.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('ID do usuário').setStyle(TextInputStyle.Short).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('qty').setLabel('Quantidade').setStyle(TextInputStyle.Short).setRequired(true)),
+      );
+      return i.showModal(m);
+    }
+
+  } catch (err) {
+    console.error('[ROLETA]', err);
+    if (i.isRepliable() && !i.replied && !i.deferred) i.reply({ content: `❌ ${err.message}`, flags: EPHEMERAL }).catch(() => {});
+  }
+});
+
+// ─────────────── MODAIS ───────────────
+client.on('interactionCreate', async (i) => {
+  if (!i.isModalSubmit()) return;
+  if (!i.guild) return;
+  try {
+    if (i.customId === 'roleta_modal:add_prize') {
+      if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+      await roletaCreatePrize(i.guild.id, {
+        name: i.fields.getTextInputValue('name').trim(),
+        emoji: i.fields.getTextInputValue('emoji')?.trim() || '🎁',
+        type: i.fields.getTextInputValue('type')?.trim().toLowerCase() || 'nothing',
+        value: parseInt(i.fields.getTextInputValue('value')) || 0,
+        weight: parseInt(i.fields.getTextInputValue('weight')) || 10,
+      });
+      return i.reply({ ...(await roletaConfigPanel(i.guild.id)), flags: EPHEMERAL });
+    }
+
+    if (i.customId.startsWith('roleta_modal:edit_prize:')) {
+      if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+      const prizeId = i.customId.split(':')[2];
+      await roletaUpdatePrize(i.guild.id, prizeId, {
+        name: i.fields.getTextInputValue('name').trim(),
+        emoji: i.fields.getTextInputValue('emoji')?.trim() || '🎁',
+        type: i.fields.getTextInputValue('type')?.trim().toLowerCase() || 'nothing',
+        value: parseInt(i.fields.getTextInputValue('value')) || 0,
+        weight: parseInt(i.fields.getTextInputValue('weight')) || 10,
+      });
+      return i.reply({ content: '✅ Prêmio atualizado.', flags: EPHEMERAL });
+    }
+
+    if (i.customId.startsWith('roleta_usr_modal:')) {
+      if (!await isAdmin(i.user, i.guild)) return i.reply({ content: '❌', flags: EPHEMERAL });
+      const action = i.customId.split(':')[1];
+      const uid = i.fields.getTextInputValue('user_id').trim().replace(/[<@!>]/g, '');
+      const qty = parseInt(i.fields.getTextInputValue('qty')) || 0;
+      if (!/^\d{15,25}$/.test(uid)) return i.reply({ content: '❌ ID inválido.', flags: EPHEMERAL });
+
+      if (action === 'add_spins')    { const n = await roletaAddSpins(i.guild.id, uid, qty);  return i.reply({ content: `✅ <@${uid}> +${qty} giros • **${n}** restantes`, flags: EPHEMERAL }); }
+      if (action === 'remove_spins') { const n = await roletaAddSpins(i.guild.id, uid, -qty); return i.reply({ content: `✅ <@${uid}> -${qty} giros • **${n}** restantes`, flags: EPHEMERAL }); }
+      if (action === 'add_coins')    { const n = await roletaAddCoins(i.guild.id, uid, qty);  await logCoins(i.guild, uid, qty, `[ADMIN] ${i.user.tag}`, i.user.id); return i.reply({ content: `✅ <@${uid}> +${qty} coins • **${n}**`, flags: EPHEMERAL }); }
+      if (action === 'remove_coins') { const n = await roletaAddCoins(i.guild.id, uid, -qty); await logCoins(i.guild, uid, -qty, `[ADMIN] ${i.user.tag}`, i.user.id); return i.reply({ content: `✅ <@${uid}> -${qty} coins • **${n}**`, flags: EPHEMERAL }); }
+    }
+  } catch (err) { console.error('[ROLETA-MODAL]', err); }
+});
+
+// ─────────────── SELECTS ───────────────
+client.on('interactionCreate', async (i) => {
+  if (!i.isStringSelectMenu()) return;
+  if (!i.guild) return;
+  try {
+    if (i.customId === 'roleta_edit:pick') {
+      if (!await isAdmin(i.user, i.guild)) return;
+      const p = await roletaGetPrize(i.guild.id, i.values[0]);
+      if (!p) return i.reply({ content: '❌', flags: EPHEMERAL });
+      const m = new ModalBuilder().setCustomId(`roleta_modal:edit_prize:${p.id}`).setTitle('✏️ Editar prêmio');
+      m.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('name').setLabel('Nome').setStyle(TextInputStyle.Short).setValue(p.name).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji').setStyle(TextInputStyle.Short).setValue(p.emoji || '🎁').setRequired(false)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('type').setLabel('Tipo').setStyle(TextInputStyle.Short).setValue(p.type).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('value').setLabel('Valor').setStyle(TextInputStyle.Short).setValue(String(p.value || 0)).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('weight').setLabel('Peso').setStyle(TextInputStyle.Short).setValue(String(p.weight || 10)).setRequired(true)),
+      );
+      return i.showModal(m);
+    }
+    if (i.customId === 'roleta_del:pick') {
+      if (!await isAdmin(i.user, i.guild)) return;
+      await roletaDeletePrize(i.guild.id, i.values[0]);
+      return i.reply({ ...(await roletaPrizeListPanel(i.guild.id, 0)), flags: EPHEMERAL });
+    }
+  } catch (err) { console.error('[ROLETA-SELECT]', err); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// FIM DA PARTE 8.5/12
+// ═══════════════════════════════════════════════════════════

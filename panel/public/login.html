@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0b12">
+<title>Entrar — Frio Panel</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/auth.css?v=1">
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="auth-body">
+
+<div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+
+<header class="auth-top">
+  <a href="/" class="auth-top-brand">
+    <img src="/assets/logo.png" alt="Frio Panel">
+    <span>Frio Panel</span>
+  </a>
+  <a href="/register" class="auth-top-link">
+    Criar conta <i data-lucide="arrow-right"></i>
+  </a>
+</header>
+
+<main class="auth-shell">
+  <!-- Lado esquerdo (branding) -->
+  <aside class="auth-aside">
+    <span class="auth-pill">
+      <i data-lucide="shield-check"></i>
+      <span>Acesso seguro por e-mail</span>
+    </span>
+
+    <h2>Bem-vindo de volta ao <span class="grad">Frio Panel</span></h2>
+    <p class="auth-aside-sub">
+      Entre com seu e-mail e senha para gerenciar seus servidores,
+      tickets, apostas e automações do bot.
+    </p>
+
+    <ul class="auth-feats">
+      <li><i data-lucide="check-circle-2"></i>Sessão protegida (httpOnly + CSRF)</li>
+      <li><i data-lucide="check-circle-2"></i>Aprovação manual pelo desenvolvedor</li>
+      <li><i data-lucide="check-circle-2"></i>Confirmação de e-mail</li>
+      <li><i data-lucide="check-circle-2"></i>Recuperação e redefinição de senha</li>
+    </ul>
+
+    <div class="auth-note">
+      <i data-lucide="info"></i>
+      <p>Não fazemos login por Discord. O Discord é usado apenas para autorizar bots e servidores.</p>
+    </div>
+  </aside>
+
+  <!-- Card do formulário -->
+  <section class="auth-card" id="authCard">
+    <div class="auth-card-head">
+      <h1>Entrar</h1>
+      <p class="auth-sub">Use seu e-mail e senha cadastrados.</p>
+    </div>
+
+    <form id="loginForm" novalidate autocomplete="on">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <div class="input-wrap">
+          <i data-lucide="mail"></i>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            autocomplete="email"
+            inputmode="email"
+            placeholder="voce@exemplo.com"
+            required
+            maxlength="254"
+          >
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">Senha</label>
+        <div class="input-wrap">
+          <i data-lucide="lock"></i>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+            minlength="8"
+            maxlength="128"
+          >
+          <button type="button" class="btn-eye" id="togglePw" aria-label="Mostrar senha">
+            <i data-lucide="eye"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label class="check">
+          <input type="checkbox" id="remember">
+          <span class="check-box"></span>
+          <span class="check-txt">Lembrar neste dispositivo</span>
+        </label>
+        <a href="#" id="linkForgot" class="link-forgot">Esqueci a senha</a>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="btnLogin">
+        <i data-lucide="log-in"></i>
+        <span id="btnLoginText">Entrar</span>
+      </button>
+
+      <div id="formMsg" class="msg" role="alert" aria-live="polite"></div>
+    </form>
+
+    <div class="auth-divider"><span>ou</span></div>
+
+    <a href="/register" class="btn btn-ghost btn-block">
+      <i data-lucide="user-plus"></i>
+      Criar conta grátis
+    </a>
+
+    <div class="auth-terms">
+      Ao entrar, você concorda com os
+      <a href="/terms" target="_blank" rel="noopener">Termos</a>
+      e a
+      <a href="/privacy" target="_blank" rel="noopener">Política de Privacidade</a>.
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- Modal: Recuperar senha -->
+<div id="modalForgot" class="modal" role="dialog" aria-modal="true" aria-labelledby="forgotTitle">
+  <div class="modal-box">
+    <button class="modal-x" id="closeForgot" aria-label="Fechar"><i data-lucide="x"></i></button>
+    <h2 id="forgotTitle">Recuperar senha</h2>
+    <p class="modal-sub">Enviaremos um link de redefinição para o seu e-mail.</p>
+    <form id="forgotForm" novalidate>
+      <div class="field">
+        <label for="forgotEmail">E-mail</label>
+        <div class="input-wrap">
+          <i data-lucide="mail"></i>
+          <input type="email" id="forgotEmail" placeholder="voce@exemplo.com" required maxlength="254">
+        </div>
+      </div>
+      <div class="modal-btns">
+        <button type="button" class="btn btn-ghost" id="cancelForgot">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btnForgot">
+          <i data-lucide="send"></i>
+          <span>Enviar link</span>
+        </button>
+      </div>
+      <div id="forgotMsg" class="msg" role="alert" aria-live="polite"></div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══ Inicializa ícones Lucide ═══
+  if (window.lucide) { try { window.lucide.createIcons(); } catch (e) {} }
+
+  // ═══ Helpers ═══
+  const $ = (id) => document.getElementById(id);
+  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function setMsg(el, text, type = 'error') {
+    if (!el) return;
+    if (!text) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.textContent = text;
+    el.className = `msg ${type}`;
+    el.style.display = 'block';
+  }
+
+  let _toastT = null;
+  function toast(text, type = 'ok') {
+    const t = $('toast');
+    if (!t) return;
+    t.textContent = text;
+    t.className = `toast ${type} active`;
+    clearTimeout(_toastT);
+    _toastT = setTimeout(() => t.classList.remove('active'), 3200);
+  }
+
+  // ═══ CSRF (lê cookie) ═══
+  function getCookie(name) {
+    const m = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[2]) : null;
+  }
+
+  async function api(path, opts = {}) {
+    const method = (opts.method || 'GET').toUpperCase();
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) {
+      const csrf = getCookie('frio_csrf');
+      if (csrf) headers['x-csrf-token'] = csrf;
+    }
+    try {
+      const r = await fetch(path, { credentials: 'include', ...opts, method, headers });
+      let data;
+      try { data = await r.json(); } catch { data = { ok: false, error: 'Resposta inválida.' }; }
+      if (!r.ok && typeof data === 'object' && data && data.ok === undefined) data.ok = false;
+      return { status: r.status, ...data };
+    } catch {
+      return { ok: false, error: 'Erro de conexão.' };
+    }
+  }
+
+  // ═══ Toggle senha ═══
+  $('togglePw')?.addEventListener('click', () => {
+    const inp = $('password');
+    const isPw = inp.type === 'password';
+    inp.type = isPw ? 'text' : 'password';
+    $('togglePw').innerHTML = `<i data-lucide="${isPw ? 'eye-off' : 'eye'}"></i>`;
+    if (window.lucide) try { window.lucide.createIcons(); } catch {}
+  });
+
+  // ═══ Se já está logado, redireciona ═══
+  (async () => {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'include' });
+      if (r.ok) {
+        const d = await r.json();
+        if (d?.ok && d.admin) {
+          window.location.replace('/app');
+        }
+      }
+    } catch {}
+  })();
+
+  // ═══ Login ═══
+  $('loginForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setMsg($('formMsg'), '');
+
+    const email = ($('email').value || '').trim();
+    const password = $('password').value || '';
+
+    if (!email) return setMsg($('formMsg'), 'Informe seu e-mail.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setMsg($('formMsg'), 'E-mail inválido.');
+    if (!password || password.length < 8) return setMsg($('formMsg'), 'Senha deve ter 8 ou mais caracteres.');
+
+    const btn = $('btnLogin');
+    const label = $('btnLoginText');
+    btn.disabled = true;
+    label.textContent = 'Entrando...';
+
+    const r = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, remember: $('remember')?.checked === true }),
+    });
+
+    if (!r.ok) {
+      let msg = r.error || 'Não foi possível entrar.';
+      if (r.code === 'EMAIL_NOT_CONFIRMED' || /confirm/i.test(msg)) {
+        msg = 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.';
+      } else if (r.code === 'PENDING' || /aprovação|aguarde/i.test(msg)) {
+        msg = 'Sua conta está aguardando aprovação do desenvolvedor. Você será notificado quando liberar.';
+      } else if (/banida/i.test(msg)) {
+        msg = 'Esta conta foi banida.';
+      } else if (/desativada/i.test(msg)) {
+        msg = 'Esta conta está desativada.';
+      } else if (/inválid|credenc/i.test(msg)) {
+        msg = 'E-mail ou senha incorretos.';
+      }
+      setMsg($('formMsg'), msg);
+      btn.disabled = false;
+      label.textContent = 'Entrar';
+      return;
+    }
+
+    toast('Bem-vindo!');
+    setTimeout(() => { window.location.replace('/app'); }, 300);
+  });
+
+  // ═══ Modal esqueci senha ═══
+  const modalForgot = $('modalForgot');
+  function openModal() {
+    modalForgot.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => $('forgotEmail')?.focus(), 80);
+  }
+  function closeModal() {
+    modalForgot.classList.remove('active');
+    document.body.style.overflow = '';
+    setMsg($('forgotMsg'), '');
+  }
+
+  $('linkForgot')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    $('forgotEmail').value = ($('email').value || '').trim();
+    openModal();
+  });
+  $('closeForgot')?.addEventListener('click', closeModal);
+  $('cancelForgot')?.addEventListener('click', closeModal);
+  modalForgot?.addEventListener('click', (e) => { if (e.target === modalForgot) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modalForgot.classList.contains('active')) closeModal();
+  });
+
+  // ═══ Enviar link de recuperação ═══
+  $('forgotForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setMsg($('forgotMsg'), '');
+
+    const email = ($('forgotEmail').value || '').trim();
+    if (!email) return setMsg($('forgotMsg'), 'Informe seu e-mail.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setMsg($('forgotMsg'), 'E-mail inválido.');
+
+    const btn = $('btnForgot');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i><span>Enviando...</span>';
+    if (window.lucide) try { window.lucide.createIcons(); } catch {}
+
+    const r = await api('/api/auth/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    if (window.lucide) try { window.lucide.createIcons(); } catch {}
+
+    if (!r.ok) return setMsg($('forgotMsg'), r.error || 'Não foi possível enviar.');
+
+    setMsg($('forgotMsg'), 'Se esse e-mail estiver cadastrado, enviaremos as instruções em instantes.', 'ok');
+    setTimeout(() => closeModal(), 4000);
+  });
+
+  // ═══ Enter fecha modal em inputs ═══
+  // (deixa o form cuidar disso)
+})();
+</script>
+</body>
+</html>

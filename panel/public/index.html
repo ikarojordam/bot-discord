@@ -3,1048 +3,417 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#5865F2">
-<title>Frio Panel — Gerenciamento Premium</title>
+<meta name="theme-color" content="#0a0b12">
+<title>Frio Panel — Gerenciamento profissional de bots Discord</title>
+<meta name="description" content="Painel completo para gerenciar bots Discord: tickets, apostas, lojas, streamers e automações. Seguro, rápido e profissional.">
+<meta property="og:title" content="Frio Panel">
+<meta property="og:description" content="Gerenciamento profissional de bots Discord.">
+<meta property="og:type" content="website">
 <link rel="icon" type="image/png" href="/assets/logo.png">
-<link rel="stylesheet" href="/assets/style.css?v=1">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/landing.css?v=1">
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════
-     VIEW: TERMOS + PRIVACIDADE
-     ═══════════════════════════════════════════════════════════ -->
-<div id="view-terms" class="auth-page active">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
-
-  <div class="terms-wrapper">
-    <div class="terms-card">
-      <div class="terms-head">
-        <img src="/assets/logo.png" alt="Frio Panel" class="terms-logo">
-        <h1>Termos de Uso & Privacidade</h1>
-        <p class="terms-sub">Leia com atenção. Você precisa aceitar para usar a plataforma.</p>
-        <div class="terms-tags">
-          <span class="terms-tag">🔒 LGPD</span>
-          <span class="terms-tag">🇧🇷 Lei 13.709/2018</span>
-          <span class="terms-tag">📅 v2.0</span>
-        </div>
-      </div>
-
-      <div class="terms-tabs">
-        <button class="terms-tab active" data-terms-tab="uso">📋 Termos de Uso</button>
-        <button class="terms-tab" data-terms-tab="privacidade">🔐 Privacidade</button>
-      </div>
-
-      <div class="terms-scroll" id="termsScroll">
-        <!-- TERMOS -->
-        <div class="terms-body active" data-terms-tab-body="uso">
-          <h2>1. Aceitação</h2>
-          <p>Ao criar uma conta no <strong>Frio Panel</strong>, você declara ter lido e aceito estes Termos e a Política de Privacidade. Caso não concorde, interrompa o uso.</p>
-
-          <h2>2. Descrição do Serviço</h2>
-          <p>O Frio Panel é o painel web oficial de gerenciamento do bot Discord <strong>FrioBot</strong>, oferecendo:</p>
-          <ul>
-            <li>Painel para controle de servidores Discord;</li>
-            <li>Sistema de tickets, apostas, lojas e automações;</li>
-            <li>Gestão de planos premium e keys;</li>
-            <li>Ferramentas administrativas para donos de servidor.</li>
-          </ul>
-
-          <h2>3. Elegibilidade</h2>
-          <ul>
-            <li>Ter no mínimo <strong>13 anos</strong>;</li>
-            <li>Possuir conta Discord válida;</li>
-            <li>Fornecer informações verdadeiras no cadastro;</li>
-            <li>Não estar banido de serviços Discord.</li>
-          </ul>
-
-          <h2>4. Conta e Segurança</h2>
-          <p>Você é totalmente responsável por manter a senha segura e por tudo que acontecer na sua conta. Notifique imediatamente qualquer uso não autorizado.</p>
-
-          <h2>5. Uso Permitido</h2>
-          <ul>
-            <li>✅ Gerenciar apenas servidores dos quais você é <strong>dono ou admin</strong>;</li>
-            <li>✅ Configurar sistemas disponíveis no seu plano;</li>
-            <li>✅ Solicitar suporte oficial.</li>
-          </ul>
-
-          <h2>6. Uso Proibido</h2>
-          <ul>
-            <li>❌ Acessar servidores onde você não é dono/admin;</li>
-            <li>❌ Hackear, burlar ou explorar vulnerabilidades;</li>
-            <li>❌ Compartilhar sua conta com terceiros;</li>
-            <li>❌ Usar a plataforma para atividades ilegais;</li>
-            <li>❌ Fazer engenharia reversa ou revender o software;</li>
-            <li>❌ Enviar spam ou conteúdo ofensivo;</li>
-            <li>❌ Violar os <a href="https://discord.com/terms" target="_blank" rel="noopener">Termos do Discord</a>.</li>
-          </ul>
-          <p>O descumprimento resulta em <strong>banimento imediato</strong>, sem reembolso.</p>
-
-          <h2>7. Planos</h2>
-          <ul>
-            <li>Planos <strong>Basic, Premium, Ultra e Unlimited</strong> são cobrados conforme tabela;</li>
-            <li>Pagamentos via PIX ou Mercado Pago;</li>
-            <li>Reembolso apenas em até 7 dias (Art. 49 CDC), se aplicável.</li>
-          </ul>
-
-          <h2>8. Propriedade Intelectual</h2>
-          <p>Todos os direitos sobre código, marca, design e conteúdo do FrioBot/Frio Panel são dos desenvolvedores. Você não adquire nenhum direito de propriedade.</p>
-
-          <h2>9. Limitação de Responsabilidade</h2>
-          <p>O serviço é fornecido <strong>"como está"</strong>. Não nos responsabilizamos por perdas em apostas de terceiros, indisponibilidade temporária ou danos indiretos.</p>
-
-          <h2>10. Modificações</h2>
-          <p>Podemos alterar estes Termos a qualquer momento. Mudanças significativas serão notificadas no painel.</p>
-
-          <h2>11. Rescisão</h2>
-          <p>Podemos suspender contas que violem estes Termos, sem aviso e sem reembolso.</p>
-
-          <h2>12. Foro</h2>
-          <p>Regidos pelas leis brasileiras. Foro: comarca do domicílio do usuário.</p>
-        </div>
-
-        <!-- PRIVACIDADE -->
-        <div class="terms-body" data-terms-tab-body="privacidade">
-          <div class="terms-highlight">
-            <strong>🔒 Seus dados são tratados conforme a LGPD (Lei 13.709/2018)</strong>
-            <p>Você tem controle total. Pode solicitar acesso, correção ou exclusão a qualquer momento.</p>
-          </div>
-
-          <h2>1. Dados que coletamos</h2>
-          <p><strong>Fornecidos por você:</strong></p>
-          <ul>
-            <li>📧 <strong>E-mail</strong> — login e notificações;</li>
-            <li>🎮 <strong>ID do Discord</strong> — vincula sua conta a servidores;</li>
-            <li>👤 <strong>Nome</strong> — exibição;</li>
-            <li>🔒 <strong>Senha</strong> — criptografada com bcrypt (irreversível).</li>
-          </ul>
-          <p><strong>Coletados automaticamente:</strong></p>
-          <ul>
-            <li>🌐 <strong>Endereço IP</strong> — segurança;</li>
-            <li>🖥️ <strong>Navegador, SO, dispositivo</strong> — auditoria;</li>
-            <li>📍 <strong>País/Cidade</strong> (aproximado) — detecção de acesso suspeito;</li>
-            <li>🕐 <strong>Data/hora</strong> de cada ação;</li>
-            <li>📋 <strong>Registros de auditoria</strong>.</li>
-          </ul>
-
-          <h2>2. Como usamos</h2>
-          <ul>
-            <li>✅ Autenticar no painel;</li>
-            <li>✅ Verificar permissões no Discord;</li>
-            <li>✅ Enviar notificações importantes;</li>
-            <li>✅ Prevenir fraudes e acessos não autorizados;</li>
-            <li>✅ Cumprir obrigações legais.</li>
-          </ul>
-          <p><strong>Nunca</strong> vendemos ou compartilhamos seus dados para fins comerciais.</p>
-
-          <h2>3. Base legal (LGPD Art. 7º)</h2>
-          <ul>
-            <li><strong>Consentimento</strong> (I) — ao criar conta;</li>
-            <li><strong>Execução de contrato</strong> (V) — prestar o serviço;</li>
-            <li><strong>Legítimo interesse</strong> (IX) — segurança;</li>
-            <li><strong>Obrigação legal</strong> (II).</li>
-          </ul>
-
-          <h2>4. Compartilhamento</h2>
-          <ul>
-            <li><strong>Supabase</strong> — banco e auth (EUA);</li>
-            <li><strong>Render</strong> — hospedagem (EUA);</li>
-            <li><strong>Discord Inc.</strong> — validação de ID/permissões;</li>
-            <li><strong>Autoridades</strong> — sob ordem judicial.</li>
-          </ul>
-
-          <h2>5. Retenção</h2>
-          <ul>
-            <li>🔒 Conta — enquanto ativa;</li>
-            <li>📋 Logs de auditoria — 90 dias;</li>
-            <li>🖥️ Sessões — 7 dias;</li>
-            <li>🔑 Keys — 1 ano.</li>
-          </ul>
-          <p>Após exclusão, dados são anonimizados em até 30 dias.</p>
-
-          <h2>6. Seus direitos (LGPD Art. 18)</h2>
-          <ul>
-            <li>📖 Confirmar tratamento;</li>
-            <li>👁️ Acessar seus dados;</li>
-            <li>✏️ Corrigir dados;</li>
-            <li>🗑️ Solicitar anonimização ou exclusão;</li>
-            <li>📤 Portabilidade;</li>
-            <li>🚫 Revogar consentimento.</li>
-          </ul>
-          <p>Envie e-mail para <strong>privacidade@frio.com</strong> ou use <em>Minhas Sessões</em> no painel.</p>
-
-          <h2>7. Segurança</h2>
-          <ul>
-            <li>🔐 bcrypt 12 rounds;</li>
-            <li>🔑 JWT HMAC-SHA256;</li>
-            <li>🛡️ HTTPS/HSTS;</li>
-            <li>🚫 Proteção CSRF/XSS/timing;</li>
-            <li>👁️ Auditoria completa;</li>
-            <li>🚨 Alertas em tempo real de acessos suspeitos.</li>
-          </ul>
-
-          <h2>8. Cookies</h2>
-          <p>Usamos apenas cookies essenciais:</p>
-          <ul>
-            <li><code>sb_token</code> — sessão (httpOnly, secure);</li>
-            <li><code>frio_csrf</code> — proteção CSRF.</li>
-          </ul>
-          <p><strong>Sem</strong> rastreamento, publicidade ou analytics de terceiros.</p>
-
-          <h2>9. Menores</h2>
-          <p>Não coletamos intencionalmente dados de menores de 13 anos. Entre 13 e 18, é necessário consentimento dos responsáveis.</p>
-
-          <h2>10. Alterações</h2>
-          <p>Atualizaremos a data no topo quando houver mudanças significativas.</p>
-
-          <h2>11. Encarregado (DPO)</h2>
-          <p>📧 <strong>privacidade@frio.com</strong></p>
-          <p>🕐 Resposta em até 15 dias corridos</p>
-
-          <h2>12. ANPD</h2>
-          <p>Você pode reclamar à Autoridade Nacional de Proteção de Dados (gov.br/anpd).</p>
-        </div>
-      </div>
-
-      <label class="terms-accept">
-        <input type="checkbox" id="termsCheck">
-        <span class="terms-accept-box"></span>
-        <span class="terms-accept-txt">
-          Li e <strong>aceito</strong> os Termos e a Política de Privacidade. Tenho no mínimo <strong>13 anos</strong>.
-        </span>
-      </label>
-
-      <div class="terms-btns">
-        <button type="button" class="btn btn-ghost" id="btnTermsReject">❌ Não aceito</button>
-        <button type="button" class="btn btn-success" id="btnTermsAccept" disabled>✅ Aceitar e continuar</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     VIEW: LOGIN
-     ═══════════════════════════════════════════════════════════ -->
-<div id="view-login" class="auth-page">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
-
-  <div class="auth-wrapper">
-    <div class="auth-brand">
-      <img src="/assets/logo.png" alt="Frio Panel">
-      <h2>Bem-vindo ao <span>Frio Panel</span></h2>
-      <p>Gerencie servidores, keys e automações do FrioBot.</p>
-      <div class="auth-features">
-        <div class="feature">🌐 Gerenciamento total</div>
-        <div class="feature">⚡ Command Palette</div>
-        <div class="feature">📊 Dashboard em tempo real</div>
-        <div class="feature">🔐 Seguro com Supabase</div>
-      </div>
-    </div>
-
-    <div class="auth-form-card">
-      <h1>Entrar</h1>
-      <p class="auth-sub">Acesse sua conta</p>
-
-      <form id="loginForm" autocomplete="on">
-        <div class="field">
-          <label>E-mail</label>
-          <div class="input-icon">
-            <span>📧</span>
-            <input type="email" id="loginEmail" required autocomplete="email" placeholder="seu@email.com">
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Senha</label>
-          <div class="input-icon">
-            <span>🔒</span>
-            <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
-            <button type="button" class="btn-eye" onclick="togglePass('loginPassword', this)">👁️</button>
-          </div>
-        </div>
-
-        <div class="auth-links">
-          <a href="#" id="linkForgot">Esqueci minha senha</a>
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-block" id="btnLogin">
-          <span>🚀 Entrar</span>
-        </button>
-      </form>
-
-      <div class="auth-divider"><span>ou</span></div>
-
-      <button id="btnShowRegister" class="btn btn-ghost btn-block">✨ Criar conta grátis</button>
-
-      <div id="loginMsg" class="msg"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     VIEW: REGISTER
-     ═══════════════════════════════════════════════════════════ -->
-<div id="view-register" class="auth-page">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
-
-  <div class="auth-wrapper">
-    <div class="auth-brand">
-      <img src="/assets/logo.png" alt="Frio Panel">
-      <h2>Crie sua conta</h2>
-      <p>Confirme o e-mail e aguarde aprovação do DEV.</p>
-      <div class="auth-features">
-        <div class="feature">✅ Confirmação por e-mail</div>
-        <div class="feature">🛡️ Aprovação pelo DEV</div>
-        <div class="feature">🎨 Temas por plano</div>
-        <div class="feature">🎁 Receba keys</div>
-      </div>
-    </div>
-
-    <div class="auth-form-card">
-      <h1>Criar conta</h1>
-      <p class="auth-sub">Preencha os dados abaixo</p>
-
-      <form id="registerForm">
-        <div class="field">
-          <label>E-mail</label>
-          <div class="input-icon">
-            <span>📧</span>
-            <input type="email" id="regEmail" required autocomplete="email" placeholder="seu@email.com">
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Nome de usuário</label>
-          <div class="input-icon">
-            <span>👤</span>
-            <input type="text" id="regUsername" maxlength="40" placeholder="Seu nome">
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Discord ID <span class="field-req">obrigatório</span></label>
-          <div class="input-icon">
-            <span>🎮</span>
-            <input type="text" id="regDiscord" required pattern="\d{15,25}" inputmode="numeric" placeholder="123456789012345678">
-          </div>
-          <p class="field-hint">Discord → Configurações → Avançado → Modo Desenvolvedor → botão direito no seu nome → Copiar ID</p>
-        </div>
-
-        <div class="field">
-          <label>Senha <span class="field-req">mín. 8</span></label>
-          <div class="input-icon">
-            <span>🔒</span>
-            <input type="password" id="regPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-            <button type="button" class="btn-eye" onclick="togglePass('regPassword', this)">👁️</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Confirmar senha</label>
-          <div class="input-icon">
-            <span>🔒</span>
-            <input type="password" id="regConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-            <button type="button" class="btn-eye" onclick="togglePass('regConfirm', this)">👁️</button>
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-block" id="btnRegister">
-          <span>✨ Criar minha conta</span>
-        </button>
-      </form>
-
-      <div class="auth-links">
-        <a href="#" id="linkBackLogin">← Voltar pro login</a>
-      </div>
-
-      <div id="registerMsg" class="msg"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     VIEW: RESET
-     ═══════════════════════════════════════════════════════════ -->
-<div id="view-reset" class="auth-page">
-  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
-
-  <div class="auth-wrapper">
-    <div class="auth-brand">
-      <img src="/assets/logo.png" alt="Frio Panel">
-      <h2>Defina uma nova senha</h2>
-      <p>Use no mínimo 8 caracteres com letras, números e símbolos.</p>
-      <div class="auth-features">
-        <div class="feature">🔐 Supabase Auth</div>
-        <div class="feature">⏱️ Link expira em 1h</div>
-        <div class="feature">🛡️ Privado e seguro</div>
-      </div>
-    </div>
-
-    <div class="auth-form-card">
-      <h1>Nova senha</h1>
-      <p class="auth-sub">Escolha uma senha forte</p>
-
-      <form id="resetForm">
-        <div class="field">
-          <label>Nova senha</label>
-          <div class="input-icon">
-            <span>🔒</span>
-            <input type="password" id="resetPassword" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-            <button type="button" class="btn-eye" onclick="togglePass('resetPassword', this)">👁️</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Confirmar</label>
-          <div class="input-icon">
-            <span>🔒</span>
-            <input type="password" id="resetConfirm" required minlength="8" autocomplete="new-password" placeholder="••••••••">
-            <button type="button" class="btn-eye" onclick="togglePass('resetConfirm', this)">👁️</button>
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-block" id="btnReset">
-          <span>✅ Salvar nova senha</span>
-        </button>
-      </form>
-
-      <div class="auth-links">
-        <a href="/">← Voltar pro login</a>
-      </div>
-
-      <div id="resetMsg" class="msg"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     VIEW: APP
-     ═══════════════════════════════════════════════════════════ -->
-<div id="view-app" class="app-layout">
-  <header class="app-header">
-    <button class="hamburger" id="btnHamburger">☰</button>
-    <div class="brand">
-      <img src="/assets/logo.png" alt="Frio Panel">
+<!-- ═══════════════ NAVBAR ═══════════════ -->
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/assets/logo.png" alt="Frio Panel" class="nav-logo">
       <span>Frio Panel</span>
-    </div>
-    <div class="spacer"></div>
-    <button class="cmd-trigger" id="btnCmdTrigger" title="Buscar (Ctrl+K)">
-      🔎 <span class="cmd-trigger-txt">Buscar...</span> <kbd>Ctrl K</kbd>
-    </button>
-    <div class="header-actions">
-      <button class="bell" id="btnBell" title="Notificações">
-        🔔<span class="bell-badge hidden" id="bellBadge">0</span>
-      </button>
-      <div class="user-chip" id="userChip" title="Minha conta">
-        <span class="chip-mail" id="userEmail">—</span>
-        <span class="chip-badge" id="userRole">—</span>
-        <span class="chip-badge" id="userPlan">—</span>
-      </div>
-      <button class="btn btn-ghost btn-sm" id="btnLogout">Sair</button>
-    </div>
-  </header>
+    </a>
 
-  <aside class="sidebar" id="sidebar">
-    <nav>
-      <div class="nav-title">Geral</div>
-      <a data-nav="dashboard" class="active"><span>📊</span>Dashboard</a>
-      <a data-nav="keys" data-roles="dev,admin,funcionario"><span>🔑</span>Keys</a>
-      <a data-nav="packs" data-roles="dev"><span>📦</span>Packs</a>
-      <a data-nav="servers"><span>🌐</span>Meus Servidores</a>
-      <a data-nav="my-keys"><span>🎁</span>Minhas Keys</a>
-      <a data-nav="sessions"><span>🖥️</span>Minhas Sessões</a>
-      <a data-nav="notifications"><span>🔔</span>Notificações <span class="badge-dot hidden" id="navNotifBadge">0</span></a>
-
-      <div class="nav-title" data-roles="dev,admin">Admin</div>
-      <a data-nav="tickets-global" data-roles="dev,admin"><span>🎫</span>Tickets Global</a>
-      <a data-nav="financial" data-roles="dev,admin"><span>💰</span>Financeiro</a>
-
-      <div class="nav-title" data-roles="dev">Servidores (DEV)</div>
-      <a data-nav="dev-servers" data-roles="dev"><span>🛰️</span>Gerenciar Servidores</a>
-      <a data-nav="dev-server-search" data-roles="dev"><span>🔎</span>Buscar Servidor</a>
-
-      <div class="nav-title" data-roles="dev">Dev Tools</div>
-      <a data-nav="kill-switch" data-roles="dev"><span>🚨</span>Kill Switch</a>
-      <a data-nav="maintenance" data-roles="dev"><span>🔧</span>Manutenção</a>
-      <a data-nav="force-premium" data-roles="dev"><span>💎</span>Force Premium</a>
-      <a data-nav="broadcast" data-roles="dev"><span>📢</span>Broadcast</a>
-      <a data-nav="backup" data-roles="dev"><span>💾</span>Backup</a>
-
-      <div class="nav-title" data-roles="dev">Usuários</div>
-      <a data-nav="usuarios" data-roles="dev"><span>👥</span>Usuários</a>
-      <a data-nav="pending" data-roles="dev"><span>⏳</span>Aprovações <span class="badge-dot hidden" id="navPendingBadge">0</span></a>
-      <a data-nav="audit" data-roles="dev"><span>📋</span>Auditoria</a>
+    <nav class="nav-links" id="navLinks">
+      <a href="#inicio"><i data-lucide="home"></i>Início</a>
+      <a href="#recursos"><i data-lucide="sparkles"></i>Recursos</a>
+      <a href="#seguranca"><i data-lucide="shield-check"></i>Segurança</a>
+      <a href="#como-funciona"><i data-lucide="workflow"></i>Como funciona</a>
+      <a href="/terms"><i data-lucide="file-text"></i>Termos</a>
     </nav>
-  </aside>
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <main class="app-main">
-    <!-- ═══ DASHBOARD ═══ -->
-    <section class="page active" id="page-dashboard">
-      <div class="page-head">
-        <h2>📊 Dashboard</h2>
-        <div class="page-head-actions">
-          <button id="btnRefreshDashboard" class="btn btn-ghost btn-sm">🔄 Atualizar</button>
-        </div>
+    <div class="nav-actions">
+      <a href="/login" class="btn btn-ghost btn-sm">
+        <i data-lucide="log-in"></i>Entrar
+      </a>
+      <a href="#" class="btn btn-primary btn-sm" id="navAddBot">
+        <i data-lucide="plus-circle"></i>Adicionar Bot
+      </a>
+      <button class="nav-burger" id="navBurger" aria-label="Menu">
+        <i data-lucide="menu"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero" id="inicio">
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+
+  <div class="hero-inner">
+    <div class="hero-left">
+      <span class="pill">
+        <i data-lucide="zap"></i>
+        <span>Sistema profissional para Discord</span>
+      </span>
+
+      <h1>
+        Gerencie seu bot <span class="grad">Discord</span> como um SaaS de verdade.
+      </h1>
+
+      <p class="hero-sub">
+        Um painel único, moderno e seguro para controlar servidores, tickets, apostas,
+        loja, streamers e automações. Tudo em tempo real, integrado ao seu bot.
+      </p>
+
+      <div class="hero-cta">
+        <a href="/login" class="btn btn-primary btn-lg">
+          <i data-lucide="layout-dashboard"></i>Entrar no Painel
+        </a>
+        <a href="#" class="btn btn-ghost btn-lg" id="heroAddBot">
+          <i data-lucide="discord"></i>Adicionar ao Discord
+        </a>
       </div>
 
-      <!-- STATUS DO BOT -->
-      <div class="card card-status" id="cardBotStatus">
-        <div class="status-header">
-          <div class="status-left">
-            <span class="status-dot" id="botStatusDot">⚪</span>
-            <span class="status-label" id="botStatusLabel">Verificando...</span>
+      <ul class="hero-feats">
+        <li><i data-lucide="check-circle-2"></i>Login seguro</li>
+        <li><i data-lucide="check-circle-2"></i>Aprovação manual</li>
+        <li><i data-lucide="check-circle-2"></i>Multi-servidor</li>
+        <li><i data-lucide="check-circle-2"></i>Auditoria completa</li>
+      </ul>
+    </div>
+
+    <div class="hero-right">
+      <div class="mockup">
+        <div class="mockup-bar">
+          <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+          <span class="mockup-url">painel.friobot.app/dashboard</span>
+        </div>
+        <div class="mockup-body">
+          <div class="mockup-side">
+            <div class="mock-line lg"></div>
+            <div class="mock-line"></div>
+            <div class="mock-line"></div>
+            <div class="mock-line"></div>
+            <div class="mock-line short"></div>
           </div>
-          <div class="status-right">
-            <span class="status-chip" id="botStatusPing">--ms</span>
-            <span class="status-chip" id="botStatusUptime">--</span>
-            <span class="status-chip" id="botStatusGuilds">-- guilds</span>
-          </div>
-        </div>
-        <div class="status-warnings hidden" id="statusWarnings"></div>
-      </div>
-
-      <!-- STATS PRINCIPAIS -->
-      <div class="stats-grid" id="dashStats"></div>
-
-      <!-- QUICK STATS -->
-      <div class="stats-grid" id="dashQuickStats"></div>
-
-      <!-- GRÁFICOS -->
-      <div class="charts-grid" id="dashCharts"></div>
-
-      <!-- DUAS COLUNAS -->
-      <div class="dashboard-columns">
-        <!-- ATIVIDADE RECENTE -->
-        <div class="card">
-          <div class="card-head">
-            <h3>🕐 Atividade Recente</h3>
-            <a class="card-link" onclick="navigate('audit')">Ver tudo →</a>
-          </div>
-          <div id="recentActivity" class="activity-list">
-            <div class="empty-small">⏳ Carregando...</div>
-          </div>
-        </div>
-
-        <!-- AÇÕES RÁPIDAS -->
-        <div class="card">
-          <div class="card-head">
-            <h3>⚡ Ações Rápidas</h3>
-          </div>
-          <div class="quick-actions" id="quickActions"></div>
-        </div>
-      </div>
-
-      <!-- KEYS EXPIRANDO -->
-      <div class="card" id="cardKeysExpiring" style="margin-top:16px">
-        <div class="card-head">
-          <h3>⏰ Keys expirando em 7 dias</h3>
-          <a class="card-link" onclick="navigate('keys')">Ver keys →</a>
-        </div>
-        <div id="keysExpiring" class="keys-list">
-          <div class="empty-small">⏳ Carregando...</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- KEYS -->
-    <section class="page" id="page-keys">
-      <div class="page-head"><h2>🔑 Keys Premium</h2></div>
-
-      <div class="card">
-        <h3>➕ Gerar novas keys</h3>
-        <form id="genForm">
-          <div class="grid-2">
-            <div class="field"><label>Tier</label><div class="input-wrap"><select id="genTier">
-              <option value="basic">🥉 Basic</option>
-              <option value="premium" selected>🥈 Premium</option>
-              <option value="ultra">🥇 Ultra</option>
-              <option value="unlimited">💎 Unlimited</option>
-            </select></div></div>
-            <div class="field"><label>Duração</label><div class="input-wrap"><select id="genDuracao">
-              <option value="7">7 dias</option><option value="15">15 dias</option>
-              <option value="30" selected>30 dias</option><option value="90">90 dias</option>
-              <option value="180">180 dias</option><option value="365">1 ano</option>
-              <option value="0">♾️ Permanente</option>
-            </select></div></div>
-            <div class="field"><label>Quantidade (1-50)</label><div class="input-wrap"><input type="number" id="genQtd" value="1" min="1" max="50"></div></div>
-            <div class="field"><label>Máx usos</label><div class="input-wrap"><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div></div>
-            <div class="field"><label>Validade (dias, 0=∞)</label><div class="input-wrap"><input type="number" id="genValidade" value="0" min="0"></div></div>
-            <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="genMotivo" placeholder="opcional"></div></div>
-          </div>
-          <button type="submit" class="btn btn-primary">🚀 Gerar</button>
-          <div id="genResult" class="msg"></div>
-        </form>
-      </div>
-
-      <div class="page-head-sm">
-        <h3>📋 Keys geradas</h3>
-        <button id="btnEnviarKey" class="btn btn-success btn-sm">📤 Enviar key</button>
-      </div>
-
-      <div class="filters">
-        <select id="filterStatus"><option value="">Status</option><option value="active">Ativas</option><option value="used">Esgotadas</option></select>
-        <select id="filterTier"><option value="">Tier</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
-        <button id="btnRefreshKeys" class="btn btn-ghost btn-sm">🔄 Atualizar</button>
-      </div>
-      <div id="keysTable"></div>
-
-      <div class="page-head-sm" style="margin-top:24px"><h3>🎁 Resgates recentes</h3></div>
-      <div id="redemptionsTable"></div>
-    </section>
-
-    <!-- PACKS -->
-    <section class="page" id="page-packs">
-      <div class="page-head"><h2>📦 Packs de Keys</h2></div>
-      <div class="card">
-        <h3>➕ Gerar Pack (60 keys)</h3>
-        <p class="hint">Cada pack gera <strong>5 keys × 4 tiers × 3 durações = 60 keys</strong>.</p>
-        <div class="grid-2">
-          <div class="field"><label>Quantidade de packs</label><div class="input-wrap"><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
-          <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="packMotivo" placeholder="opcional"></div></div>
-        </div>
-        <button id="btnGerarPack" class="btn btn-primary">📦 Gerar Pack</button>
-        <div id="packResult" class="msg"></div>
-      </div>
-      <div class="filters"><button id="btnRefreshPacks" class="btn btn-ghost btn-sm">🔄 Atualizar</button></div>
-      <div id="packsTable"></div>
-    </section>
-
-    <!-- SERVIDORES -->
-    <section class="page" id="page-servers">
-      <div class="page-head"><h2>🌐 Meus Servidores</h2></div>
-      <div id="serversGrid" class="servers-grid"></div>
-    </section>
-
-    <!-- MINHAS KEYS -->
-    <section class="page" id="page-my-keys">
-      <div class="page-head"><h2>🎁 Minhas Keys</h2></div>
-      <p class="hint">Keys enviadas pra você pela staff.</p>
-      <div id="myKeysList"></div>
-    </section>
-
-    <!-- SESSIONS -->
-    <section class="page" id="page-sessions">
-      <div class="page-head">
-        <h2>🖥️ Minhas Sessões</h2>
-        <div class="page-head-actions">
-          <button id="btnRevokeAllSessions" class="btn btn-danger btn-sm">🚫 Revogar todas</button>
-          <button id="btnRefreshSessions" class="btn btn-ghost btn-sm">🔄</button>
-        </div>
-      </div>
-      <p class="hint">Dispositivos conectados na sua conta.</p>
-      <div id="sessionsList"></div>
-    </section>
-
-    <!-- NOTIFICATIONS -->
-    <section class="page" id="page-notifications">
-      <div class="page-head"><h2>🔔 Notificações</h2></div>
-      <button id="btnMarkAllRead" class="btn btn-ghost btn-sm" style="margin-bottom:16px">✅ Marcar todas como lidas</button>
-      <div id="notifList"></div>
-    </section>
-
-    <!-- TICKETS GLOBAL -->
-    <section class="page" id="page-tickets-global">
-      <div class="page-head"><h2>🎫 Tickets Abertos</h2></div>
-      <p class="hint">Todos os tickets abertos na rede.</p>
-      <div id="ticketsGlobalTable"></div>
-    </section>
-
-    <!-- FINANCIAL -->
-    <section class="page" id="page-financial">
-      <div class="page-head"><h2>💰 Financeiro — últimos 30 dias</h2></div>
-      <div class="stats-grid" id="financialStats"></div>
-      <div class="card" style="margin-top:18px">
-        <h3>Vendas por dia</h3>
-        <canvas id="chartFinancial" style="max-height:340px"></canvas>
-      </div>
-    </section>
-
-    <!-- DEV: SERVERS -->
-    <section class="page" id="page-dev-servers">
-      <div class="page-head">
-        <h2>🛰️ Gerenciar Todos os Servidores <span class="badge-dev">DEV</span></h2>
-      </div>
-      <div class="card">
-        <div class="filters">
-          <input type="text" id="devServersSearch" placeholder="🔎 Buscar nome ou ID" style="flex:1;min-width:180px">
-          <input type="number" id="devServersMinMembers" placeholder="Mín. membros" style="width:140px" min="0">
-          <select id="devServersPremium">
-            <option value="">Todos</option>
-            <option value="true">💎 Premium</option>
-            <option value="false">🆓 Sem premium</option>
-          </select>
-          <button id="btnRefreshDevServers" class="btn btn-ghost btn-sm">🔄</button>
-          <button id="btnForceSyncAll" class="btn btn-primary btn-sm">⚡ Sync Global</button>
-        </div>
-      </div>
-      <div class="stats-grid" id="devServersStats" style="margin-top:16px"></div>
-      <div class="servers-grid" id="devServersList" style="margin-top:16px"></div>
-    </section>
-
-    <!-- DEV: SERVER SEARCH -->
-    <section class="page" id="page-dev-server-search">
-      <div class="page-head"><h2>🔎 Buscar Servidor</h2></div>
-      <div class="card">
-        <p class="hint">Cole o ID do servidor para ver detalhes.</p>
-        <div class="field">
-          <label>ID do Servidor</label>
-          <div class="input-icon">
-            <span>🛰️</span>
-            <input type="text" id="devServerLookupId" placeholder="Ex: 123456789012345678" inputmode="numeric">
+          <div class="mockup-main">
+            <div class="mock-cards">
+              <div class="mock-card"><div class="mock-tag blue"></div><div class="mock-bar"></div></div>
+              <div class="mock-card"><div class="mock-tag green"></div><div class="mock-bar"></div></div>
+              <div class="mock-card"><div class="mock-tag amber"></div><div class="mock-bar"></div></div>
+            </div>
+            <div class="mock-chart"></div>
+            <div class="mock-chart"></div>
           </div>
         </div>
-        <button id="btnDevServerLookup" class="btn btn-primary">🔎 Buscar</button>
       </div>
-      <div id="devServerLookupResult" style="margin-top:18px"></div>
-    </section>
-
-    <!-- KILL SWITCH -->
-    <section class="page" id="page-kill-switch">
-      <div class="page-head"><h2>🚨 Kill Switch</h2></div>
-      <div class="card">
-        <p class="hint">Bloqueia todos os comandos do bot na rede.</p>
-        <div id="ksStatus" style="margin-bottom:14px">⏳ Carregando...</div>
-        <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="ksReason" placeholder="Ex: bug crítico"></div></div>
-        <div class="btn-row">
-          <button id="btnKillOn" class="btn btn-danger">🔴 ATIVAR</button>
-          <button id="btnKillOff" class="btn btn-success">🟢 DESATIVAR</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- MAINTENANCE -->
-    <section class="page" id="page-maintenance">
-      <div class="page-head"><h2>🔧 Manutenção Global</h2></div>
-      <div class="card">
-        <div id="mtStatus" style="margin-bottom:14px">⏳ Carregando...</div>
-        <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="mtReason" placeholder="Ex: atualizando banco"></div></div>
-        <div class="btn-row">
-          <button id="btnMtOn" class="btn btn-danger">🔴 ATIVAR</button>
-          <button id="btnMtOff" class="btn btn-success">🟢 DESATIVAR</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- FORCE PREMIUM -->
-    <section class="page" id="page-force-premium">
-      <div class="page-head"><h2>💎 Force Premium</h2></div>
-      <div class="card">
-        <h3>➕ Adicionar</h3>
-        <div class="grid-2">
-          <div class="field"><label>Scope</label><div class="input-wrap"><select id="fpScope">
-            <option value="guild">Servidor</option>
-            <option value="user">Usuário</option>
-          </select></div></div>
-          <div class="field"><label>ID (guild ou user)</label><div class="input-wrap"><input type="text" id="fpTarget" placeholder="123456789012345678"></div></div>
-          <div class="field"><label>Dias (0 = permanente)</label><div class="input-wrap"><input type="number" id="fpDays" value="0" min="0"></div></div>
-          <div class="field"><label>Motivo</label><div class="input-wrap"><input type="text" id="fpReason"></div></div>
-        </div>
-        <button id="btnFpAdd" class="btn btn-primary">Adicionar</button>
-      </div>
-      <div class="page-head-sm" style="margin-top:24px"><h3>📋 Ativos</h3></div>
-      <div id="fpList"></div>
-    </section>
-
-    <!-- BROADCAST -->
-    <section class="page" id="page-broadcast">
-      <div class="page-head"><h2>📢 Broadcast Global</h2></div>
-      <div class="card">
-        <div class="field"><label>Título</label><div class="input-wrap"><input type="text" id="bcTitle" placeholder="Ex: Nova atualização"></div></div>
-        <div class="field"><label>Conteúdo</label><div class="input-wrap"><textarea id="bcContent" placeholder="Mensagem..."></textarea></div></div>
-        <div class="field"><label>Filtrar por role</label><div class="input-wrap"><select id="bcRole">
-          <option value="">Todos</option><option value="dev">DEV</option><option value="admin">Admin</option>
-          <option value="funcionario">Funcionário</option><option value="cliente">Cliente</option>
-        </select></div></div>
-        <button id="btnBcSend" class="btn btn-primary">📤 Enviar</button>
-      </div>
-      <div class="card">
-        <h3>🔄 Forçar broadcast de update</h3>
-        <p class="hint">Reset para o bot reenviar o anúncio no próximo boot.</p>
-        <button id="btnForceUpdate" class="btn btn-ghost">🔄 Resetar</button>
-      </div>
-    </section>
-
-    <!-- BACKUP -->
-    <section class="page" id="page-backup">
-      <div class="page-head"><h2>💾 Backup</h2></div>
-      <div class="card">
-        <p class="hint">Baixa um JSON com as tabelas principais do painel.</p>
-        <button id="btnDownloadBackup" class="btn btn-primary">💾 Baixar backup</button>
-      </div>
-      <div class="card">
-        <h3>🔄 Sincronizar servidores</h3>
-        <p class="hint">Força o bot a reescanear todos os servidores.</p>
-        <button id="btnForceSync" class="btn btn-ghost">🔄 Forçar sync</button>
-      </div>
-    </section>
-
-    <!-- USUARIOS -->
-    <section class="page" id="page-usuarios">
-      <div class="page-head">
-        <h2>👥 Usuários</h2>
-        <button id="btnNovoUsuario" class="btn btn-primary btn-sm">➕ Novo</button>
-      </div>
-      <div class="filters">
-        <input type="text" id="userSearch" placeholder="🔍 Buscar email, nome ou Discord ID">
-        <select id="userFilterRole"><option value="">Roles</option><option value="dev">DEV</option><option value="admin">Admin</option><option value="funcionario">Funcionário</option><option value="cliente">Cliente</option></select>
-        <select id="userFilterPlan"><option value="">Planos</option><option value="none">Sem plano</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
-        <select id="userFilterAtivo"><option value="">Status</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
-        <button id="btnRefreshUsers" class="btn btn-ghost btn-sm">🔄</button>
-      </div>
-      <div id="usersTable"></div>
-    </section>
-
-    <!-- PENDING -->
-    <section class="page" id="page-pending">
-      <div class="page-head"><h2>⏳ Aprovações Pendentes</h2></div>
-      <div id="pendingList"></div>
-    </section>
-
-    <!-- AUDIT -->
-    <section class="page" id="page-audit">
-      <div class="page-head"><h2>📋 Auditoria Completa</h2></div>
-
-      <div class="stats-grid" id="auditStats"></div>
-
-      <div class="card" style="margin-top:16px">
-        <h3>🔍 Filtros</h3>
-        <div class="grid-2">
-          <div class="field"><label>Ação</label><div class="input-wrap"><input type="text" id="auditFilterAction" placeholder="Ex: login, nuke_guild"></div></div>
-          <div class="field"><label>IP</label><div class="input-wrap"><input type="text" id="auditFilterIp" placeholder="Ex: 200.150.10.5"></div></div>
-          <div class="field"><label>De</label><div class="input-wrap"><input type="datetime-local" id="auditFilterFrom"></div></div>
-          <div class="field"><label>Até</label><div class="input-wrap"><input type="datetime-local" id="auditFilterTo"></div></div>
-          <div class="field"><label>Resultado</label><div class="input-wrap"><select id="auditFilterSuccess"><option value="">Todos</option><option value="true">✅ Sucesso</option><option value="false">❌ Falha</option></select></div></div>
-          <div class="field"><label>Por página</label><div class="input-wrap"><select id="auditFilterLimit"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option><option value="500">500</option></select></div></div>
-        </div>
-        <div class="btn-row">
-          <button id="btnAuditFilter" class="btn btn-primary">🔍 Filtrar</button>
-          <button id="btnAuditClear" class="btn btn-ghost">🧹 Limpar</button>
-          <button id="btnAuditExport" class="btn btn-success">📤 Exportar CSV</button>
-          <button id="btnAuditRefresh" class="btn btn-ghost">🔄</button>
-        </div>
-      </div>
-
-      <div id="auditTable" style="margin-top:16px"></div>
-
-      <div class="pagination">
-        <span id="auditPaginationInfo" class="hint"></span>
-        <div class="btn-row">
-          <button id="btnAuditPrev" class="btn btn-ghost btn-sm">⬅️ Anterior</button>
-          <button id="btnAuditNext" class="btn btn-ghost btn-sm">Próximo ➡️</button>
-        </div>
-      </div>
-    </section>
-  </main>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     COMMAND PALETTE
-     ═══════════════════════════════════════════════════════════ -->
-<div id="cmdPalette" class="cmdk">
-  <div class="cmdk-box">
-    <div class="cmdk-input">
-      <span>🔎</span>
-      <input type="text" id="cmdInput" placeholder="Ir para... ou buscar ação" autocomplete="off">
-      <kbd>ESC</kbd>
-    </div>
-    <div id="cmdResults" class="cmdk-results"></div>
-    <div class="cmdk-footer">
-      <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
-      <span><kbd>Enter</kbd> selecionar</span>
-      <span><kbd>ESC</kbd> fechar</span>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══════════════════════════════════════════════════════════
-     DRAWER NOTIFICAÇÕES
-     ═══════════════════════════════════════════════════════════ -->
-<div id="notifDrawer" class="drawer">
-  <div class="drawer-head">
-    <h3>🔔 Notificações</h3>
-    <button id="btnCloseDrawer" class="btn btn-ghost btn-sm">✕</button>
+<!-- ═══════════════ RECURSOS ═══════════════ -->
+<section class="section" id="recursos">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="sparkles"></i>Recursos</span>
+    <h2>Tudo que seu bot precisa, em um só painel</h2>
+    <p>Ferramentas modulares para você operar, escalar e monitorar com clareza.</p>
   </div>
-  <div class="drawer-body" id="drawerBody"></div>
-  <div class="drawer-foot">
-    <button id="btnMarkAllReadDrawer" class="btn btn-ghost btn-block btn-sm">✅ Marcar todas</button>
-  </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     MODAIS
-     ═══════════════════════════════════════════════════════════ -->
-
-<div id="modalServer" class="modal">
-  <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalServer">✕</button>
-    <div id="serverDetail"></div>
-  </div>
-</div>
-
-<div id="modalForgot" class="modal">
-  <div class="modal-box">
-    <button class="modal-x" data-close="modalForgot">✕</button>
-    <h2>🔐 Recuperar senha</h2>
-    <p class="modal-sub">Enviaremos um link pro seu e-mail.</p>
-    <div class="field">
-      <label>E-mail</label>
-      <div class="input-icon"><span>📧</span><input type="email" id="forgotEmail" placeholder="seu@email.com"></div>
+  <div class="grid-feats">
+    <div class="feat">
+      <div class="feat-icon blue"><i data-lucide="layout-dashboard"></i></div>
+      <h3>Dashboard em tempo real</h3>
+      <p>Status do bot, servidores, usuários, receita e alertas em uma visão unificada.</p>
     </div>
-    <div class="modal-btns">
-      <button class="btn btn-ghost" data-close="modalForgot">Cancelar</button>
-      <button class="btn btn-primary" id="btnSendForgot">📧 Enviar</button>
+
+    <div class="feat">
+      <div class="feat-icon purple"><i data-lucide="server"></i></div>
+      <h3>Multi-servidor</h3>
+      <p>Gerencie vários servidores Discord com permissão validada no backend.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon green"><i data-lucide="ticket"></i></div>
+      <h3>Sistema de tickets</h3>
+      <p>Painéis personalizáveis, formulários, prioridades, avaliações e transcripts.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon amber"><i data-lucide="gamepad-2"></i></div>
+      <h3>Apostas &amp; mediadores</h3>
+      <p>Filas, threads automáticas, PIX por mediador, blacklist e análise de disputas.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon red"><i data-lucide="shopping-cart"></i></div>
+      <h3>Loja integrada</h3>
+      <p>Produtos, estoque, cupons, PIX/Mercado Pago e entrega automática.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon cyan"><i data-lucide="radio"></i></div>
+      <h3>Streamers</h3>
+      <p>Fila dedicada, threads privadas, mediação de apostas com streamer.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon pink"><i data-lucide="shield"></i></div>
+      <h3>Moderação</h3>
+      <p>Anti-link, anti-convite, anti-raid, blacklist global e kill switch.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon lime"><i data-lucide="scroll-text"></i></div>
+      <h3>Auditoria completa</h3>
+      <p>Toda ação registrada: quem, quando, de onde, com filtros e exportação.</p>
     </div>
   </div>
-</div>
+</section>
 
-<div id="modalUser" class="modal">
-  <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalUser">✕</button>
-    <h2 id="modalUserTitle">➕ Novo Usuário</h2>
-    <form id="userForm">
-      <input type="hidden" id="modalUserId">
-      <div class="grid-2">
-        <div class="field"><label>E-mail *</label><div class="input-icon"><span>📧</span><input type="email" id="modalUserEmail" required></div></div>
-        <div class="field"><label>Discord ID *</label><div class="input-icon"><span>🎮</span><input type="text" id="modalUserDiscord" required pattern="\d{15,25}" inputmode="numeric"></div></div>
-        <div class="field"><label>Nome</label><div class="input-icon"><span>👤</span><input type="text" id="modalUserNome"></div></div>
-        <div class="field"><label>Role *</label><div class="input-wrap"><select id="modalUserRole">
-          <option value="cliente" selected>CLIENTE</option>
-          <option value="funcionario">FUNCIONÁRIO</option>
-          <option value="admin">ADMIN</option>
-          <option value="dev">DEV</option>
-        </select></div></div>
-        <div class="field"><label>Plano</label><div class="input-wrap"><select id="modalUserPlan">
-          <option value="basic" selected>Basic</option>
-          <option value="premium">Premium</option>
-          <option value="ultra">Ultra</option>
-          <option value="unlimited">Unlimited</option>
-          <option value="none">Nenhum</option>
-        </select></div></div>
-        <div class="field" id="fieldPassword"><label>Senha <span class="field-req">vazio = gerada</span></label><div class="input-icon"><span>🔒</span><input type="text" id="modalUserPassword"></div></div>
+<!-- ═══════════════ COMO FUNCIONA ═══════════════ -->
+<section class="section section-alt" id="como-funciona">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="workflow"></i>Como funciona</span>
+    <h2>Em 4 passos você está dentro</h2>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Crie sua conta</h3>
+      <p>Cadastro por e-mail e senha. Confirmação por e-mail obrigatória.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>Aguarde aprovação</h3>
+      <p>O desenvolvedor aprova o acesso e define seu plano e permissões.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Vincule servidores</h3>
+      <p>Adicione o bot nos seus servidores Discord e autorize o acesso.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <h3>Gerencie tudo</h3>
+      <p>Configure tickets, apostas, loja e módulos direto no painel.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SEGURANÇA ═══════════════ -->
+<section class="section" id="seguranca">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="shield-check"></i>Segurança</span>
+    <h2>Segurança levada a sério</h2>
+    <p>Arquitetura pensada para proteger dados, sessões e o seu servidor.</p>
+  </div>
+
+  <div class="grid-security">
+    <div class="sec-item">
+      <i data-lucide="lock"></i>
+      <div>
+        <h4>Sessões protegidas</h4>
+        <p>Cookies httpOnly, CSRF em todas as mutações, expiração automática.</p>
       </div>
-      <div class="field"><label>Servidores atribuídos <span class="field-req">IDs por vírgula</span></label><div class="input-icon"><span>🌐</span><input type="text" id="modalUserGuilds" placeholder="123, 456"></div></div>
-      <div class="field"><label>Notas internas</label><div class="input-wrap"><textarea id="modalUserNotes"></textarea></div></div>
-      <div class="modal-btns">
-        <button type="button" class="btn btn-ghost" data-close="modalUser">Cancelar</button>
-        <button type="submit" class="btn btn-primary" id="btnSaveUser">Criar</button>
+    </div>
+    <div class="sec-item">
+      <i data-lucide="key-round"></i>
+      <div>
+        <h4>Sem segredos no frontend</h4>
+        <p>Tokens, chaves e credenciais vivem apenas no backend.</p>
       </div>
-      <div id="modalUserMsg" class="msg"></div>
-    </form>
-  </div>
-</div>
-
-<div id="modalApprove" class="modal">
-  <div class="modal-box">
-    <button class="modal-x" data-close="modalApprove">✕</button>
-    <h2>✅ Aprovar cadastro</h2>
-    <p class="modal-sub" id="approveEmail">—</p>
-    <form id="approveForm">
-      <input type="hidden" id="approveUserId">
-      <div class="grid-2">
-        <div class="field"><label>Role *</label><div class="input-wrap"><select id="approveRole">
-          <option value="cliente" selected>CLIENTE</option>
-          <option value="funcionario">FUNCIONÁRIO</option>
-          <option value="admin">ADMIN</option>
-        </select></div></div>
-        <div class="field"><label>Plano *</label><div class="input-wrap"><select id="approvePlan">
-          <option value="basic" selected>Basic</option>
-          <option value="premium">Premium</option>
-          <option value="ultra">Ultra</option>
-          <option value="unlimited">Unlimited</option>
-          <option value="none">Nenhum</option>
-        </select></div></div>
+    </div>
+    <div class="sec-item">
+      <i data-lucide="user-check"></i>
+      <div>
+        <h4>Permissões validadas</h4>
+        <p>Cada requisição verifica usuário, cargo, recurso e associação.</p>
       </div>
-      <div class="field"><label>Servidores atribuídos</label><div class="input-icon"><span>🌐</span><input type="text" id="approveGuilds" placeholder="IDs por vírgula"></div></div>
-      <div class="field"><label>Notas</label><div class="input-wrap"><textarea id="approveNotes"></textarea></div></div>
-      <div class="modal-btns">
-        <button type="button" class="btn btn-ghost" data-close="modalApprove">Cancelar</button>
-        <button type="submit" class="btn btn-success">✅ Aprovar</button>
+    </div>
+    <div class="sec-item">
+      <i data-lucide="scan-face"></i>
+      <div>
+        <h4>Auditoria e alertas</h4>
+        <p>Logs completos com IP, dispositivo e ações sensíveis em destaque.</p>
       </div>
-      <div id="approveMsg" class="msg"></div>
-    </form>
-  </div>
-</div>
-
-<div id="modalSendKey" class="modal">
-  <div class="modal-box">
-    <button class="modal-x" data-close="modalSendKey">✕</button>
-    <h2>📤 Enviar key</h2>
-    <p class="modal-sub">A key será enviada e o cliente notificado.</p>
-    <div class="field"><label>Key</label><div class="input-wrap"><select id="sendKeyId"></select></div></div>
-    <div class="field"><label>Cliente</label><div class="input-wrap"><select id="sendKeyUser"></select></div></div>
-    <div class="modal-btns">
-      <button class="btn btn-ghost" data-close="modalSendKey">Cancelar</button>
-      <button class="btn btn-success" id="btnConfirmSendKey">📤 Enviar</button>
     </div>
-    <div id="sendKeyMsg" class="msg"></div>
-  </div>
-</div>
-
-<div id="modalDevServerActions" class="modal">
-  <div class="modal-box">
-    <button class="modal-x" data-close="modalDevServerActions">✕</button>
-    <h2>🛰️ Ações do Servidor</h2>
-    <p class="modal-sub" id="devServerActionsId">—</p>
-
-    <div class="actions-list">
-      <button class="btn btn-ghost" id="actRename">✏️ Renomear</button>
-      <button class="btn btn-ghost" id="actRefresh">🔄 Atualizar dados</button>
-      <button class="btn btn-success" id="actForcePremium">💎 Force Premium (30d)</button>
-      <button class="btn btn-ghost" id="actSyncMembers">🚀 Levar membros (OAuth)</button>
-      <button class="btn btn-danger" id="actLeave">🚪 Bot sair do servidor</button>
-      <button class="btn btn-danger btn-nuke" id="actNuke">💥 NUKE — apagar canais e cargos</button>
+    <div class="sec-item">
+      <i data-lucide="shield-alert"></i>
+      <div>
+        <h4>Rate limiting</h4>
+        <p>Proteção contra força bruta e abuso em endpoints críticos.</p>
+      </div>
     </div>
-
-    <div id="devServerActionsMsg" class="msg"></div>
-  </div>
-</div>
-
-<div id="modalUserSessions" class="modal">
-  <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalUserSessions">✕</button>
-    <h2>🖥️ Sessões do Usuário</h2>
-    <p class="modal-sub" id="userSessionsTarget">—</p>
-    <div class="btn-row" style="margin-bottom:14px">
-      <button id="btnRefreshUserSessions" class="btn btn-ghost btn-sm">🔄 Atualizar</button>
-      <button id="btnRevokeAllUserSessions" class="btn btn-danger btn-sm">🚫 Revogar todas</button>
-    </div>
-    <div id="userSessionsList"></div>
-  </div>
-</div>
-
-<div id="modalAuditDetail" class="modal">
-  <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalAuditDetail">✕</button>
-    <h2>🔍 Detalhes do Evento</h2>
-    <div id="auditDetailBody" style="margin-top:16px"></div>
-  </div>
-</div>
-
-<div id="modalTermsReject" class="modal">
-  <div class="modal-box modal-center">
-    <div class="modal-icon-big">👋</div>
-    <h2>Sentiremos sua falta!</h2>
-    <p class="modal-sub">Você não aceitou os Termos. Sem o aceite não podemos permitir o uso.</p>
-    <div class="modal-btns">
-      <button class="btn btn-ghost" data-close="modalTermsReject">↩️ Voltar e ler</button>
-      <button class="btn btn-danger" id="btnTermsConfirmLeave">🚪 Sair do site</button>
+    <div class="sec-item">
+      <i data-lucide="eye-off"></i>
+      <div>
+        <h4>Dados minimizados</h4>
+        <p>Coletamos apenas o necessário. Você pode revogar sessões a qualquer momento.</p>
+      </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- Toast -->
-<div id="toast" class="toast"></div>
+<!-- ═══════════════ BENEFÍCIOS ═══════════════ -->
+<section class="section section-alt" id="beneficios">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="heart-handshake"></i>Benefícios</span>
+    <h2>Por que usar o Frio Panel</h2>
+  </div>
+
+  <div class="grid-benefits">
+    <div class="benefit"><i data-lucide="timer"></i><h4>Economize tempo</h4><p>Configure tudo pelo navegador, sem comandos complexos.</p></div>
+    <div class="benefit"><i data-lucide="trending-up"></i><h4>Escale sem dor</h4><p>Multi-servidor, multi-cliente, multi-plano — do primeiro ao milésimo.</p></div>
+    <div class="benefit"><i data-lucide="palette"></i><h4>Identidade própria</h4><p>Personalize embeds, painéis, cores e fluxos por servidor.</p></div>
+    <div class="benefit"><i data-lucide="headset"></i><h4>Suporte dedicado</h4><p>Canal direto com o desenvolvedor pelo próprio painel.</p></div>
+  </div>
+</section>
+
+<!-- ═══════════════ CTA FINAL ═══════════════ -->
+<section class="cta-final">
+  <div class="cta-box">
+    <h2>Pronto para modernizar seu bot?</h2>
+    <p>Acesse o painel e comece agora. Cadastro gratuito, aprovação rápida.</p>
+    <div class="hero-cta center">
+      <a href="/login" class="btn btn-primary btn-lg">
+        <i data-lucide="log-in"></i>Entrar no Painel
+      </a>
+      <a href="/register" class="btn btn-ghost btn-lg">
+        <i data-lucide="user-plus"></i>Criar conta
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="/assets/logo.png" alt="Frio Panel">
+      <p>Painel profissional para gerenciamento de bots Discord.</p>
+    </div>
+
+    <div class="footer-col">
+      <h5>Produto</h5>
+      <a href="#recursos">Recursos</a>
+      <a href="#seguranca">Segurança</a>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="/login">Entrar</a>
+    </div>
+
+    <div class="footer-col">
+      <h5>Legal</h5>
+      <a href="/terms">Termos de Uso</a>
+      <a href="/privacy">Política de Privacidade</a>
+      <a href="/terms#lgpd">LGPD</a>
+    </div>
+
+    <div class="footer-col">
+      <h5>Comunidade</h5>
+      <a href="#" id="footDiscord" target="_blank" rel="noopener">Discord</a>
+      <a href="#" id="footSupport">Suporte</a>
+      <a href="/terms#contato">Contato</a>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <span>&copy; <span id="year"></span> Frio Panel. Todos os direitos reservados.</span>
+    <span class="footer-meta">Feito com segurança e café ☕</span>
+  </div>
+</footer>
 
 <script>
-function togglePass(id, btn) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const isPass = el.type === 'password';
-  el.type = isPass ? 'text' : 'password';
-  btn.textContent = isPass ? '🙈' : '👁️';
-}
+(function () {
+  'use strict';
+
+  // Ano dinâmico
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Lucide icons
+  if (window.lucide) {
+    try { window.lucide.createIcons(); } catch (e) { console.warn('lucide', e); }
+  }
+
+  // Navbar scrolled
+  const nav = document.getElementById('nav');
+  const onScroll = () => {
+    if (window.scrollY > 12) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Menu mobile
+  const burger = document.getElementById('navBurger');
+  const links = document.getElementById('navLinks');
+  burger?.addEventListener('click', () => {
+    links?.classList.toggle('open');
+    burger.classList.toggle('active');
+  });
+  links?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+    links.classList.remove('open');
+    burger?.classList.remove('active');
+  }));
+
+  // Smooth scroll
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href');
+      if (!id || id === '#') return;
+      const el = document.querySelector(id);
+      if (el) {
+        e.preventDefault();
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // Botão "Adicionar Bot" — OAuth2 do Discord
+  // O client_id é obtido de forma segura via API pública (nunca hardcoded no HTML público).
+  async function getDiscordInviteUrl() {
+    try {
+      const r = await fetch('/api/public-config', { credentials: 'omit' });
+      const d = await r.json();
+      if (!d?.discord_client_id) return null;
+      const params = new URLSearchParams({
+        client_id: d.discord_client_id,
+        permissions: '8', // Administrator (ajuste conforme necessário)
+        scope: 'bot applications.commands',
+      });
+      return `https://discord.com/oauth2/authorize?${params}`;
+    } catch { return null; }
+  }
+
+  const addBotHandler = async (e) => {
+    e.preventDefault();
+    const url = await getDiscordInviteUrl();
+    if (!url) {
+      alert('Não foi possível gerar o link do bot. Tente novamente em instantes.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  document.getElementById('navAddBot')?.addEventListener('click', addBotHandler);
+  document.getElementById('heroAddBot')?.addEventListener('click', addBotHandler);
+  document.getElementById('footDiscord')?.setAttribute('href', '#');
+
+  // Reveal on scroll
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        en.target.classList.add('in');
+        io.unobserve(en.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.feat, .sec-item, .benefit, .step').forEach(el => io.observe(el));
+})();
 </script>
-<script src="/assets/app.js?v=1"></script>
 </body>
 </html>

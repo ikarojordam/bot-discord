@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════
-// 🔑 FRIO PANEL — Backend v5.1.6
-// Fix: requireRole chama requireAuth · Dashboard v2 endpoints
+// FRIO PANEL — Backend v6.0.0
+// Painel + Landing + Páginas legais (SPA separada)
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 
@@ -26,29 +26,29 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 
 // ═══ VALIDAÇÕES ═══
-function fatal(msg) { console.error(`❌ [BOOT] ${msg}`); process.exit(1); }
+function fatal(msg) { console.error(`[BOOT] ${msg}`); process.exit(1); }
 if (!SUPABASE_URL) fatal('SUPABASE_URL ausente');
 if (!SUPABASE_ANON) fatal('SUPABASE_ANON_KEY ausente');
 if (!SUPABASE_SERVICE) fatal('SUPABASE_SERVICE_ROLE_KEY ausente');
-if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('⚠️ [SECURITY] PANEL_API_TOKEN curto/ausente');
-if (!DISCORD_TOKEN) console.warn('⚠️ DISCORD_TOKEN ausente — ações Discord desabilitadas');
+if (!PANEL_API_TOKEN || PANEL_API_TOKEN.length < 24) console.warn('[SECURITY] PANEL_API_TOKEN curto/ausente');
+if (!DISCORD_TOKEN) console.warn('DISCORD_TOKEN ausente — ações Discord desabilitadas');
 
 // ═══ SUPABASE ═══
 const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.6' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/6.0.0' } },
 });
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/5.1.6-admin' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/6.0.0-admin' } },
 });
 
-// ═══ AUTO-MIGRATION ═══
+// ═══ AUTO-MIGRATION CHECK ═══
 (async function autoMigrate() {
   try {
     const { error } = await supaAdmin.from('panel_admins').select('email_confirmed').limit(1);
-    if (!error) console.log('✅ [MIGRATION] Colunas presentes.');
-    else console.warn('⚠️ [MIGRATION] Coluna ausente. Rode: ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS email_confirmed BOOLEAN DEFAULT false, confirm_token TEXT, confirm_expires TIMESTAMPTZ, reset_token TEXT, reset_expires TIMESTAMPTZ;');
+    if (!error) console.log('[MIGRATION] Colunas presentes.');
+    else console.warn('[MIGRATION] Coluna ausente. Rode: ALTER TABLE panel_admins ADD COLUMN IF NOT EXISTS email_confirmed BOOLEAN DEFAULT false, confirm_token TEXT, confirm_expires TIMESTAMPTZ, reset_token TEXT, reset_expires TIMESTAMPTZ;');
   } catch (e) { console.error('[MIGRATION]', e.message); }
 })();
 
@@ -85,12 +85,7 @@ function genKeyCode() {
   return `FRIO-${seg(4)}-${seg(4)}-${seg(4)}`;
 }
 function clientIp(req) {
-  return (
-    (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
-    req.ip ||
-    req.socket?.remoteAddress ||
-    'unknown'
-  );
+  return ((req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || req.socket?.remoteAddress || 'unknown');
 }
 function genericError(res, status = 500, msg = 'Erro interno.') {
   return res.status(status).json({ ok: false, error: msg });
@@ -103,7 +98,13 @@ function maskEmail(email) {
   return `${name[0]}${'*'.repeat(Math.max(1, name.length - 2))}${name.slice(-1)}@${domain}`;
 }
 
-// ═══ SECURITY HEADERS ═══
+// ═══════════════════════════════════════════════════════════
+// SECURITY HEADERS
+// CSP ajustada para:
+//   - Lucide   (unpkg.com)
+//   - Chart.js (cdn.jsdelivr.net)
+//   - Google Fonts
+// ═══════════════════════════════════════════════════════════
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
@@ -111,20 +112,26 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   if (IS_PROD) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+  // CSP — landing/auth/legal/app
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'",
+    "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: https:",
     "connect-src 'self' " + (BOT_API_URL || ''),
+    "media-src 'self' https:",
+    "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    "upgrade-insecure-requests",
   ].join('; '));
+
   next();
 });
 
@@ -132,8 +139,27 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 app.use(cookieParser());
 
+// ═══════════════════════════════════════════════════════════
+// STATIC — assets
+// Nunca cacheia assets versionados por querystring (?v=1)
+// ═══════════════════════════════════════════════════════════
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), {
+  maxAge: IS_PROD ? '7d' : 0,
+  etag: true,
+  setHeaders: (res, filePath) => {
+    // nunca cacheia HTML que possa existir em assets
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+  },
+}));
+
+// Arquivos soltos na raiz de /public (favicon, robots, sitemap)
 app.use(express.static(path.join(__dirname, 'public'), {
-  etag: false, lastModified: false,
+  index: false,
+  maxAge: 0,
+  etag: false,
+  lastModified: false,
   setHeaders: (res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -188,7 +214,7 @@ function csrfProtect(req, res, next) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CONTEXT EXTRACTOR
+// CONTEXT EXTRACTOR + AUDITORIA
 // ═══════════════════════════════════════════════════════════
 function extractCtx(req) {
   const ua = String(req.headers['user-agent'] || '');
@@ -215,9 +241,6 @@ function extractCtx(req) {
   };
 }
 
-// ═══════════════════════════════════════════════════════════
-// AUDITORIA
-// ═══════════════════════════════════════════════════════════
 const _AUDIT_WHITELIST = new Set([
   'email','username','role','plan','tier','guild_id','guild_name',
   'target_user_id','product_id','product_name','amount','status',
@@ -374,7 +397,6 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// ⚡ FIX CRÍTICO: agora chama requireAuth ANTES de checar role
 function requireRole(...allowed) {
   return (req, res, next) => {
     requireAuth(req, res, () => {
@@ -418,7 +440,7 @@ app.use((req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// PUBLIC
+// PUBLIC ENDPOINTS
 // ═══════════════════════════════════════════════════════════
 app.get('/api/public-config', (req, res) => {
   res.json({
@@ -432,7 +454,7 @@ app.get('/api/public-config', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, service: 'frio-panel', version: '5.1.6',
+    ok: true, service: 'frio-panel', version: '6.0.0',
     uptime: Math.floor(process.uptime()),
     env: NODE_ENV,
   });
@@ -444,7 +466,7 @@ app.get('/health', (req, res) => {
 app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
   const started = Date.now();
   try {
-    const { email, password } = req.body || {};
+    const { email, password, remember } = req.body || {};
     if (!email || !password) return res.status(400).json({ ok: false, error: 'E-mail e senha obrigatórios' });
     if (!isValidEmail(email)) return res.status(400).json({ ok: false, error: 'E-mail inválido' });
 
@@ -490,9 +512,12 @@ app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Conta desativada' });
     }
 
+    // Sessão mais longa se "remember" foi marcado
+    const maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+
     res.cookie(COOKIE_NAME, data.session.access_token, {
       httpOnly: true, secure: IS_PROD, sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, path: '/',
+      maxAge, path: '/',
     });
     const csrf = setCsrfCookie(res);
     const sessionId = await createSession(data.user.id, data.session.access_token, req);
@@ -608,7 +633,7 @@ app.post('/api/auth/register', rateLimit(5, 60 * 60 * 1000), async (req, res) =>
 
     const { data: devs } = await supaAdmin.from('panel_admins').select('user_id').eq('role', 'dev').eq('ativo', true);
     for (const d of devs || []) {
-      await notify(d.user_id, 'system', '🆕 Novo cadastro pendente',
+      await notify(d.user_id, 'system', 'Novo cadastro pendente',
         `${emailNorm} (Discord: ${discordIdClean}) solicitou acesso.`,
         { user_id: signupData.user.id, discord_id: discordIdClean });
     }
@@ -790,7 +815,7 @@ app.post('/api/auth/confirm', rateLimit(20, 60 * 60 * 1000), async (req, res) =>
 });
 
 // ═══════════════════════════════════════════════════════════
-// VERIFY
+// VERIFY (token_hash)
 // ═══════════════════════════════════════════════════════════
 app.post('/api/auth/verify', rateLimit(20, 60 * 60 * 1000), async (req, res) => {
   try {
@@ -949,10 +974,9 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// 🆕 DASHBOARD v2 — Bot status, atividade, keys expirando, quick stats
+// DASHBOARD v2 — status, atividade, keys expirando, quick stats
 // ═══════════════════════════════════════════════════════════
 
-// GET /api/dashboard/bot-status
 app.get('/api/dashboard/bot-status', requireStaff, async (req, res) => {
   try {
     let botStatus = null;
@@ -978,7 +1002,6 @@ app.get('/api/dashboard/bot-status', requireStaff, async (req, res) => {
   }
 });
 
-// GET /api/dashboard/recent-activity
 app.get('/api/dashboard/recent-activity', requireStaff, rateLimit(120, 60 * 1000), async (req, res) => {
   try {
     const { data } = await supaAdmin.from('site_audit_log')
@@ -992,7 +1015,6 @@ app.get('/api/dashboard/recent-activity', requireStaff, rateLimit(120, 60 * 1000
   }
 });
 
-// GET /api/dashboard/keys-expiring
 app.get('/api/dashboard/keys-expiring', requireStaff, async (req, res) => {
   try {
     const in7d = new Date(Date.now() + 7 * 86400000).toISOString();
@@ -1012,24 +1034,21 @@ app.get('/api/dashboard/keys-expiring', requireStaff, async (req, res) => {
   }
 });
 
-// GET /api/dashboard/quick-stats
 app.get('/api/dashboard/quick-stats', requireStaff, async (req, res) => {
   try {
     const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
-    const [logins24h, loginsFailed24h, keysGenerated24h, redemptions7d, topMediadores] = await Promise.all([
+    const [logins24h, loginsFailed24h, keysGenerated24h, redemptions7d] = await Promise.all([
       supaAdmin.from('site_audit_log').select('*', { count: 'exact', head: true }).eq('action', 'login').gte('created_at', since24h),
       supaAdmin.from('site_audit_log').select('*', { count: 'exact', head: true }).eq('action', 'login_failed').gte('created_at', since24h),
       supaAdmin.from('premium_keys').select('*', { count: 'exact', head: true }).gte('created_at', since24h),
       supaAdmin.from('premium_redemptions').select('*', { count: 'exact', head: true }).gte('created_at', since7d),
-      supaAdmin.from('ff_mediator_queue').select('user_id,earnings_total,matches_total').order('earnings_total', { ascending: false }).limit(5),
     ]);
     return res.json({ ok: true, quick: {
       logins_24h: logins24h.count || 0,
       logins_failed_24h: loginsFailed24h.count || 0,
       keys_generated_24h: keysGenerated24h.count || 0,
       redemptions_7d: redemptions7d.count || 0,
-      top_mediadores: topMediadores.data || [],
     }});
   } catch (e) {
     console.error('[quick-stats]', e);
@@ -1183,7 +1202,7 @@ app.get('/api/dev/servers', requireDev, async (req, res) => {
     if (error) return res.status(500).json({ ok: false, error: error.message });
 
     const ids = (data || []).map(g => g.guild_id);
-    let premiumIds = new Set();
+    const premiumIds = new Set();
     if (ids.length) {
       const { data: fps } = await supaAdmin.from('force_premium').select('target_id').eq('scope', 'guild').in('target_id', ids);
       const { data: cfgs } = await supaAdmin.from('configs').select('guild_id').in('guild_id', ids).eq('is_premium', true);
@@ -1403,7 +1422,7 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
       target_id: authData.user.id, target_role: role,
       metadata: { email: emailNorm, plan, discord_id: discordIdClean },
     });
-    await notify(authData.user.id, 'system', '👋 Bem-vindo!',
+    await notify(authData.user.id, 'system', 'Bem-vindo!',
       `Conta (${role} · ${plan || 'basic'}) criada. Sua senha temporária: ${finalPassword}`,
       { role, plan });
 
@@ -1429,7 +1448,7 @@ app.post('/api/dev/usuarios/:userId/approve', requireDev, csrfProtect, async (re
     if (error) return res.status(500).json({ ok: false, error: error.message });
 
     await audit(req, 'approve_user', { target_id: req.params.userId, target_role: role });
-    await notify(req.params.userId, 'system', '✅ Aprovado!', `Você é ${role} · ${plan || 'basic'}.`, { role, plan });
+    await notify(req.params.userId, 'system', 'Aprovado!', `Você é ${role} · ${plan || 'basic'}.`, { role, plan });
     res.json({ ok: true });
   } catch (e) { return genericError(res); }
 });
@@ -1441,7 +1460,7 @@ app.patch('/api/dev/usuarios/:userId/plan', requireDev, csrfProtect, async (req,
     const { error } = await supaAdmin.from('panel_admins').update({ plan, updated_at: new Date().toISOString() }).eq('user_id', req.params.userId);
     if (error) return res.status(500).json({ ok: false, error: error.message });
     await audit(req, 'change_plan', { target_id: req.params.userId, metadata: { plan } });
-    await notify(req.params.userId, 'system', '💎 Plano alterado!', `Seu plano agora é ${String(plan).toUpperCase()}.`, { plan });
+    await notify(req.params.userId, 'system', 'Plano alterado!', `Seu plano agora é ${String(plan).toUpperCase()}.`, { plan });
     res.json({ ok: true });
   } catch (e) { return genericError(res); }
 });
@@ -1607,7 +1626,7 @@ app.post('/api/keys/send', requireStaff, csrfProtect, async (req, res) => {
     if (!target.ativo) return res.status(400).json({ ok: false, error: 'Usuário inativo' });
 
     await supaAdmin.from('premium_keys').update({ sent_to: user_id, sent_at: new Date().toISOString() }).eq('id', key_id);
-    const label = key.is_pack ? '📦 Pack de Keys' : `🔑 ${key.tier.toUpperCase()}`;
+    const label = key.is_pack ? 'Pack de Keys' : `${key.tier.toUpperCase()}`;
     await notify(user_id, 'key_received', `${label} recebido!`, `Código: ${key.key_code}`,
       { key_id, key_code: key.key_code, tier: key.tier, is_pack: key.is_pack });
 
@@ -1946,17 +1965,118 @@ app.post('/api/dev/notifications', requireStaff, csrfProtect, async (req, res) =
 });
 
 // ═══════════════════════════════════════════════════════════
-// SPA FALLBACK + ERRO GLOBAL
+// ➤ NOVO — PÁGINAS PÚBLICAS (landing, login, register, legal)
+// Servidas como arquivos estáticos dedicados
 // ═══════════════════════════════════════════════════════════
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) return res.status(404).json({ ok: false, error: 'Rota não encontrada.' });
+
+// Rota raiz → landing
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Login
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Registro
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+// Termos de Uso
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+});
+
+// Política de Privacidade
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+});
+
+// Painel (SPA)
+app.get('/app', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+});
+
+// Confirmação e reset (mantidos da v5)
+app.get('/confirm', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'confirm.html'));
+});
+app.get('/reset', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset.html'));
+});
+
+// robots.txt e sitemap.xml
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.send(
+`User-agent: *
+Allow: /
+Allow: /terms
+Allow: /privacy
+Disallow: /app
+Disallow: /login
+Disallow: /register
+Disallow: /api/
+
+Sitemap: ${baseUrl()}/sitemap.xml`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const base = baseUrl();
+  const urls = [
+    { loc: '/', priority: '1.0' },
+    { loc: '/terms', priority: '0.5' },
+    { loc: '/privacy', priority: '0.5' },
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map(u => `  <url>
+    <loc>${base}${u.loc}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+  res.type('application/xml');
+  res.send(xml);
+});
+
+// ═══════════════════════════════════════════════════════════
+// FALLBACK — SPA do /app e 404
+// ═══════════════════════════════════════════════════════════
+app.get('*', (req, res, next) => {
+  // APIs retornam 404 JSON
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ ok: false, error: 'Rota não encontrada.' });
+  }
+
+  // Deep-links do /app → servem a SPA
+  if (req.path.startsWith('/app')) {
+    return res.sendFile(path.join(__dirname, 'public', 'app.html'));
+  }
+
+  // Arquivo estático existente? serve
+  const filePath = path.join(__dirname, 'public', req.path);
+  return res.sendFile(filePath, (err) => {
+    if (err) next();
+  });
+});
+
+// 404 final — só chega aqui se o fallback também falhou
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ ok: false, error: 'Rota não encontrada.' });
+  }
+  res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Tratamento global de erro
 app.use((err, req, res, next) => {
-  console.error('❌ [UNCAUGHT]', err);
+  console.error('[UNCAUGHT]', err);
   if (res.headersSent) return next(err);
-  return genericError(res, 500);
+  if (req.path.startsWith('/api/')) return genericError(res, 500);
+  res.status(500).send('Erro interno.');
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -1965,23 +2085,23 @@ app.use((err, req, res, next) => {
 setInterval(async () => {
   try {
     await supaAdmin.rpc('cleanup_expired_data').catch(() => {});
-    console.log('🧹 [cleanup] executado');
+    console.log('[cleanup] executado');
   } catch (e) { console.error('[cleanup]', e.message); }
 }, 24 * 60 * 60 * 1000);
 
 // ═══════════════════════════════════════════════════════════
 // PROCESS HANDLERS
 // ═══════════════════════════════════════════════════════════
-process.on('unhandledRejection', r => console.error('⚠️ unhandledRejection:', r?.message || r));
-process.on('uncaughtException', e => console.error('⚠️ uncaughtException:', e?.message || e));
+process.on('unhandledRejection', r => console.error('unhandledRejection:', r?.message || r));
+process.on('uncaughtException', e => console.error('uncaughtException:', e?.message || e));
 
 // ═══════════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, () => {
-  console.log(`🌐 [PANEL v5.1.6] Rodando na porta ${PORT}`);
-  console.log(`🔒 NODE_ENV=${NODE_ENV}`);
-  console.log(`🤖 Bot: ${BOT_API_URL}`);
-  console.log(`🔧 requireRole: OK · Dashboard v2: OK`);
-  console.log(`🚀 Pronto.`);
+  console.log(`[PANEL v6.0.0] Rodando na porta ${PORT}`);
+  console.log(`NODE_ENV=${NODE_ENV}`);
+  console.log(`Bot API: ${BOT_API_URL}`);
+  console.log(`Painel URL: ${baseUrl()}`);
+  console.log(`Rotas: / (landing) · /login · /register · /terms · /privacy · /app`);
 });

@@ -1871,3 +1871,28 @@ kbd{
     transition-duration:.01ms !important;
   }
 }
+/* ═══════════════════════════════════════════════════════════
+   BOOT SCREEN (carregamento inicial / bloqueado)
+   ═══════════════════════════════════════════════════════════ */
+.boot-screen{
+  position:fixed;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  padding:24px;
+  background:var(--bg-1);
+  z-index:500;
+}
+.boot-card{
+  width:100%;max-width:420px;
+  padding:40px 32px;
+  text-align:center;
+  background:var(--surface);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);
+}
+.boot-card .spinner{margin:0 auto 20px}
+.boot-card h2{font-size:20px;font-weight:900;margin-bottom:10px}
+.boot-text{font-size:15px;font-weight:700;margin-bottom:6px}
+.boot-sub{font-size:13px;color:var(--txt-3);line-height:1.6;margin-bottom:22px}
+.boot-card .btn-row{justify-content:center;margin-top:18px}

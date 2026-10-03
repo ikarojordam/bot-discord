@@ -1,65 +1,100 @@
 // ═══════════════════════════════════════════════════════════
 // emojis.js — Central de custom emojis do FrioBot
-// ═══════════════════════════════════════════════════════════
-// Formato: '<:nome:ID>' (estático) ou '<a:nome:ID>' (animado)
+// v2 — CORRIGIDO com TODAS as chaves usadas no código
 // ═══════════════════════════════════════════════════════════
 module.exports = {
 
   // ═══════════════════════════════════════════════════════════
-  // AÇÕES GENÉRICAS (botões)
+  // APOSTAS / GELO  ← ESSENCIAL (estava faltando!)
   // ═══════════════════════════════════════════════════════════
-  entrar:       '<:membro:1548712679475122326>',            // ✅ Entrar (usa "membro")
-  sair:         '<:FARM_ASETA2_:1464502194815373480>',      // ✅ Sair (seta animada)
-  check:        '<:certo_froid:1550644903455756339>',       // ✅ Check/Confirmar
-  checkAlt:     '<:36_V:1532466851127361729>',              // ✅ Check alternativo
-  x:            '<:35_X:1532467009181454557>',              // ✅ X/Cancelar
-  xAlt:         '<:4702discordcrossemoji:1550644905037135992>', // ✅ X alternativo
-  seta:         '<:setinha:1535354476829999114>',           // ✅ Voltar
-  setaGhost:    '<:seta_ghost:1548712677650464771>',        // ✅ Voltar alternativo
-  lupa:         '<:12_lupa:1532467007671500973>',           // ✅ Verificar / Analisar
-  cartao:       '<:3_cartao:1532467082527113328>',          // ✅ Pagamento / Cartão
-  caminhao:     '<:40_caminhao:1532464073734619297>',       // ✅ Entrega / Envio
-  carrinho:     '<:carrinho:1546588205107646645>',          // ✅ Loja / Carrinho
-  modo:         '<:modo_1:1550206370392055818>',            // ✅ Config
+  gel:         '<:gel_normal:1294507785995948042>',
+  gelNormal:   '<:gel_normal:1294507785995948042>',
+  granada:     '<:gel_normal:1294507785995948042>',
+
+  // ═══════════════════════════════════════════════════════════
+  // AÇÕES GENÉRICAS
+  // ═══════════════════════════════════════════════════════════
+  entrar:       '<:membro:1548712679475122326>',
+  sair:         '<:FARM_ASETA2_:1464502194815373480>',
+  adicionar:    '<:adicionar:1493905344445943838>',
+  salvar:       '<:19_salvar:1532467016999370774>',
+  ferramenta:   '<:1_ferramenta:1532467079113085119>',
+  lixo:         '<:11_lixo:1532467081088598177>',
+  lupa:         '<:12_lupa:1532467007671500973>',
+  grafico:      '<:8_grafico:1532467089049260223>',
+  config:       '<:30_configuracoes:1532467012901801996>',
+  modo:         '<:modo_1:1550206370392055818>',
+  caminhao:     '<:40_caminhao:1532464073734619297>',
+  cartao:       '<:3_cartao:1532467082527113328>',
+  carrinho:     '<:carrinho:1546588205107646645>',
+  relogio:      '<:relogio:1494473331615731714>',
+  obg:          '<:4obg:1535794029135138848>',
+
+  // ═══════════════════════════════════════════════════════════
+  // CHECK / X / SETAS
+  // ═══════════════════════════════════════════════════════════
+  check:        '<:certo_froid:1550644903455756339>',
+  checkAlt:     '<:36_V:1532466851127361729>',
+  x:            '<:35_X:1532467009181454557>',
+  xAlt:         '<:4702discordcrossemoji:1550644905037135992>',
+  seta:         '<:setinha:1535354476829999114>',
+  setaAlt:      '<:seta:1540309800074748026>',
+  setaGhost:    '<:seta_ghost:1548712677650464771>',
 
   // ═══════════════════════════════════════════════════════════
   // PAGAMENTOS
   // ═══════════════════════════════════════════════════════════
-  pix:          '<:pix:1536469531755815094>',               // ✅ PIX
-  mercadopago:  '<:mercadopago:1536469538730811454>',       // ✅ Mercado Pago
-  dinheiro:     '<:whitemoney:1538246799364591656>',        // ✅ Valor / Saldo
+  pix:          '<:pix:1536469531755815094>',
+  mercadopago:  '<:mercadopago:1536469538730811454>',
+  dinheiro:     '<:whitemoney:1538246799364591656>',
+  valor:        '<:valor_2:1550205889867292794>',
 
   // ═══════════════════════════════════════════════════════════
   // TICKETS / SUPORTE
   // ═══════════════════════════════════════════════════════════
-  suporte:      '<:suporte:1535354572329984020>',           // ✅ Suporte / Tickets
-  suporteAlt:   '<:49suporte:1535354550343434250>',         // ✅ Suporte alternativo
-  entrega:      '<:entrega:1548713872951738370>',           // ✅ Entrega / Reembolso
+  suporte:      '<:suporte:1536012623647088790>',
+  suporteAlt:   '<:49suporte:1535354550343434250>',
+  reembolso:    '<:REEMBOLSO:1536012636347568219>',
+  duvida:       '<:duvidacluth:1529608732009304205>',
+  presente:     '<a:presente_gift:1536012659995054150>',
+  regras:       '<:25_regras:1532467011399979229>',
+  entrega:      '<:entrega:1548713872951738370>',
 
   // ═══════════════════════════════════════════════════════════
-  // CARGOS / STAFF / COROAS
+  // CARGOS / STAFF
   // ═══════════════════════════════════════════════════════════
-  staff:        '<:Staff:1464525238988705802>',             // ✅ Staff
-  mod:          '<:Mod:1464525237256327387>',               // ✅ Moderador
-  escudo:       '<:escudo_branco:1535865118007500820>',     // ✅ Mediador / Proteção
-  verificado:   '<a:verificado:1548713875149422622>',       // ✅ Verificado (animado)
-  cliente:      '<:cliente:1493673913430053045>',           // ✅ Cliente
-  membro:       '<:membro:1548712679475122326>',            // ✅ Membro comum
+  staff:        '<:Staff:1464525238988705802>',
+  helper:       '<:helper:1547863130963574894>',
+  mod:          '<:Mod:1464525237256327387>',
+  escudo:       '<:escudo_branco:1535865118007500820>',
+  verificado:   '<a:verificado:1548713875149422622>',
+  visto:        '<:vist:1550205993646948523>',
+  cliente:      '<:cliente:1493673913430053045>',
+  membro:       '<:membro:1548712679475122326>',
 
-  coroaOwner:   '<a:coroa_vermelha:1548705829774032936>',   // ✅ Owner / Premium top
-  coroaDiretor: '<a:coroa_blue:1548705832001077249>',       // ✅ Diretor
-  coroaGerente: '<a:coroa_cinza:1548705838145867878>',      // ✅ Gerente
-  coroa:        '<a:Coroa:1548705828549296218>',            // ✅ Coroa genérica
-  coroaOld:     '<a:coroa_old11:1548705842445025351>',      // ✅ Coroa legado
-  vip:          '<a:c_VIPTKF:1548710214629331014>',         // ✅ VIP
+  // ═══════════════════════════════════════════════════════════
+  // COROAS / PREMIUM
+  // ═══════════════════════════════════════════════════════════
+  coroaOwner:   '<a:coroa_vermelha:1548705829774032936>',
+  coroaDiretor: '<a:coroa_blue:1548705832001077249>',
+  coroaGerente: '<a:coroa_cinza:1548705838145867878>',
+  coroa:        '<a:Coroa:1548705828549296218>',
+  coroaAlt:     '<a:coroa:1548705839479783514>',
+  coroaOld:     '<a:coroa_old11:1548705842445025351>',
+  vip:          '<a:c_VIPTKF:1548710214629331014>',
+  gold:         '<a:golddddddd:1548712681199116378>',
+  president:    '<:PresidentRoleIcon:1547869089727520829>',
 
   // ═══════════════════════════════════════════════════════════
   // RANKING / CONQUISTAS
   // ═══════════════════════════════════════════════════════════
-  trofeu:       '<:trofeus_1:1538246805714894898>',         // ✅ Ranking / Premiações
+  trofeu:       '<:trofeus_1:1538246805714894898>',
+  cemHoras:     '<:100hs:1500979766495281192>',
 
   // ═══════════════════════════════════════════════════════════
-  // MISC
+  // EVENTOS / MISC
   // ═══════════════════════════════════════════════════════════
-  discord:      '<:discord:1527188455023448114>',           // ✅ Discord
+  evento:       '<a:evento:1554185023236608000>',
+  discord:      '<:discord:1527188455023448114>',
+  emote8k:      '<a:emote8k:1463792250537513077>',
 };

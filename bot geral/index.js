@@ -35,8 +35,8 @@ const {
   AudioPlayerStatus, VoiceConnectionStatus, getVoiceConnection, entersState,
 } = require('@discordjs/voice');
 
-let playdl;
-try { playdl = require('play-dl'); } catch { playdl = const express = require('express');
+try { playdl = require('play-dl'); } catch { playdl = null; }
+const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const QRCode = require('qrcode');
 

@@ -1,6 +1,6 @@
 {
   "name": "frio-bot",
-  "version": "6.7.2",
+  "version": "6.8.4",
   "description": "FrioBot — Sistema completo para servidores Discord",
   "main": "index.js",
   "engines": {
@@ -8,8 +8,10 @@
   },
   "scripts": {
     "start": "node index.js",
-    "teste": "node teste.js",
-    "teste-ws": "node teste-ws.js"
+    "check": "node --check index.js && node --check emojis.js",
+    "scan:secrets": "node scripts/scan-secrets.js",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@discordjs/voice": "0.18.0",
@@ -25,7 +27,13 @@
     "qrcode": "^1.5.3",
     "ws": "8.18.0"
   },
-  "keywords": ["discord", "bot", "free-fire", "apostas"],
+  "keywords": [
+    "discord",
+    "bot",
+    "free-fire",
+    "apostas"
+  ],
   "author": "FrioBot",
-  "license": "MIT"
+  "license": "MIT",
+  "private": true
 }

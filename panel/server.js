@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL — Backend v6.0.0
-// Painel + Landing + Páginas legais (SPA separada)
+// FRIO PANEL — Backend v6.1.0
+// + Edição de perfil (cliente + dev)
+// + Isolamento de servidores por discord_id
 // ═══════════════════════════════════════════════════════════
 try { require('dotenv').config(); } catch {}
 
@@ -36,11 +37,11 @@ if (!DISCORD_TOKEN) console.warn('DISCORD_TOKEN ausente — ações Discord desa
 // ═══ SUPABASE ═══
 const supaPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/6.0.0' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/6.1.0' } },
 });
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
-  global: { headers: { 'X-Client-Info': 'frio-panel/6.0.0-admin' } },
+  global: { headers: { 'X-Client-Info': 'frio-panel/6.1.0-admin' } },
 });
 
 // ═══ AUTO-MIGRATION CHECK ═══
@@ -100,10 +101,6 @@ function maskEmail(email) {
 
 // ═══════════════════════════════════════════════════════════
 // SECURITY HEADERS
-// CSP ajustada para:
-//   - Lucide   (unpkg.com)
-//   - Chart.js (cdn.jsdelivr.net)
-//   - Google Fonts
 // ═══════════════════════════════════════════════════════════
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
@@ -116,7 +113,6 @@ app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   if (IS_PROD) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
-  // CSP — landing/auth/legal/app
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
     "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net 'unsafe-inline'",
@@ -141,20 +137,17 @@ app.use(cookieParser());
 
 // ═══════════════════════════════════════════════════════════
 // STATIC — assets
-// Nunca cacheia assets versionados por querystring (?v=1)
 // ═══════════════════════════════════════════════════════════
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), {
   maxAge: IS_PROD ? '7d' : 0,
   etag: true,
   setHeaders: (res, filePath) => {
-    // nunca cacheia HTML que possa existir em assets
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-store');
     }
   },
 }));
 
-// Arquivos soltos na raiz de /public (favicon, robots, sitemap)
 app.use(express.static(path.join(__dirname, 'public'), {
   index: false,
   maxAge: 0,
@@ -246,7 +239,7 @@ const _AUDIT_WHITELIST = new Set([
   'target_user_id','product_id','product_name','amount','status',
   'panel_id','ticket_id','reason','metadata','action','success',
   'duration_ms','method','path','error','code','device','browser',
-  'os','country','city','ip','user_agent','key_id','key_code',
+  'os','country','city','ip','user_agent','key_id','key_code','changed',
 ]);
 function sanitizeAuditPayload(payload) {
   if (!payload || typeof payload !== 'object') return {};
@@ -292,7 +285,7 @@ function isSensitiveAction(a) {
     'login_failed', 'access_denied', 'nuke_guild', 'force_leave_guild',
     'kill_switch_on', 'maintenance_on', 'force_premium_add',
     'generate_keys', 'generate_pack', 'broadcast_global',
-    'password_reset', 'update_user', 'deactivate_user',
+    'password_reset', 'update_user', 'deactivate_user', 'self_update_profile',
   ].includes(a);
 }
 async function notifyDevsRealtime(action, data) {
@@ -454,7 +447,7 @@ app.get('/api/public-config', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, service: 'frio-panel', version: '6.0.0',
+    ok: true, service: 'frio-panel', version: '6.1.0',
     uptime: Math.floor(process.uptime()),
     env: NODE_ENV,
   });
@@ -512,7 +505,6 @@ app.post('/api/auth/login', rateLimit(10, 15 * 60 * 1000), async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Conta desativada' });
     }
 
-    // Sessão mais longa se "remember" foi marcado
     const maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
 
     res.cookie(COOKIE_NAME, data.session.access_token, {
@@ -883,6 +875,110 @@ app.post('/api/auth/update-password', rateLimit(10, 60 * 60 * 1000), async (req,
 });
 
 // ═══════════════════════════════════════════════════════════
+// ⚡ NOVO — MEU PERFIL (cliente edita próprio e-mail e Discord ID)
+// ═══════════════════════════════════════════════════════════
+app.patch('/api/me/profile', requireAuth, csrfProtect, rateLimit(10, 60 * 60 * 1000), async (req, res) => {
+  try {
+    const { email, discord_id } = req.body || {};
+    const patchAdmin = { updated_at: new Date().toISOString() };
+    const changed = [];
+    let newEmail = null;
+
+    // ─── E-mail ───
+    if (email !== undefined) {
+      const emailNorm = String(email).toLowerCase().trim();
+      if (!isValidEmail(emailNorm)) {
+        return res.status(400).json({ ok: false, error: 'E-mail inválido.' });
+      }
+      const currentEmail = String(req.admin.email || '').toLowerCase();
+      if (emailNorm !== currentEmail) {
+        const { data: existing } = await supaAdmin
+          .from('panel_admins')
+          .select('user_id')
+          .eq('email', emailNorm)
+          .neq('user_id', req.user.id)
+          .maybeSingle();
+        if (existing) {
+          return res.status(409).json({ ok: false, error: 'Este e-mail já está em uso.', code: 'EMAIL_TAKEN' });
+        }
+        patchAdmin.email = emailNorm;
+        newEmail = emailNorm;
+        changed.push('email');
+      }
+    }
+
+    // ─── Discord ID ───
+    if (discord_id !== undefined) {
+      const clean = cleanId(discord_id);
+      if (!clean) {
+        return res.status(400).json({ ok: false, error: 'ID do Discord é obrigatório.', code: 'DISCORD_ID_REQUIRED' });
+      }
+      if (!isValidDiscordId(clean)) {
+        return res.status(400).json({ ok: false, error: 'ID do Discord inválido (15–25 dígitos).', code: 'DISCORD_ID_INVALID' });
+      }
+      if (clean !== String(req.admin.discord_id || '')) {
+        const { data: existingDiscord } = await supaAdmin
+          .from('panel_admins')
+          .select('user_id')
+          .eq('discord_id', clean)
+          .neq('user_id', req.user.id)
+          .maybeSingle();
+        if (existingDiscord) {
+          return res.status(409).json({ ok: false, error: 'Este ID do Discord já está cadastrado.', code: 'DISCORD_ID_TAKEN' });
+        }
+        patchAdmin.discord_id = clean;
+        changed.push('discord_id');
+      }
+    }
+
+    if (!changed.length) {
+      return res.json({ ok: true, changed: [], message: 'Nenhuma alteração necessária.' });
+    }
+
+    // 1) Atualiza Supabase Auth (email)
+    if (newEmail) {
+      const { error: authErr } = await supaAdmin.auth.admin.updateUserById(req.user.id, {
+        email: newEmail,
+        email_confirm: true,
+      });
+      if (authErr) {
+        return res.status(400).json({ ok: false, error: `Falha ao atualizar e-mail: ${authErr.message}` });
+      }
+    }
+
+    // 2) Atualiza panel_admins
+    const { error: dbErr } = await supaAdmin
+      .from('panel_admins')
+      .update(patchAdmin)
+      .eq('user_id', req.user.id);
+    if (dbErr) {
+      return res.status(500).json({ ok: false, error: dbErr.message });
+    }
+
+    await audit(req, 'self_update_profile', {
+      target_id: req.user.id,
+      metadata: {
+        changed: changed.join(','),
+        ...(patchAdmin.email ? { email: patchAdmin.email } : {}),
+        ...(patchAdmin.discord_id ? { discord_id: patchAdmin.discord_id } : {}),
+      },
+    });
+
+    return res.json({
+      ok: true,
+      changed,
+      admin: {
+        email: patchAdmin.email || req.admin.email,
+        discord_id: patchAdmin.discord_id || req.admin.discord_id,
+      },
+    });
+  } catch (e) {
+    console.error('[me/profile PATCH]', e);
+    return genericError(res);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
@@ -973,10 +1069,6 @@ app.get('/api/dashboard/charts', requireStaff, async (req, res) => {
   } catch (e) { return genericError(res); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// DASHBOARD v2 — status, atividade, keys expirando, quick stats
-// ═══════════════════════════════════════════════════════════
-
 app.get('/api/dashboard/bot-status', requireStaff, async (req, res) => {
   try {
     let botStatus = null;
@@ -1057,27 +1149,57 @@ app.get('/api/dashboard/quick-stats', requireStaff, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// SERVIDORES (cliente)
+// ⚡ SERVIDORES — isolamento reforçado por discord_id
 // ═══════════════════════════════════════════════════════════
 app.get('/api/me/servers', requireAuth, async (req, res) => {
   try {
-    if (['dev', 'admin'].includes(req.admin.role)) {
-      const { data } = await supaAdmin.from('bot_guilds').select('*').eq('in_guild', true).order('member_count', { ascending: false }).limit(500);
+    const role = req.admin.role;
+
+    // ─── DEV/ADMIN: visão global (intencional) ───
+    if (role === 'dev' || role === 'admin') {
+      const { data } = await supaAdmin
+        .from('bot_guilds')
+        .select('*')
+        .eq('in_guild', true)
+        .order('member_count', { ascending: false })
+        .limit(500);
       return res.json({ ok: true, servers: data || [] });
     }
 
-    const discordId = req.admin.discord_id;
-    if (!discordId) return res.json({ ok: true, servers: [] });
+    // ─── CLIENTE/FUNCIONARIO: SÓ os próprios servidores ───
+    const discordId = String(req.admin.discord_id || '').trim();
+    if (!discordId) {
+      return res.json({ ok: true, servers: [] });
+    }
 
-    const { data: ug } = await supaAdmin.from('user_guilds').select('guild_id').eq('discord_id', discordId);
-    const guildIds = (ug || []).map(x => x.guild_id);
-    const assigned = req.admin.assigned_guilds || [];
-    const allIds = [...new Set([...guildIds, ...assigned])];
-    if (!allIds.length) return res.json({ ok: true, servers: [] });
+    // Fonte 1: servidores onde ele é DONO
+    const { data: ug } = await supaAdmin
+      .from('user_guilds')
+      .select('guild_id')
+      .eq('discord_id', discordId);
 
-    const { data } = await supaAdmin.from('bot_guilds').select('*').in('guild_id', allIds).eq('in_guild', true).order('member_count', { ascending: false });
-    res.json({ ok: true, servers: data || [] });
-  } catch (e) { return genericError(res); }
+    // Fonte 2: servidores atribuídos manualmente pela staff
+    const assigned = Array.isArray(req.admin.assigned_guilds) ? req.admin.assigned_guilds : [];
+
+    const allIds = [...new Set([...(ug || []).map(x => x.guild_id), ...assigned])]
+      .filter(id => typeof id === 'string' && /^\d{15,25}$/.test(id));
+
+    if (!allIds.length) {
+      return res.json({ ok: true, servers: [] });
+    }
+
+    const { data } = await supaAdmin
+      .from('bot_guilds')
+      .select('guild_id, name, icon, member_count, in_guild, owner_id')
+      .in('guild_id', allIds)
+      .eq('in_guild', true)
+      .order('member_count', { ascending: false });
+
+    return res.json({ ok: true, servers: data || [] });
+  } catch (e) {
+    console.error('[me/servers]', e);
+    return genericError(res);
+  }
 });
 
 async function canAccessGuild(req, guildId) {
@@ -1390,10 +1512,10 @@ app.post('/api/dev/usuarios', requireDev, csrfProtect, async (req, res) => {
 
     const emailNorm = String(email).toLowerCase().trim();
     const { data: existing } = await supaAdmin.from('panel_admins').select('user_id').eq('email', emailNorm).maybeSingle();
-    if (existing) return res.status(400).json({ ok: false, error: 'E-mail já cadastrado' });
+    if (existing) return res.status(400).json({ ok: false, error: 'E-mail já cadastrado', code: 'EMAIL_TAKEN' });
 
     const { data: existingDiscord } = await supaAdmin.from('panel_admins').select('user_id').eq('discord_id', discordIdClean).maybeSingle();
-    if (existingDiscord) return res.status(409).json({ ok: false, error: 'Discord ID já cadastrado' });
+    if (existingDiscord) return res.status(409).json({ ok: false, error: 'Discord ID já cadastrado', code: 'DISCORD_ID_TAKEN' });
 
     const finalPassword = password && password.length >= 8 ? password : genPassword(12);
     const { data: authData, error: authErr } = await supaAdmin.auth.admin.createUser({
@@ -1465,10 +1587,13 @@ app.patch('/api/dev/usuarios/:userId/plan', requireDev, csrfProtect, async (req,
   } catch (e) { return genericError(res); }
 });
 
+// ⚡ PATCH atualizado — agora aceita e-mail, discord_id e assigned_guilds
 app.patch('/api/dev/usuarios/:userId', requireDev, csrfProtect, async (req, res) => {
   try {
-    const { role, ativo, nome, discord_id, assigned_guilds, notes, plan, banned } = req.body || {};
+    const { role, ativo, nome, discord_id, assigned_guilds, notes, plan, banned, email } = req.body || {};
     const patch = { updated_at: new Date().toISOString() };
+    let newEmail = null;
+
     if (role && ROLES.includes(role)) {
       patch.role = role;
       patch.pode_gerar_keys = ['dev', 'admin', 'funcionario'].includes(role);
@@ -1477,18 +1602,72 @@ app.patch('/api/dev/usuarios/:userId', requireDev, csrfProtect, async (req, res)
     if (typeof ativo === 'boolean') patch.ativo = ativo;
     if (typeof banned === 'boolean') patch.banned = banned;
     if (nome) patch.nome = nome;
+
+    // ─── E-mail ───
+    if (email !== undefined) {
+      const emailNorm = String(email).toLowerCase().trim();
+      if (!isValidEmail(emailNorm)) {
+        return res.status(400).json({ ok: false, error: 'E-mail inválido.' });
+      }
+      const { data: target } = await supaAdmin
+        .from('panel_admins')
+        .select('email')
+        .eq('user_id', req.params.userId)
+        .maybeSingle();
+      if (target && emailNorm !== String(target.email || '').toLowerCase()) {
+        const { data: existing } = await supaAdmin
+          .from('panel_admins')
+          .select('user_id')
+          .eq('email', emailNorm)
+          .neq('user_id', req.params.userId)
+          .maybeSingle();
+        if (existing) {
+          return res.status(409).json({ ok: false, error: 'E-mail já cadastrado em outra conta.', code: 'EMAIL_TAKEN' });
+        }
+        patch.email = emailNorm;
+        newEmail = emailNorm;
+      }
+    }
+
+    // ─── Discord ID ───
     if (discord_id !== undefined) {
       if (discord_id) {
         const clean = cleanId(discord_id);
-        if (!isValidDiscordId(clean)) return res.status(400).json({ ok: false, error: 'Discord ID inválido' });
+        if (!isValidDiscordId(clean)) {
+          return res.status(400).json({ ok: false, error: 'Discord ID inválido' });
+        }
+        const { data: existingDiscord } = await supaAdmin
+          .from('panel_admins')
+          .select('user_id')
+          .eq('discord_id', clean)
+          .neq('user_id', req.params.userId)
+          .maybeSingle();
+        if (existingDiscord) {
+          return res.status(409).json({ ok: false, error: 'Discord ID já cadastrado em outra conta.', code: 'DISCORD_ID_TAKEN' });
+        }
         patch.discord_id = clean;
-      } else patch.discord_id = null;
+      } else {
+        patch.discord_id = null;
+      }
     }
+
     if (Array.isArray(assigned_guilds)) patch.assigned_guilds = assigned_guilds;
     if (notes !== undefined) patch.notes = notes || null;
 
+    // Atualiza Supabase Auth primeiro se o e-mail mudou
+    if (newEmail) {
+      const { error: authErr } = await supaAdmin.auth.admin.updateUserById(req.params.userId, {
+        email: newEmail,
+        email_confirm: true,
+      });
+      if (authErr) {
+        return res.status(400).json({ ok: false, error: `Falha ao atualizar e-mail: ${authErr.message}` });
+      }
+    }
+
     const { error } = await supaAdmin.from('panel_admins').update(patch).eq('user_id', req.params.userId);
     if (error) return res.status(500).json({ ok: false, error: error.message });
+
     await audit(req, 'update_user', { target_id: req.params.userId, metadata: patch });
     res.json({ ok: true });
   } catch (e) { return genericError(res); }
@@ -1965,49 +2144,17 @@ app.post('/api/dev/notifications', requireStaff, csrfProtect, async (req, res) =
 });
 
 // ═══════════════════════════════════════════════════════════
-// ➤ NOVO — PÁGINAS PÚBLICAS (landing, login, register, legal)
-// Servidas como arquivos estáticos dedicados
+// PÁGINAS PÚBLICAS
 // ═══════════════════════════════════════════════════════════
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/register', (req, res) => res.sendFile(path.join(__dirname, 'public', 'register.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
+app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));
+app.get('/app', (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
+app.get('/confirm', (req, res) => res.sendFile(path.join(__dirname, 'public', 'confirm.html')));
+app.get('/reset', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset.html')));
 
-// Rota raiz → landing
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Login
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-
-// Registro
-app.get('/register', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'register.html'));
-});
-
-// Termos de Uso
-app.get('/terms', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'terms.html'));
-});
-
-// Política de Privacidade
-app.get('/privacy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
-});
-
-// Painel (SPA)
-app.get('/app', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'app.html'));
-});
-
-// Confirmação e reset (mantidos da v5)
-app.get('/confirm', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'confirm.html'));
-});
-app.get('/reset', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'reset.html'));
-});
-
-// robots.txt e sitemap.xml
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain');
   res.send(
@@ -2046,24 +2193,20 @@ ${urls.map(u => `  <url>
 // FALLBACK — SPA do /app e 404
 // ═══════════════════════════════════════════════════════════
 app.get('*', (req, res, next) => {
-  // APIs retornam 404 JSON
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ ok: false, error: 'Rota não encontrada.' });
   }
 
-  // Deep-links do /app → servem a SPA
   if (req.path.startsWith('/app')) {
     return res.sendFile(path.join(__dirname, 'public', 'app.html'));
   }
 
-  // Arquivo estático existente? serve
   const filePath = path.join(__dirname, 'public', req.path);
   return res.sendFile(filePath, (err) => {
     if (err) next();
   });
 });
 
-// 404 final — só chega aqui se o fallback também falhou
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ ok: false, error: 'Rota não encontrada.' });
@@ -2071,7 +2214,6 @@ app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Tratamento global de erro
 app.use((err, req, res, next) => {
   console.error('[UNCAUGHT]', err);
   if (res.headersSent) return next(err);
@@ -2099,9 +2241,10 @@ process.on('uncaughtException', e => console.error('uncaughtException:', e?.mess
 // BOOT
 // ═══════════════════════════════════════════════════════════
 app.listen(PORT, () => {
-  console.log(`[PANEL v6.0.0] Rodando na porta ${PORT}`);
+  console.log(`[PANEL v6.1.0] Rodando na porta ${PORT}`);
   console.log(`NODE_ENV=${NODE_ENV}`);
   console.log(`Bot API: ${BOT_API_URL}`);
   console.log(`Painel URL: ${baseUrl()}`);
   console.log(`Rotas: / (landing) · /login · /register · /terms · /privacy · /app`);
+  console.log(`Novos endpoints: PATCH /api/me/profile · PATCH /api/dev/usuarios/:id (com email) · GET /api/me/servers (isolado)`);
 });

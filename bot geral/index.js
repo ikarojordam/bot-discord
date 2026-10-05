@@ -15076,72 +15076,75 @@ client.on('messageCreate', async (m) => {
     }
   } catch {}
 
-    // ═══════════════════════════════════════════════════════════
-  // FAQ do ticket — resposta automática
+   // ═══════════════════════════════════════════════════════════
+  // FAQ do ticket — resposta automática (isolada, não mata .p/.ss)
   // ═══════════════════════════════════════════════════════════
-  try {
-    if (m.author.bot) return;
-    if (!m.channel?.isThread?.()) return;
+  await (async () => {
+    try {
+      if (m.author.bot) return;
+      if (!m.channel?.isThread?.()) return;
 
-    const { data: tdata } = await supabase
-      .from('ticket_data')
-      .select('*')
-      .eq('thread_id', m.channel.id)
-      .maybeSingle();
+      const { data: tdata } = await supabase
+        .from('ticket_data')
+        .select('*')
+        .eq('thread_id', m.channel.id)
+        .maybeSingle();
 
-    if (!tdata || tdata.closed_at) return;
+      if (!tdata || tdata.closed_at) return;
 
-    const content = (m.content || '').trim();
-    if (content.length < 3) return;
-    if (content.startsWith('.') || content.startsWith('!') || content.startsWith('/')) return;
+      const content = (m.content || '').trim();
+      if (content.length < 3) return;
+      if (content.startsWith('.') || content.startsWith('!') || content.startsWith('/')) return;
 
-    // Cooldown
-    if (!globalThis.__faqCd) globalThis.__faqCd = new Map();
-    const cdKey = `faq:${m.author.id}`;
-    const now = Date.now();
-    if (now - (globalThis.__faqCd.get(cdKey) || 0) < FAQ.CFG.cooldownMs) return;
-    globalThis.__faqCd.set(cdKey, now);
+      // Cooldown por usuário
+      if (!globalThis.__faqCd) globalThis.__faqCd = new Map();
+      const cdKey = `faq:${m.author.id}`;
+      const now = Date.now();
+      if (now - (globalThis.__faqCd.get(cdKey) || 0) < FAQ.FAQ_CONFIG.cooldownMs) return;
+      globalThis.__faqCd.set(cdKey, now);
 
-    // Limite por thread
-    if (!globalThis.__faqCnt) globalThis.__faqCnt = new Map();
-    const cnt = globalThis.__faqCnt.get(m.channel.id) || 0;
-    if (cnt >= FAQ.CFG.maxPerThread) return;
+      // Limite por thread
+      if (!globalThis.__faqCnt) globalThis.__faqCnt = new Map();
+      const cnt = globalThis.__faqCnt.get(m.channel.id) || 0;
+      if (cnt >= FAQ.FAQ_CONFIG.maxPerThread) return;
 
-    // Processa
-    const result = FAQ.respond(content, {
-      user: `<@${m.author.id}>`,
-      guild: m.guild.name,
-    });
+      // Processa
+      const result = FAQ.respond(content, {
+        user: `<@${m.author.id}>`,
+        guild: m.guild.name,
+      });
 
-    if (!result) return; // sem match → não responde
+      if (!result) return;
 
-    // Envia
-    await m.channel.send({
-      content: result.text,
-      allowedMentions: { repliedUser: false },
-    }).catch(() => {});
+      // Envia
+      await m.channel.send({
+        content: result.text,
+        allowedMentions: { repliedUser: false },
+      }).catch(() => {});
 
-    // Se escalar, marca prioridade + menciona staff
-    if (result.escalate) {
-      try {
-        if (tdata.panel_id) {
-          const panel = await getTicketPanel(m.guild.id, tdata.panel_id);
-          if (panel?.cargo_id) {
-            await m.channel.send({
-              content: `<@&${panel.cargo_id}>`,
-              allowedMentions: { roles: [panel.cargo_id] },
-            }).catch(() => {});
+      // Se escalar, marca prioridade + menciona staff
+      if (result.escalate) {
+        try {
+          if (tdata.panel_id) {
+            const panel = await getTicketPanel(m.guild.id, tdata.panel_id);
+            if (panel?.cargo_id) {
+              await m.channel.send({
+                content: `<@&${panel.cargo_id}>`,
+                allowedMentions: { roles: [panel.cargo_id] },
+              }).catch(() => {});
+            }
           }
-        }
-        await supabase.from('ticket_data').update({ is_priority: true }).eq('thread_id', m.channel.id);
-      } catch {}
+          await supabase.from('ticket_data')
+            .update({ is_priority: true })
+            .eq('thread_id', m.channel.id);
+        } catch {}
+      }
+
+      globalThis.__faqCnt.set(m.channel.id, cnt + 1);
+    } catch (e) {
+      console.error('[FAQ]', e.message);
     }
-
-    globalThis.__faqCnt.set(m.channel.id, cnt + 1);
-  } catch (e) {
-    console.error('[FAQ]', e.message);
-  }
-
+  })();
   
 
   // .p

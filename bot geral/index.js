@@ -36,15 +36,15 @@ const {
 } = require('@discordjs/voice');
 
 let playdl;
-try { playdl = require('play-dl'); } catch { playdl = null; }
-
-const express = require('express');
+try { playdl = require('play-dl'); } catch { playdl = const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const QRCode = require('qrcode');
 
 // ✅ CUSTOM EMOJIS — arquivo emojis.js na raiz
 const E = require('./emojis');
 
+// ⚡ IA DO TICKET — sistema de perguntas e respostas
+const FAQ = require('./ia-ticket');
 // ═══════════════════════════════════════════════════════════
 // VERSÃO
 // ═══════════════════════════════════════════════════════════

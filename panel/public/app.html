@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=1">
+<link rel="stylesheet" href="/assets/app.css?v=2">
 <script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -20,7 +20,7 @@
 <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
 
 <!-- ═══════════════════════════════════════════════════════
-     ESTADO INICIAL — carregamento/erro
+     ESTADO INICIAL
      ═══════════════════════════════════════════════════════ -->
 <div id="bootScreen" class="boot-screen">
   <div class="boot-card">
@@ -30,15 +30,12 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     ESTADO — acesso pendente/bloqueado
-     ═══════════════════════════════════════════════════════ -->
 <div id="blockedScreen" class="boot-screen hidden">
   <div class="boot-card">
     <div class="modal-icon-big warn"><i data-lucide="clock"></i></div>
     <h2 id="blockedTitle">Aguardando aprovação</h2>
     <p class="boot-sub" id="blockedText">
-      Sua conta está aguardando aprovação do desenvolvedor. Você será notificado quando liberar.
+      Sua conta está aguardando aprovação do desenvolvedor.
     </p>
     <div class="btn-row" style="justify-content:center">
       <button class="btn btn-ghost" id="blockedRefresh">
@@ -56,7 +53,6 @@
      ═══════════════════════════════════════════════════════ -->
 <div id="appShell" class="app-shell hidden">
 
-  <!-- ═══════════════ TOPBAR ═══════════════ -->
   <header class="topbar">
     <button class="topbar-burger" id="btnBurger" aria-label="Abrir menu">
       <i data-lucide="menu"></i>
@@ -98,123 +94,38 @@
     </div>
   </header>
 
-  <!-- ═══════════════ SIDEBAR ═══════════════ -->
   <aside class="sidebar" id="sidebar">
     <nav>
-
-      <!-- GERAL -->
       <div class="nav-section">Geral</div>
+      <a class="nav-link active" data-nav="dashboard"><i data-lucide="layout-dashboard"></i><span>Dashboard</span></a>
+      <a class="nav-link" data-nav="servers"><i data-lucide="server"></i><span>Meus Servidores</span></a>
+      <a class="nav-link" data-nav="my-keys"><i data-lucide="key-round"></i><span>Minhas Keys</span></a>
+      <a class="nav-link" data-nav="notifications"><i data-lucide="bell"></i><span>Notificações</span><span class="badge-dot hidden" id="navNotifBadge">0</span></a>
+      <a class="nav-link" data-nav="account"><i data-lucide="user"></i><span>Conta &amp; Sessões</span></a>
 
-      <a class="nav-link active" data-nav="dashboard">
-        <i data-lucide="layout-dashboard"></i>
-        <span>Dashboard</span>
-      </a>
-
-      <a class="nav-link" data-nav="servers">
-        <i data-lucide="server"></i>
-        <span>Meus Servidores</span>
-      </a>
-
-      <a class="nav-link" data-nav="my-keys">
-        <i data-lucide="key-round"></i>
-        <span>Minhas Keys</span>
-      </a>
-
-      <a class="nav-link" data-nav="notifications">
-        <i data-lucide="bell"></i>
-        <span>Notificações</span>
-        <span class="badge-dot hidden" id="navNotifBadge">0</span>
-      </a>
-
-      <a class="nav-link" data-nav="account">
-        <i data-lucide="user"></i>
-        <span>Conta &amp; Sessões</span>
-      </a>
-
-      <!-- STAFF — aparece se role ∈ dev/admin/funcionario -->
       <div class="nav-section hidden" data-roles="dev,admin,funcionario">Operacional</div>
+      <a class="nav-link hidden" data-nav="keys" data-roles="dev,admin,funcionario"><i data-lucide="key"></i><span>Keys</span></a>
+      <a class="nav-link hidden" data-nav="packs" data-roles="dev"><i data-lucide="package"></i><span>Packs</span></a>
+      <a class="nav-link hidden" data-nav="tickets-global" data-roles="dev,admin"><i data-lucide="ticket"></i><span>Tickets Global</span></a>
+      <a class="nav-link hidden" data-nav="financial" data-roles="dev,admin"><i data-lucide="wallet"></i><span>Financeiro</span></a>
 
-      <a class="nav-link hidden" data-nav="keys" data-roles="dev,admin,funcionario">
-        <i data-lucide="key"></i>
-        <span>Keys</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="packs" data-roles="dev">
-        <i data-lucide="package"></i>
-        <span>Packs</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="tickets-global" data-roles="dev,admin">
-        <i data-lucide="ticket"></i>
-        <span>Tickets Global</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="financial" data-roles="dev,admin">
-        <i data-lucide="wallet"></i>
-        <span>Financeiro</span>
-      </a>
-
-      <!-- DEV -->
       <div class="nav-section hidden" data-roles="dev">Servidores (DEV)</div>
-
-      <a class="nav-link hidden" data-nav="dev-servers" data-roles="dev">
-        <i data-lucide="radar"></i>
-        <span>Gerenciar Servidores</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="dev-server-search" data-roles="dev">
-        <i data-lucide="search"></i>
-        <span>Buscar Servidor</span>
-      </a>
+      <a class="nav-link hidden" data-nav="dev-servers" data-roles="dev"><i data-lucide="radar"></i><span>Gerenciar Servidores</span></a>
+      <a class="nav-link hidden" data-nav="dev-server-search" data-roles="dev"><i data-lucide="search"></i><span>Buscar Servidor</span></a>
 
       <div class="nav-section hidden" data-roles="dev">Dev Tools</div>
-
-      <a class="nav-link hidden" data-nav="kill-switch" data-roles="dev">
-        <i data-lucide="siren"></i>
-        <span>Kill Switch</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="maintenance" data-roles="dev">
-        <i data-lucide="wrench"></i>
-        <span>Manutenção</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="force-premium" data-roles="dev">
-        <i data-lucide="gem"></i>
-        <span>Force Premium</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="broadcast" data-roles="dev">
-        <i data-lucide="megaphone"></i>
-        <span>Broadcast</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="backup" data-roles="dev">
-        <i data-lucide="database"></i>
-        <span>Backup &amp; Sync</span>
-      </a>
+      <a class="nav-link hidden" data-nav="kill-switch" data-roles="dev"><i data-lucide="siren"></i><span>Kill Switch</span></a>
+      <a class="nav-link hidden" data-nav="maintenance" data-roles="dev"><i data-lucide="wrench"></i><span>Manutenção</span></a>
+      <a class="nav-link hidden" data-nav="force-premium" data-roles="dev"><i data-lucide="gem"></i><span>Force Premium</span></a>
+      <a class="nav-link hidden" data-nav="broadcast" data-roles="dev"><i data-lucide="megaphone"></i><span>Broadcast</span></a>
+      <a class="nav-link hidden" data-nav="backup" data-roles="dev"><i data-lucide="database"></i><span>Backup &amp; Sync</span></a>
 
       <div class="nav-section hidden" data-roles="dev">Usuários</div>
-
-      <a class="nav-link hidden" data-nav="usuarios" data-roles="dev">
-        <i data-lucide="users"></i>
-        <span>Usuários</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="pending" data-roles="dev">
-        <i data-lucide="user-check"></i>
-        <span>Aprovações</span>
-        <span class="badge-dot hidden" id="navPendingBadge">0</span>
-      </a>
-
-      <a class="nav-link hidden" data-nav="audit" data-roles="dev">
-        <i data-lucide="scroll-text"></i>
-        <span>Auditoria</span>
-      </a>
-
+      <a class="nav-link hidden" data-nav="usuarios" data-roles="dev"><i data-lucide="users"></i><span>Usuários</span></a>
+      <a class="nav-link hidden" data-nav="pending" data-roles="dev"><i data-lucide="user-check"></i><span>Aprovações</span><span class="badge-dot hidden" id="navPendingBadge">0</span></a>
+      <a class="nav-link hidden" data-nav="audit" data-roles="dev"><i data-lucide="scroll-text"></i><span>Auditoria</span></a>
     </nav>
 
-    <!-- Rodapé do sidebar -->
     <div class="sidebar-foot">
       <div class="sidebar-user">
         <div class="chip-avatar" id="sideAvatar"><span>–</span></div>
@@ -224,36 +135,25 @@
         </div>
       </div>
       <button class="btn btn-ghost btn-sm btn-block" id="btnLogoutSide">
-        <i data-lucide="log-out"></i>
-        Sair
+        <i data-lucide="log-out"></i>Sair
       </button>
     </div>
   </aside>
 
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <!-- ═══════════════ MAIN ═══════════════ -->
   <main class="app-main">
     <div class="app-main-inner">
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DASHBOARD
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DASHBOARD ═══════════ -->
       <section class="page active" id="page-dashboard">
         <div class="page-head">
-          <h1>
-            <i data-lucide="layout-dashboard"></i>
-            Dashboard
-          </h1>
+          <h1><i data-lucide="layout-dashboard"></i>Dashboard</h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnRefreshDashboard">
-              <i data-lucide="refresh-cw"></i>
-              Atualizar
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshDashboard"><i data-lucide="refresh-cw"></i>Atualizar</button>
           </div>
         </div>
 
-        <!-- Status do bot -->
         <div class="card card-status" id="cardBotStatus">
           <div class="flex-between gap" style="flex-wrap:wrap">
             <div class="flex-start gap">
@@ -269,92 +169,48 @@
           <div class="hidden" id="statusWarnings" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)"></div>
         </div>
 
-        <!-- Stats principais (depende do role) -->
         <div class="stats-grid" id="dashStats">
-          <div class="stat-card">
-            <div class="stat-icon blue"><i data-lucide="loader-2" class="spin"></i></div>
-            <div class="stat-body">
-              <div class="stat-value">–</div>
-              <div class="stat-label">Carregando…</div>
-            </div>
-          </div>
+          <div class="stat-card"><div class="stat-icon blue"><i data-lucide="loader-2" class="spin"></i></div><div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div></div>
         </div>
 
-        <!-- Quick stats (staff) -->
         <div class="stats-grid hidden" id="dashQuickStats"></div>
-
-        <!-- Gráficos (staff) -->
         <div class="charts-grid hidden" id="dashCharts"></div>
 
-        <!-- Duas colunas: atividade + ações rápidas -->
         <div class="dash-cols">
-
           <div class="card">
             <div class="card-head">
-              <h3 class="flex-start gap-sm">
-                <i data-lucide="activity" style="width:15px;height:15px;color:var(--primary)"></i>
-                Atividade Recente
-              </h3>
-              <a class="card-link" data-nav-go="audit">
-                Ver tudo
-                <i data-lucide="arrow-right"></i>
-              </a>
+              <h3 class="flex-start gap-sm"><i data-lucide="activity" style="width:15px;height:15px;color:var(--primary)"></i>Atividade Recente</h3>
+              <a class="card-link" data-nav-go="audit">Ver tudo<i data-lucide="arrow-right"></i></a>
             </div>
-            <div class="activity-list" id="recentActivity">
-              <div class="empty-sm">Carregando…</div>
-            </div>
+            <div class="activity-list" id="recentActivity"><div class="empty-sm">Carregando…</div></div>
           </div>
 
           <div class="card">
             <div class="card-head">
-              <h3 class="flex-start gap-sm">
-                <i data-lucide="zap" style="width:15px;height:15px;color:var(--primary)"></i>
-                Ações Rápidas
-              </h3>
+              <h3 class="flex-start gap-sm"><i data-lucide="zap" style="width:15px;height:15px;color:var(--primary)"></i>Ações Rápidas</h3>
             </div>
             <div class="quick-actions" id="quickActions"></div>
           </div>
-
         </div>
 
-        <!-- Keys expirando (staff) -->
         <div class="card hidden" id="cardKeysExpiring" style="margin-top:16px">
           <div class="card-head">
-            <h3 class="flex-start gap-sm">
-              <i data-lucide="clock-alert" style="width:15px;height:15px;color:var(--warn)"></i>
-              Keys expirando em 7 dias
-            </h3>
-            <a class="card-link" data-nav-go="keys">
-              Ver keys
-              <i data-lucide="arrow-right"></i>
-            </a>
+            <h3 class="flex-start gap-sm"><i data-lucide="clock-alert" style="width:15px;height:15px;color:var(--warn)"></i>Keys expirando em 7 dias</h3>
+            <a class="card-link" data-nav-go="keys">Ver keys<i data-lucide="arrow-right"></i></a>
           </div>
-          <div class="list" id="keysExpiring">
-            <div class="empty-sm">Carregando…</div>
-          </div>
+          <div class="list" id="keysExpiring"><div class="empty-sm">Carregando…</div></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: MEUS SERVIDORES
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: MEUS SERVIDORES ═══════════ -->
       <section class="page" id="page-servers">
         <div class="page-head">
-          <h1>
-            <i data-lucide="server"></i>
-            Meus Servidores
-          </h1>
+          <h1><i data-lucide="server"></i>Meus Servidores</h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnRefreshServers">
-              <i data-lucide="refresh-cw"></i>
-              Atualizar
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshServers"><i data-lucide="refresh-cw"></i>Atualizar</button>
           </div>
         </div>
-
-        <p class="page-sub">
-          Apenas servidores onde você é dono, administrador ou possui acesso concedido pela staff.
-        </p>
+        <p class="page-sub">Apenas servidores onde você é dono, administrador ou possui acesso concedido pela staff.</p>
 
         <div class="filters">
           <div class="input-wrap" style="flex:1;min-width:200px;max-width:320px">
@@ -377,72 +233,48 @@
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: MINHAS KEYS (cliente)
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: MINHAS KEYS ═══════════ -->
       <section class="page" id="page-my-keys">
         <div class="page-head">
-          <h1>
-            <i data-lucide="key-round"></i>
-            Minhas Keys
-          </h1>
+          <h1><i data-lucide="key-round"></i>Minhas Keys</h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnRefreshMyKeys">
-              <i data-lucide="refresh-cw"></i>
-              Atualizar
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshMyKeys"><i data-lucide="refresh-cw"></i>Atualizar</button>
           </div>
         </div>
-
         <p class="page-sub">Keys de plano enviadas para você pela staff.</p>
-
-        <div class="list" id="myKeysList">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div class="list" id="myKeysList"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: NOTIFICAÇÕES
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: NOTIFICAÇÕES ═══════════ -->
       <section class="page" id="page-notifications">
         <div class="page-head">
-          <h1>
-            <i data-lucide="bell"></i>
-            Notificações
-          </h1>
+          <h1><i data-lucide="bell"></i>Notificações</h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnMarkAllRead">
-              <i data-lucide="check-check"></i>
-              Marcar todas como lidas
-            </button>
-            <button class="btn btn-ghost btn-sm" id="btnRefreshNotifs">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnMarkAllRead"><i data-lucide="check-check"></i>Marcar todas como lidas</button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshNotifs"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
-
-        <div class="list" id="notifList">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div class="list" id="notifList"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: CONTA & SESSÕES
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: CONTA & SESSÕES ═══════════ -->
       <section class="page" id="page-account">
         <div class="page-head">
-          <h1>
-            <i data-lucide="user"></i>
-            Conta &amp; Sessões
-          </h1>
+          <h1><i data-lucide="user"></i>Conta &amp; Sessões</h1>
         </div>
 
-        <!-- Dados da conta -->
+        <!-- ⚡ Card "Dados da conta" — com botão Editar perfil -->
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="user-circle" style="width:15px;height:15px;color:var(--primary)"></i>
-            Dados da conta
-          </h3>
+          <div class="card-head">
+            <h3 class="flex-start gap-sm">
+              <i data-lucide="user-circle" style="width:15px;height:15px;color:var(--primary)"></i>
+              Dados da conta
+            </h3>
+            <button class="btn btn-primary btn-sm" id="btnEditProfile">
+              <i data-lucide="user-cog"></i>
+              Editar perfil
+            </button>
+          </div>
           <div class="grid-2" style="margin-top:14px">
             <div>
               <label class="hint" style="font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:700">E-mail</label>
@@ -463,7 +295,6 @@
           </div>
         </div>
 
-        <!-- Segurança -->
         <div class="card">
           <h3 class="flex-start gap-sm">
             <i data-lucide="shield-check" style="width:15px;height:15px;color:var(--success)"></i>
@@ -484,101 +315,34 @@
           </div>
         </div>
 
-        <!-- Sessões -->
         <div class="card">
           <div class="card-head">
             <h3 class="flex-start gap-sm">
               <i data-lucide="monitor-smartphone" style="width:15px;height:15px;color:var(--primary)"></i>
               Sessões ativas
             </h3>
-            <button class="btn btn-ghost btn-sm" id="btnRefreshSessions">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshSessions"><i data-lucide="refresh-cw"></i></button>
           </div>
-          <div class="list" id="sessionsList">
-            <div class="empty-sm">Carregando…</div>
-          </div>
+          <div class="list" id="sessionsList"><div class="empty-sm">Carregando…</div></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: KEYS (staff)
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: KEYS ═══════════ -->
       <section class="page" id="page-keys">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="key"></i>
-            Keys Premium
-          </h1>
-        </div>
+        <div class="page-head"><h1><i data-lucide="key"></i>Keys Premium</h1></div>
 
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--success)"></i>
-            Gerar novas keys
-          </h3>
+          <h3 class="flex-start gap-sm"><i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--success)"></i>Gerar novas keys</h3>
           <form id="genForm" style="margin-top:14px">
             <div class="grid-2">
-              <div class="field">
-                <label>Tier</label>
-                <div class="input-wrap">
-                  <i data-lucide="layers"></i>
-                  <select id="genTier">
-                    <option value="basic">Basic</option>
-                    <option value="premium" selected>Premium</option>
-                    <option value="ultra">Ultra</option>
-                    <option value="unlimited">Unlimited</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field">
-                <label>Duração</label>
-                <div class="input-wrap">
-                  <i data-lucide="calendar"></i>
-                  <select id="genDuracao">
-                    <option value="7">7 dias</option>
-                    <option value="15">15 dias</option>
-                    <option value="30" selected>30 dias</option>
-                    <option value="90">90 dias</option>
-                    <option value="180">180 dias</option>
-                    <option value="365">1 ano</option>
-                    <option value="0">Permanente</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field">
-                <label>Quantidade (1–50)</label>
-                <div class="input-wrap">
-                  <i data-lucide="hash"></i>
-                  <input type="number" id="genQtd" value="1" min="1" max="50">
-                </div>
-              </div>
-              <div class="field">
-                <label>Máx. usos</label>
-                <div class="input-wrap">
-                  <i data-lucide="repeat"></i>
-                  <input type="number" id="genMaxUsos" value="1" min="1" max="100">
-                </div>
-              </div>
-              <div class="field">
-                <label>Validade em dias (0 = ∞)</label>
-                <div class="input-wrap">
-                  <i data-lucide="timer"></i>
-                  <input type="number" id="genValidade" value="0" min="0">
-                </div>
-              </div>
-              <div class="field">
-                <label>Motivo (opcional)</label>
-                <div class="input-wrap">
-                  <i data-lucide="message-square"></i>
-                  <input type="text" id="genMotivo" placeholder="Ex: evento, promoção…">
-                </div>
-              </div>
+              <div class="field"><label>Tier</label><div class="input-wrap"><i data-lucide="layers"></i><select id="genTier"><option value="basic">Basic</option><option value="premium" selected>Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select></div></div>
+              <div class="field"><label>Duração</label><div class="input-wrap"><i data-lucide="calendar"></i><select id="genDuracao"><option value="7">7 dias</option><option value="15">15 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="180">180 dias</option><option value="365">1 ano</option><option value="0">Permanente</option></select></div></div>
+              <div class="field"><label>Quantidade (1–50)</label><div class="input-wrap"><i data-lucide="hash"></i><input type="number" id="genQtd" value="1" min="1" max="50"></div></div>
+              <div class="field"><label>Máx. usos</label><div class="input-wrap"><i data-lucide="repeat"></i><input type="number" id="genMaxUsos" value="1" min="1" max="100"></div></div>
+              <div class="field"><label>Validade em dias (0 = ∞)</label><div class="input-wrap"><i data-lucide="timer"></i><input type="number" id="genValidade" value="0" min="0"></div></div>
+              <div class="field"><label>Motivo (opcional)</label><div class="input-wrap"><i data-lucide="message-square"></i><input type="text" id="genMotivo" placeholder="Ex: evento, promoção…"></div></div>
             </div>
-            <button type="submit" class="btn btn-primary">
-              <i data-lucide="zap"></i>
-              Gerar keys
-            </button>
+            <button type="submit" class="btn btn-primary"><i data-lucide="zap"></i>Gerar keys</button>
             <div id="genResult" class="msg"></div>
           </form>
         </div>
@@ -586,674 +350,254 @@
         <div class="page-head-sm">
           <h3>Keys geradas</h3>
           <div class="btn-row">
-            <button class="btn btn-success btn-sm" id="btnEnviarKey">
-              <i data-lucide="send"></i>
-              Enviar key
-            </button>
-            <button class="btn btn-ghost btn-sm" id="btnRefreshKeys">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button class="btn btn-success btn-sm" id="btnEnviarKey"><i data-lucide="send"></i>Enviar key</button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshKeys"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
 
         <div class="filters">
-          <select class="input" id="filterStatus" style="max-width:160px">
-            <option value="">Todos os status</option>
-            <option value="active">Ativas</option>
-            <option value="used">Esgotadas</option>
-          </select>
-          <select class="input" id="filterTier" style="max-width:160px">
-            <option value="">Todos os tiers</option>
-            <option value="basic">Basic</option>
-            <option value="premium">Premium</option>
-            <option value="ultra">Ultra</option>
-            <option value="unlimited">Unlimited</option>
-          </select>
+          <select class="input" id="filterStatus" style="max-width:160px"><option value="">Todos os status</option><option value="active">Ativas</option><option value="used">Esgotadas</option></select>
+          <select class="input" id="filterTier" style="max-width:160px"><option value="">Todos os tiers</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
         </div>
 
-        <div id="keysTable">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div id="keysTable"><div class="empty-sm">Carregando…</div></div>
 
-        <div class="page-head-sm" style="margin-top:24px">
-          <h3>Resgates recentes</h3>
-        </div>
-        <div id="redemptionsTable">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div class="page-head-sm" style="margin-top:24px"><h3>Resgates recentes</h3></div>
+        <div id="redemptionsTable"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: PACKS (dev)
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: PACKS ═══════════ -->
       <section class="page" id="page-packs">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="package"></i>
-            Packs de Keys
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="package"></i>Packs de Keys</h1></div>
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--success)"></i>
-            Gerar Pack
-          </h3>
-          <p class="hint">
-            Cada pack gera <strong>5 keys × 4 tiers × 3 durações = 60 keys</strong>.
-          </p>
+          <h3 class="flex-start gap-sm"><i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--success)"></i>Gerar Pack</h3>
+          <p class="hint">Cada pack gera <strong>5 keys × 4 tiers × 3 durações = 60 keys</strong>.</p>
           <div class="grid-2">
-            <div class="field">
-              <label>Quantidade de packs</label>
-              <div class="input-wrap">
-                <i data-lucide="package"></i>
-                <input type="number" id="packQtd" value="1" min="1" max="20">
-              </div>
-            </div>
-            <div class="field">
-              <label>Motivo (opcional)</label>
-              <div class="input-wrap">
-                <i data-lucide="message-square"></i>
-                <input type="text" id="packMotivo" placeholder="Ex: promoção…">
-              </div>
-            </div>
+            <div class="field"><label>Quantidade de packs</label><div class="input-wrap"><i data-lucide="package"></i><input type="number" id="packQtd" value="1" min="1" max="20"></div></div>
+            <div class="field"><label>Motivo (opcional)</label><div class="input-wrap"><i data-lucide="message-square"></i><input type="text" id="packMotivo" placeholder="Ex: promoção…"></div></div>
           </div>
-          <button id="btnGerarPack" class="btn btn-primary">
-            <i data-lucide="zap"></i>
-            Gerar Pack
-          </button>
+          <button id="btnGerarPack" class="btn btn-primary"><i data-lucide="zap"></i>Gerar Pack</button>
           <div id="packResult" class="msg"></div>
         </div>
-
         <div class="page-head-sm">
           <h3>Packs gerados</h3>
-          <button id="btnRefreshPacks" class="btn btn-ghost btn-sm">
-            <i data-lucide="refresh-cw"></i>
-          </button>
+          <button id="btnRefreshPacks" class="btn btn-ghost btn-sm"><i data-lucide="refresh-cw"></i></button>
         </div>
-        <div id="packsTable">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div id="packsTable"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: TICKETS GLOBAL (admin)
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: TICKETS GLOBAL ═══════════ -->
       <section class="page" id="page-tickets-global">
         <div class="page-head">
-          <h1>
-            <i data-lucide="ticket"></i>
-            Tickets Abertos
-          </h1>
+          <h1><i data-lucide="ticket"></i>Tickets Abertos</h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnRefreshTicketsGlobal">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshTicketsGlobal"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
-
         <p class="page-sub">Todos os tickets abertos na rede.</p>
-
-        <div id="ticketsGlobalTable">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div id="ticketsGlobalTable"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: FINANCEIRO (admin)
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: FINANCEIRO ═══════════ -->
       <section class="page" id="page-financial">
         <div class="page-head">
-          <h1>
-            <i data-lucide="wallet"></i>
-            Financeiro
-          </h1>
+          <h1><i data-lucide="wallet"></i>Financeiro</h1>
           <div class="page-head-actions">
             <span class="status-chip">Últimos 30 dias</span>
-            <button class="btn btn-ghost btn-sm" id="btnRefreshFinancial">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshFinancial"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
-
         <div class="stats-grid" id="financialStats">
-          <div class="stat-card">
-            <div class="stat-icon green"><i data-lucide="loader-2" class="spin"></i></div>
-            <div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div>
-          </div>
+          <div class="stat-card"><div class="stat-icon green"><i data-lucide="loader-2" class="spin"></i></div><div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div></div>
         </div>
-
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="line-chart" style="width:15px;height:15px;color:var(--primary)"></i>
-            Vendas por dia
-          </h3>
-          <div style="margin-top:14px">
-            <canvas id="chartFinancial" style="max-height:340px"></canvas>
-          </div>
+          <h3 class="flex-start gap-sm"><i data-lucide="line-chart" style="width:15px;height:15px;color:var(--primary)"></i>Vendas por dia</h3>
+          <div style="margin-top:14px"><canvas id="chartFinancial" style="max-height:340px"></canvas></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — GERENCIAR SERVIDORES
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — SERVIDORES ═══════════ -->
       <section class="page" id="page-dev-servers">
         <div class="page-head">
-          <h1>
-            <i data-lucide="radar"></i>
-            Gerenciar Servidores
-            <span class="badge-dev">DEV</span>
-          </h1>
+          <h1><i data-lucide="radar"></i>Gerenciar Servidores <span class="badge-dev">DEV</span></h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnRefreshDevServers">
-              <i data-lucide="refresh-cw"></i>
-            </button>
-            <button class="btn btn-primary btn-sm" id="btnForceSyncAll">
-              <i data-lucide="zap"></i>
-              Sync Global
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshDevServers"><i data-lucide="refresh-cw"></i></button>
+            <button class="btn btn-primary btn-sm" id="btnForceSyncAll"><i data-lucide="zap"></i>Sync Global</button>
           </div>
         </div>
-
         <div class="card tight">
           <div class="filters" style="margin-bottom:0">
-            <div class="input-wrap" style="flex:1;min-width:200px">
-              <i data-lucide="search"></i>
-              <input type="text" id="devServersSearch" placeholder="Buscar por nome ou ID">
-            </div>
-            <div class="input-wrap" style="width:160px">
-              <i data-lucide="users"></i>
-              <input type="number" id="devServersMinMembers" placeholder="Mín. membros" min="0">
-            </div>
-            <select class="input" id="devServersPremium" style="width:180px">
-              <option value="">Todos</option>
-              <option value="true">Somente premium</option>
-              <option value="false">Somente sem premium</option>
-            </select>
+            <div class="input-wrap" style="flex:1;min-width:200px"><i data-lucide="search"></i><input type="text" id="devServersSearch" placeholder="Buscar por nome ou ID"></div>
+            <div class="input-wrap" style="width:160px"><i data-lucide="users"></i><input type="number" id="devServersMinMembers" placeholder="Mín. membros" min="0"></div>
+            <select class="input" id="devServersPremium" style="width:180px"><option value="">Todos</option><option value="true">Somente premium</option><option value="false">Somente sem premium</option></select>
           </div>
         </div>
-
         <div class="stats-grid" id="devServersStats" style="margin-top:16px">
-          <div class="stat-card">
-            <div class="stat-icon blue"><i data-lucide="loader-2" class="spin"></i></div>
-            <div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div>
-          </div>
+          <div class="stat-card"><div class="stat-icon blue"><i data-lucide="loader-2" class="spin"></i></div><div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div></div>
         </div>
-
-        <div class="servers-grid" id="devServersList" style="margin-top:16px">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div class="servers-grid" id="devServersList" style="margin-top:16px"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — BUSCAR SERVIDOR
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — BUSCAR SERVIDOR ═══════════ -->
       <section class="page" id="page-dev-server-search">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="search"></i>
-            Buscar Servidor
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="search"></i>Buscar Servidor</h1></div>
         <div class="card">
           <p class="hint">Cole o ID do servidor para ver detalhes completos.</p>
-          <div class="field">
-            <label>ID do Servidor</label>
-            <div class="input-wrap">
-              <i data-lucide="hash"></i>
-              <input type="text" id="devServerLookupId" placeholder="Ex: 123456789012345678" inputmode="numeric" maxlength="25">
-            </div>
-          </div>
-          <button id="btnDevServerLookup" class="btn btn-primary">
-            <i data-lucide="search"></i>
-            Buscar
-          </button>
+          <div class="field"><label>ID do Servidor</label><div class="input-wrap"><i data-lucide="hash"></i><input type="text" id="devServerLookupId" placeholder="Ex: 123456789012345678" inputmode="numeric" maxlength="25"></div></div>
+          <button id="btnDevServerLookup" class="btn btn-primary"><i data-lucide="search"></i>Buscar</button>
         </div>
-
         <div id="devServerLookupResult" style="margin-top:18px"></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — KILL SWITCH
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — KILL SWITCH ═══════════ -->
       <section class="page" id="page-kill-switch">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="siren"></i>
-            Kill Switch
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="siren"></i>Kill Switch</h1></div>
         <div class="card">
-          <p class="hint">
-            Bloqueia temporariamente os comandos do bot na rede. Use apenas em emergências.
-          </p>
-          <div id="ksStatus" style="margin-bottom:14px">
-            <div class="empty-sm">Carregando…</div>
-          </div>
-          <div class="field">
-            <label>Motivo</label>
-            <div class="input-wrap">
-              <i data-lucide="message-square"></i>
-              <input type="text" id="ksReason" placeholder="Ex: bug crítico, incidente de segurança…" maxlength="200">
-            </div>
-          </div>
+          <p class="hint">Bloqueia temporariamente os comandos do bot na rede. Use apenas em emergências.</p>
+          <div id="ksStatus" style="margin-bottom:14px"><div class="empty-sm">Carregando…</div></div>
+          <div class="field"><label>Motivo</label><div class="input-wrap"><i data-lucide="message-square"></i><input type="text" id="ksReason" placeholder="Ex: bug crítico, incidente de segurança…" maxlength="200"></div></div>
           <div class="btn-row">
-            <button id="btnKillOn" class="btn btn-danger">
-              <i data-lucide="power"></i>
-              Ativar
-            </button>
-            <button id="btnKillOff" class="btn btn-success">
-              <i data-lucide="power-off"></i>
-              Desativar
-            </button>
+            <button id="btnKillOn" class="btn btn-danger"><i data-lucide="power"></i>Ativar</button>
+            <button id="btnKillOff" class="btn btn-success"><i data-lucide="power-off"></i>Desativar</button>
           </div>
           <div id="ksMsg" class="msg"></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — MANUTENÇÃO
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — MANUTENÇÃO ═══════════ -->
       <section class="page" id="page-maintenance">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="wrench"></i>
-            Manutenção Global
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="wrench"></i>Manutenção Global</h1></div>
         <div class="card">
-          <p class="hint">
-            Durante a manutenção, apenas desenvolvedores conseguem usar o bot. Todos os outros usuários são bloqueados temporariamente.
-          </p>
-          <div id="mtStatus" style="margin-bottom:14px">
-            <div class="empty-sm">Carregando…</div>
-          </div>
-          <div class="field">
-            <label>Motivo</label>
-            <div class="input-wrap">
-              <i data-lucide="message-square"></i>
-              <input type="text" id="mtReason" placeholder="Ex: atualização do banco…" maxlength="200">
-            </div>
-          </div>
+          <p class="hint">Durante a manutenção, apenas desenvolvedores conseguem usar o bot.</p>
+          <div id="mtStatus" style="margin-bottom:14px"><div class="empty-sm">Carregando…</div></div>
+          <div class="field"><label>Motivo</label><div class="input-wrap"><i data-lucide="message-square"></i><input type="text" id="mtReason" placeholder="Ex: atualização do banco…" maxlength="200"></div></div>
           <div class="btn-row">
-            <button id="btnMtOn" class="btn btn-warn">
-              <i data-lucide="wrench"></i>
-              Ativar manutenção
-            </button>
-            <button id="btnMtOff" class="btn btn-success">
-              <i data-lucide="check"></i>
-              Desativar manutenção
-            </button>
+            <button id="btnMtOn" class="btn btn-warn"><i data-lucide="wrench"></i>Ativar manutenção</button>
+            <button id="btnMtOff" class="btn btn-success"><i data-lucide="check"></i>Desativar manutenção</button>
           </div>
           <div id="mtMsg" class="msg"></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — FORCE PREMIUM
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — FORCE PREMIUM ═══════════ -->
       <section class="page" id="page-force-premium">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="gem"></i>
-            Force Premium
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="gem"></i>Force Premium</h1></div>
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--success)"></i>
-            Adicionar premium manualmente
-          </h3>
+          <h3 class="flex-start gap-sm"><i data-lucide="plus-circle" style="width:15px;height:15px;color:var(--success)"></i>Adicionar premium manualmente</h3>
           <div class="grid-2" style="margin-top:14px">
-            <div class="field">
-              <label>Escopo</label>
-              <div class="input-wrap">
-                <i data-lucide="target"></i>
-                <select id="fpScope">
-                  <option value="guild">Servidor</option>
-                  <option value="user">Usuário</option>
-                </select>
-              </div>
-            </div>
-            <div class="field">
-              <label>ID alvo</label>
-              <div class="input-wrap">
-                <i data-lucide="hash"></i>
-                <input type="text" id="fpTarget" placeholder="ID do servidor ou usuário" inputmode="numeric" maxlength="25">
-              </div>
-            </div>
-            <div class="field">
-              <label>Dias (0 = permanente)</label>
-              <div class="input-wrap">
-                <i data-lucide="calendar"></i>
-                <input type="number" id="fpDays" value="0" min="0">
-              </div>
-            </div>
-            <div class="field">
-              <label>Motivo</label>
-              <div class="input-wrap">
-                <i data-lucide="message-square"></i>
-                <input type="text" id="fpReason" placeholder="Ex: compensação, evento…" maxlength="200">
-              </div>
-            </div>
+            <div class="field"><label>Escopo</label><div class="input-wrap"><i data-lucide="target"></i><select id="fpScope"><option value="guild">Servidor</option><option value="user">Usuário</option></select></div></div>
+            <div class="field"><label>ID alvo</label><div class="input-wrap"><i data-lucide="hash"></i><input type="text" id="fpTarget" placeholder="ID do servidor ou usuário" inputmode="numeric" maxlength="25"></div></div>
+            <div class="field"><label>Dias (0 = permanente)</label><div class="input-wrap"><i data-lucide="calendar"></i><input type="number" id="fpDays" value="0" min="0"></div></div>
+            <div class="field"><label>Motivo</label><div class="input-wrap"><i data-lucide="message-square"></i><input type="text" id="fpReason" placeholder="Ex: compensação, evento…" maxlength="200"></div></div>
           </div>
-          <button id="btnFpAdd" class="btn btn-primary">
-            <i data-lucide="plus"></i>
-            Adicionar
-          </button>
+          <button id="btnFpAdd" class="btn btn-primary"><i data-lucide="plus"></i>Adicionar</button>
           <div id="fpMsg" class="msg"></div>
         </div>
-
         <div class="page-head-sm">
           <h3>Force premiums ativos</h3>
-          <button class="btn btn-ghost btn-sm" id="btnRefreshFp">
-            <i data-lucide="refresh-cw"></i>
-          </button>
+          <button class="btn btn-ghost btn-sm" id="btnRefreshFp"><i data-lucide="refresh-cw"></i></button>
         </div>
-        <div id="fpList">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div id="fpList"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — BROADCAST
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — BROADCAST ═══════════ -->
       <section class="page" id="page-broadcast">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="megaphone"></i>
-            Broadcast Global
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="megaphone"></i>Broadcast Global</h1></div>
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="send" style="width:15px;height:15px;color:var(--primary)"></i>
-            Enviar notificação no painel
-          </h3>
-          <div class="field" style="margin-top:14px">
-            <label>Título</label>
-            <div class="input-wrap">
-              <i data-lucide="type"></i>
-              <input type="text" id="bcTitle" placeholder="Ex: Nova atualização" maxlength="120">
-            </div>
-          </div>
-          <div class="field">
-            <label>Conteúdo</label>
-            <div class="input-wrap">
-              <i data-lucide="align-left"></i>
-              <textarea id="bcContent" placeholder="Mensagem…" maxlength="500"></textarea>
-            </div>
-          </div>
-          <div class="field">
-            <label>Filtrar por função (opcional)</label>
-            <div class="input-wrap">
-              <i data-lucide="users"></i>
-              <select id="bcRole">
-                <option value="">Todos</option>
-                <option value="dev">Dev</option>
-                <option value="admin">Admin</option>
-                <option value="funcionario">Funcionário</option>
-                <option value="cliente">Cliente</option>
-              </select>
-            </div>
-          </div>
-          <button id="btnBcSend" class="btn btn-primary">
-            <i data-lucide="send"></i>
-            Enviar
-          </button>
+          <h3 class="flex-start gap-sm"><i data-lucide="send" style="width:15px;height:15px;color:var(--primary)"></i>Enviar notificação no painel</h3>
+          <div class="field" style="margin-top:14px"><label>Título</label><div class="input-wrap"><i data-lucide="type"></i><input type="text" id="bcTitle" placeholder="Ex: Nova atualização" maxlength="120"></div></div>
+          <div class="field"><label>Conteúdo</label><div class="input-wrap"><i data-lucide="align-left"></i><textarea id="bcContent" placeholder="Mensagem…" maxlength="500"></textarea></div></div>
+          <div class="field"><label>Filtrar por função (opcional)</label><div class="input-wrap"><i data-lucide="users"></i><select id="bcRole"><option value="">Todos</option><option value="dev">Dev</option><option value="admin">Admin</option><option value="funcionario">Funcionário</option><option value="cliente">Cliente</option></select></div></div>
+          <button id="btnBcSend" class="btn btn-primary"><i data-lucide="send"></i>Enviar</button>
           <div id="bcMsg" class="msg"></div>
         </div>
-
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="rotate-ccw" style="width:15px;height:15px;color:var(--warn)"></i>
-            Forçar broadcast de update
-          </h3>
-          <p class="hint" style="margin-top:8px">
-            Reset do marcador para o bot reenviar o anúncio de atualização no próximo boot.
-          </p>
-          <button id="btnForceUpdate" class="btn btn-ghost">
-            <i data-lucide="rotate-ccw"></i>
-            Resetar marcador
-          </button>
+          <h3 class="flex-start gap-sm"><i data-lucide="rotate-ccw" style="width:15px;height:15px;color:var(--warn)"></i>Forçar broadcast de update</h3>
+          <p class="hint" style="margin-top:8px">Reset do marcador para o bot reenviar o anúncio de atualização no próximo boot.</p>
+          <button id="btnForceUpdate" class="btn btn-ghost"><i data-lucide="rotate-ccw"></i>Resetar marcador</button>
           <div id="fuMsg" class="msg"></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — BACKUP & SYNC
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — BACKUP ═══════════ -->
       <section class="page" id="page-backup">
-        <div class="page-head">
-          <h1>
-            <i data-lucide="database"></i>
-            Backup &amp; Sync
-          </h1>
-        </div>
-
+        <div class="page-head"><h1><i data-lucide="database"></i>Backup &amp; Sync</h1></div>
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="download" style="width:15px;height:15px;color:var(--primary)"></i>
-            Baixar backup
-          </h3>
-          <p class="hint" style="margin-top:8px">
-            Gera um arquivo JSON com as tabelas principais do painel.
-          </p>
-          <button id="btnDownloadBackup" class="btn btn-primary">
-            <i data-lucide="download"></i>
-            Baixar backup
-          </button>
+          <h3 class="flex-start gap-sm"><i data-lucide="download" style="width:15px;height:15px;color:var(--primary)"></i>Baixar backup</h3>
+          <p class="hint" style="margin-top:8px">Gera um arquivo JSON com as tabelas principais do painel.</p>
+          <button id="btnDownloadBackup" class="btn btn-primary"><i data-lucide="download"></i>Baixar backup</button>
         </div>
-
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="refresh-cw" style="width:15px;height:15px;color:var(--success)"></i>
-            Sincronizar servidores
-          </h3>
-          <p class="hint" style="margin-top:8px">
-            Força o bot a reescanear todos os servidores em que ele está presente.
-          </p>
-          <button id="btnForceSync" class="btn btn-ghost">
-            <i data-lucide="refresh-cw"></i>
-            Forçar sync
-          </button>
+          <h3 class="flex-start gap-sm"><i data-lucide="refresh-cw" style="width:15px;height:15px;color:var(--success)"></i>Sincronizar servidores</h3>
+          <p class="hint" style="margin-top:8px">Força o bot a reescanear todos os servidores em que ele está presente.</p>
+          <button id="btnForceSync" class="btn btn-ghost"><i data-lucide="refresh-cw"></i>Forçar sync</button>
           <div id="syncMsg" class="msg"></div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — USUÁRIOS
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — USUÁRIOS ═══════════ -->
       <section class="page" id="page-usuarios">
         <div class="page-head">
-          <h1>
-            <i data-lucide="users"></i>
-            Usuários
-          </h1>
+          <h1><i data-lucide="users"></i>Usuários</h1>
           <div class="page-head-actions">
-            <button id="btnNovoUsuario" class="btn btn-primary btn-sm">
-              <i data-lucide="user-plus"></i>
-              Novo
-            </button>
-            <button id="btnRefreshUsers" class="btn btn-ghost btn-sm">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button id="btnNovoUsuario" class="btn btn-primary btn-sm"><i data-lucide="user-plus"></i>Novo</button>
+            <button id="btnRefreshUsers" class="btn btn-ghost btn-sm"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
-
         <div class="filters">
-          <div class="input-wrap" style="flex:1;min-width:220px">
-            <i data-lucide="search"></i>
-            <input type="text" id="userSearch" placeholder="Buscar e-mail, nome ou ID do Discord">
-          </div>
-          <select class="input" id="userFilterRole" style="max-width:160px">
-            <option value="">Todas as funções</option>
-            <option value="dev">Dev</option>
-            <option value="admin">Admin</option>
-            <option value="funcionario">Funcionário</option>
-            <option value="cliente">Cliente</option>
-            <option value="pending">Pendente</option>
-          </select>
-          <select class="input" id="userFilterPlan" style="max-width:160px">
-            <option value="">Todos os planos</option>
-            <option value="none">Sem plano</option>
-            <option value="basic">Basic</option>
-            <option value="premium">Premium</option>
-            <option value="ultra">Ultra</option>
-            <option value="unlimited">Unlimited</option>
-          </select>
-          <select class="input" id="userFilterAtivo" style="max-width:160px">
-            <option value="">Todos os status</option>
-            <option value="true">Ativos</option>
-            <option value="false">Inativos</option>
-          </select>
+          <div class="input-wrap" style="flex:1;min-width:220px"><i data-lucide="search"></i><input type="text" id="userSearch" placeholder="Buscar e-mail, nome ou ID do Discord"></div>
+          <select class="input" id="userFilterRole" style="max-width:160px"><option value="">Todas as funções</option><option value="dev">Dev</option><option value="admin">Admin</option><option value="funcionario">Funcionário</option><option value="cliente">Cliente</option><option value="pending">Pendente</option></select>
+          <select class="input" id="userFilterPlan" style="max-width:160px"><option value="">Todos os planos</option><option value="none">Sem plano</option><option value="basic">Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option></select>
+          <select class="input" id="userFilterAtivo" style="max-width:160px"><option value="">Todos os status</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
         </div>
-
-        <div id="usersTable">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <div id="usersTable"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — APROVAÇÕES PENDENTES
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — APROVAÇÕES ═══════════ -->
       <section class="page" id="page-pending">
         <div class="page-head">
-          <h1>
-            <i data-lucide="user-check"></i>
-            Aprovações Pendentes
-          </h1>
+          <h1><i data-lucide="user-check"></i>Aprovações Pendentes</h1>
           <div class="page-head-actions">
-            <button class="btn btn-ghost btn-sm" id="btnRefreshPending">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button class="btn btn-ghost btn-sm" id="btnRefreshPending"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
-
-        <p class="page-sub">
-          Contas aguardando aprovação do desenvolvedor. Aprovar libera o acesso ao painel.
-        </p>
-
-        <div class="list" id="pendingList">
-          <div class="empty-sm">Carregando…</div>
-        </div>
+        <p class="page-sub">Contas aguardando aprovação do desenvolvedor. Aprovar libera o acesso ao painel.</p>
+        <div class="list" id="pendingList"><div class="empty-sm">Carregando…</div></div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════
-           PAGE: DEV — AUDITORIA
-           ═══════════════════════════════════════════════ -->
+      <!-- ═══════════ PAGE: DEV — AUDITORIA ═══════════ -->
       <section class="page" id="page-audit">
         <div class="page-head">
-          <h1>
-            <i data-lucide="scroll-text"></i>
-            Auditoria Completa
-          </h1>
+          <h1><i data-lucide="scroll-text"></i>Auditoria Completa</h1>
           <div class="page-head-actions">
-            <button id="btnAuditExport" class="btn btn-success btn-sm">
-              <i data-lucide="download"></i>
-              Exportar CSV
-            </button>
-            <button id="btnAuditRefresh" class="btn btn-ghost btn-sm">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <button id="btnAuditExport" class="btn btn-success btn-sm"><i data-lucide="download"></i>Exportar CSV</button>
+            <button id="btnAuditRefresh" class="btn btn-ghost btn-sm"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
-
         <div class="stats-grid" id="auditStats">
-          <div class="stat-card">
-            <div class="stat-icon blue"><i data-lucide="loader-2" class="spin"></i></div>
-            <div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div>
-          </div>
+          <div class="stat-card"><div class="stat-icon blue"><i data-lucide="loader-2" class="spin"></i></div><div class="stat-body"><div class="stat-value">–</div><div class="stat-label">Carregando…</div></div></div>
         </div>
-
         <div class="card">
-          <h3 class="flex-start gap-sm">
-            <i data-lucide="filter" style="width:15px;height:15px;color:var(--primary)"></i>
-            Filtros
-          </h3>
+          <h3 class="flex-start gap-sm"><i data-lucide="filter" style="width:15px;height:15px;color:var(--primary)"></i>Filtros</h3>
           <div class="grid-2" style="margin-top:14px">
-            <div class="field">
-              <label>Ação</label>
-              <div class="input-wrap">
-                <i data-lucide="activity"></i>
-                <input type="text" id="auditFilterAction" placeholder="Ex: login, nuke_guild…">
-              </div>
-            </div>
-            <div class="field">
-              <label>IP</label>
-              <div class="input-wrap">
-                <i data-lucide="globe"></i>
-                <input type="text" id="auditFilterIp" placeholder="Ex: 200.150.10.5">
-              </div>
-            </div>
-            <div class="field">
-              <label>De</label>
-              <div class="input-wrap">
-                <i data-lucide="calendar"></i>
-                <input type="datetime-local" id="auditFilterFrom">
-              </div>
-            </div>
-            <div class="field">
-              <label>Até</label>
-              <div class="input-wrap">
-                <i data-lucide="calendar"></i>
-                <input type="datetime-local" id="auditFilterTo">
-              </div>
-            </div>
-            <div class="field">
-              <label>Resultado</label>
-              <div class="input-wrap">
-                <i data-lucide="check-circle-2"></i>
-                <select id="auditFilterSuccess">
-                  <option value="">Todos</option>
-                  <option value="true">Sucesso</option>
-                  <option value="false">Falha</option>
-                </select>
-              </div>
-            </div>
-            <div class="field">
-              <label>Por página</label>
-              <div class="input-wrap">
-                <i data-lucide="list"></i>
-                <select id="auditFilterLimit">
-                  <option value="50">50</option>
-                  <option value="100" selected>100</option>
-                  <option value="200">200</option>
-                  <option value="500">500</option>
-                </select>
-              </div>
-            </div>
+            <div class="field"><label>Ação</label><div class="input-wrap"><i data-lucide="activity"></i><input type="text" id="auditFilterAction" placeholder="Ex: login, nuke_guild…"></div></div>
+            <div class="field"><label>IP</label><div class="input-wrap"><i data-lucide="globe"></i><input type="text" id="auditFilterIp" placeholder="Ex: 200.150.10.5"></div></div>
+            <div class="field"><label>De</label><div class="input-wrap"><i data-lucide="calendar"></i><input type="datetime-local" id="auditFilterFrom"></div></div>
+            <div class="field"><label>Até</label><div class="input-wrap"><i data-lucide="calendar"></i><input type="datetime-local" id="auditFilterTo"></div></div>
+            <div class="field"><label>Resultado</label><div class="input-wrap"><i data-lucide="check-circle-2"></i><select id="auditFilterSuccess"><option value="">Todos</option><option value="true">Sucesso</option><option value="false">Falha</option></select></div></div>
+            <div class="field"><label>Por página</label><div class="input-wrap"><i data-lucide="list"></i><select id="auditFilterLimit"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option><option value="500">500</option></select></div></div>
           </div>
           <div class="btn-row">
-            <button id="btnAuditFilter" class="btn btn-primary">
-              <i data-lucide="search"></i>
-              Filtrar
-            </button>
-            <button id="btnAuditClear" class="btn btn-ghost">
-              <i data-lucide="x"></i>
-              Limpar
-            </button>
+            <button id="btnAuditFilter" class="btn btn-primary"><i data-lucide="search"></i>Filtrar</button>
+            <button id="btnAuditClear" class="btn btn-ghost"><i data-lucide="x"></i>Limpar</button>
           </div>
         </div>
-
-        <div id="auditTable" style="margin-top:16px">
-          <div class="empty-sm">Carregando…</div>
-        </div>
-
+        <div id="auditTable" style="margin-top:16px"><div class="empty-sm">Carregando…</div></div>
         <div class="pagination">
           <span id="auditPaginationInfo" class="pagination-info"></span>
           <div class="pagination-btns">
-            <button id="btnAuditPrev" class="page-btn" disabled>
-              <i data-lucide="chevron-left"></i>
-            </button>
-            <button id="btnAuditNext" class="page-btn" disabled>
-              <i data-lucide="chevron-right"></i>
-            </button>
+            <button id="btnAuditPrev" class="page-btn" disabled><i data-lucide="chevron-left"></i></button>
+            <button id="btnAuditNext" class="page-btn" disabled><i data-lucide="chevron-right"></i></button>
           </div>
         </div>
       </section>
@@ -1262,14 +606,12 @@
   </main>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     COMMAND PALETTE
-     ═══════════════════════════════════════════════════════ -->
-<div id="cmdPalette" class="cmdk" role="dialog" aria-modal="true" aria-labelledby="cmdkLabel">
+<!-- ═══════════ COMMAND PALETTE ═══════════ -->
+<div id="cmdPalette" class="cmdk" role="dialog" aria-modal="true">
   <div class="cmdk-box">
     <div class="cmdk-input">
       <i data-lucide="search"></i>
-      <input type="text" id="cmdInput" placeholder="Ir para… ou buscar ação" autocomplete="off" aria-label="Busca de navegação">
+      <input type="text" id="cmdInput" placeholder="Ir para… ou buscar ação" autocomplete="off">
       <kbd>ESC</kbd>
     </div>
     <div id="cmdResults" class="cmdk-results"></div>
@@ -1281,78 +623,94 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     DRAWER — NOTIFICAÇÕES
-     ═══════════════════════════════════════════════════════ -->
-<div id="notifDrawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="notifDrawerTitle">
+<!-- ═══════════ DRAWER — NOTIFICAÇÕES ═══════════ -->
+<div id="notifDrawer" class="drawer" role="dialog" aria-modal="true">
   <div class="drawer-head">
-    <h3 id="notifDrawerTitle" class="flex-start gap-sm">
-      <i data-lucide="bell" style="width:16px;height:16px"></i>
-      Notificações
-    </h3>
-    <button id="btnCloseDrawer" class="topbar-btn" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <h3 class="flex-start gap-sm"><i data-lucide="bell" style="width:16px;height:16px"></i>Notificações</h3>
+    <button id="btnCloseDrawer" class="topbar-btn" aria-label="Fechar"><i data-lucide="x"></i></button>
   </div>
-  <div class="drawer-body" id="drawerBody">
-    <div class="empty-sm">Carregando…</div>
-  </div>
+  <div class="drawer-body" id="drawerBody"><div class="empty-sm">Carregando…</div></div>
   <div class="drawer-foot">
-    <button id="btnMarkAllReadDrawer" class="btn btn-ghost btn-block btn-sm">
-      <i data-lucide="check-check"></i>
-      Marcar todas como lidas
-    </button>
+    <button id="btnMarkAllReadDrawer" class="btn btn-ghost btn-block btn-sm"><i data-lucide="check-check"></i>Marcar todas como lidas</button>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     MODAIS
-     ═══════════════════════════════════════════════════════ -->
+<!-- ═══════════ MODAIS ═══════════ -->
 
 <!-- Modal — Detalhes do servidor -->
 <div id="modalServer" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalServer" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
-    <div id="serverDetail">
-      <div class="empty-sm">Carregando…</div>
-    </div>
+    <button class="modal-x" data-close="modalServer" aria-label="Fechar"><i data-lucide="x"></i></button>
+    <div id="serverDetail"><div class="empty-sm">Carregando…</div></div>
   </div>
 </div>
 
 <!-- Modal — Esqueci senha -->
 <div id="modalForgot" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box modal-sm">
-    <button class="modal-x" data-close="modalForgot" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalForgot" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2>Alterar senha</h2>
     <p class="modal-sub">Enviaremos um link de redefinição para o seu e-mail cadastrado.</p>
     <div class="field">
       <label>E-mail</label>
-      <div class="input-wrap">
-        <i data-lucide="mail"></i>
-        <input type="email" id="forgotEmail" placeholder="voce@exemplo.com" maxlength="254">
-      </div>
+      <div class="input-wrap"><i data-lucide="mail"></i><input type="email" id="forgotEmail" placeholder="voce@exemplo.com" maxlength="254"></div>
     </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" data-close="modalForgot">Cancelar</button>
-      <button class="btn btn-primary" id="btnSendForgot">
-        <i data-lucide="send"></i>
-        Enviar link
-      </button>
+      <button class="btn btn-primary" id="btnSendForgot"><i data-lucide="send"></i>Enviar link</button>
     </div>
     <div id="forgotMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- Modal — Novo/Editar usuário -->
+<!-- ⚡ Modal — Editar meu perfil (cliente) -->
+<div id="modalProfile" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <button class="modal-x" data-close="modalProfile" aria-label="Fechar"><i data-lucide="x"></i></button>
+    <h2>Editar meu perfil</h2>
+    <p class="modal-sub">
+      Altere seu e-mail e/ou ID do Discord. Estas informações são usadas para login
+      e para vincular os servidores que você pode gerenciar.
+    </p>
+
+    <form id="profileForm" novalidate>
+      <div class="field">
+        <label>E-mail</label>
+        <div class="input-wrap">
+          <i data-lucide="mail"></i>
+          <input type="email" id="profileEmail" required maxlength="254" autocomplete="email">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>ID do Discord <span class="req">obrigatório</span></label>
+        <div class="input-wrap">
+          <i data-lucide="message-circle"></i>
+          <input type="text" id="profileDiscord" required pattern="\d{15,25}" inputmode="numeric" maxlength="25">
+        </div>
+        <p class="field-hint">
+          Discord → <strong>Configurações</strong> → <strong>Avançado</strong> →
+          ativar <strong>Modo Desenvolvedor</strong>. Depois clique com o botão direito
+          no seu nome → <strong>Copiar ID</strong>.
+        </p>
+      </div>
+
+      <div class="modal-btns">
+        <button type="button" class="btn btn-ghost" data-close="modalProfile">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btnSaveProfile">
+          <i data-lucide="check"></i>
+          Salvar
+        </button>
+      </div>
+      <div id="profileMsg" class="msg"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal — Novo/Editar usuário (DEV) -->
 <div id="modalUser" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalUser" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalUser" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2 id="modalUserTitle">Novo usuário</h2>
     <p class="modal-sub" id="modalUserSub">Crie uma conta diretamente pelo painel.</p>
 
@@ -1362,81 +720,43 @@
       <div class="grid-2">
         <div class="field">
           <label>E-mail <span class="req">obrigatório</span></label>
-          <div class="input-wrap">
-            <i data-lucide="mail"></i>
-            <input type="email" id="modalUserEmail" required maxlength="254">
-          </div>
+          <div class="input-wrap"><i data-lucide="mail"></i><input type="email" id="modalUserEmail" required maxlength="254"></div>
         </div>
         <div class="field">
           <label>ID do Discord <span class="req">obrigatório</span></label>
-          <div class="input-wrap">
-            <i data-lucide="message-circle"></i>
-            <input type="text" id="modalUserDiscord" required pattern="\d{15,25}" inputmode="numeric" maxlength="25">
-          </div>
+          <div class="input-wrap"><i data-lucide="message-circle"></i><input type="text" id="modalUserDiscord" required pattern="\d{15,25}" inputmode="numeric" maxlength="25"></div>
         </div>
         <div class="field">
           <label>Nome</label>
-          <div class="input-wrap">
-            <i data-lucide="user"></i>
-            <input type="text" id="modalUserNome" maxlength="40">
-          </div>
+          <div class="input-wrap"><i data-lucide="user"></i><input type="text" id="modalUserNome" maxlength="40"></div>
         </div>
         <div class="field">
           <label>Função <span class="req">obrigatório</span></label>
-          <div class="input-wrap">
-            <i data-lucide="shield"></i>
-            <select id="modalUserRole">
-              <option value="cliente" selected>Cliente</option>
-              <option value="funcionario">Funcionário</option>
-              <option value="admin">Admin</option>
-              <option value="dev">Dev</option>
-            </select>
-          </div>
+          <div class="input-wrap"><i data-lucide="shield"></i><select id="modalUserRole"><option value="cliente" selected>Cliente</option><option value="funcionario">Funcionário</option><option value="admin">Admin</option><option value="dev">Dev</option></select></div>
         </div>
         <div class="field">
           <label>Plano</label>
-          <div class="input-wrap">
-            <i data-lucide="gem"></i>
-            <select id="modalUserPlan">
-              <option value="basic" selected>Basic</option>
-              <option value="premium">Premium</option>
-              <option value="ultra">Ultra</option>
-              <option value="unlimited">Unlimited</option>
-              <option value="none">Nenhum</option>
-            </select>
-          </div>
+          <div class="input-wrap"><i data-lucide="gem"></i><select id="modalUserPlan"><option value="basic" selected>Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option><option value="none">Nenhum</option></select></div>
         </div>
         <div class="field" id="fieldPassword">
           <label>Senha <span class="opt">vazio = gerada</span></label>
-          <div class="input-wrap">
-            <i data-lucide="lock"></i>
-            <input type="text" id="modalUserPassword" maxlength="64">
-          </div>
+          <div class="input-wrap"><i data-lucide="lock"></i><input type="text" id="modalUserPassword" maxlength="64"></div>
         </div>
       </div>
 
       <div class="field">
         <label>Servidores atribuídos <span class="opt">IDs separados por vírgula</span></label>
-        <div class="input-wrap">
-          <i data-lucide="server"></i>
-          <input type="text" id="modalUserGuilds" placeholder="123456789, 987654321">
-        </div>
+        <div class="input-wrap"><i data-lucide="server"></i><input type="text" id="modalUserGuilds" placeholder="123456789, 987654321"></div>
       </div>
 
       <div class="field">
         <label>Notas internas</label>
-        <div class="input-wrap">
-          <i data-lucide="sticky-note"></i>
-          <textarea id="modalUserNotes" maxlength="500"></textarea>
-        </div>
+        <div class="input-wrap"><i data-lucide="sticky-note"></i><textarea id="modalUserNotes" maxlength="500"></textarea></div>
       </div>
 
       <div class="modal-btns">
         <button type="button" class="btn btn-ghost" data-close="modalUser">Cancelar</button>
-        <button type="submit" class="btn btn-primary" id="btnSaveUser">
-          <i data-lucide="check"></i>
-          Salvar
-        </button>
+        <button type="submit" class="btn btn-primary" id="btnSaveUser"><i data-lucide="check"></i>Salvar</button>
       </div>
       <div id="modalUserMsg" class="msg"></div>
     </form>
@@ -1446,64 +766,20 @@
 <!-- Modal — Aprovar usuário -->
 <div id="modalApprove" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box">
-    <button class="modal-x" data-close="modalApprove" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalApprove" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2>Aprovar cadastro</h2>
     <p class="modal-sub" id="approveEmail">—</p>
-
     <form id="approveForm">
       <input type="hidden" id="approveUserId">
-
       <div class="grid-2">
-        <div class="field">
-          <label>Função <span class="req">obrigatório</span></label>
-          <div class="input-wrap">
-            <i data-lucide="shield"></i>
-            <select id="approveRole">
-              <option value="cliente" selected>Cliente</option>
-              <option value="funcionario">Funcionário</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-        </div>
-        <div class="field">
-          <label>Plano <span class="req">obrigatório</span></label>
-          <div class="input-wrap">
-            <i data-lucide="gem"></i>
-            <select id="approvePlan">
-              <option value="basic" selected>Basic</option>
-              <option value="premium">Premium</option>
-              <option value="ultra">Ultra</option>
-              <option value="unlimited">Unlimited</option>
-              <option value="none">Nenhum</option>
-            </select>
-          </div>
-        </div>
+        <div class="field"><label>Função <span class="req">obrigatório</span></label><div class="input-wrap"><i data-lucide="shield"></i><select id="approveRole"><option value="cliente" selected>Cliente</option><option value="funcionario">Funcionário</option><option value="admin">Admin</option></select></div></div>
+        <div class="field"><label>Plano <span class="req">obrigatório</span></label><div class="input-wrap"><i data-lucide="gem"></i><select id="approvePlan"><option value="basic" selected>Basic</option><option value="premium">Premium</option><option value="ultra">Ultra</option><option value="unlimited">Unlimited</option><option value="none">Nenhum</option></select></div></div>
       </div>
-
-      <div class="field">
-        <label>Servidores atribuídos <span class="opt">IDs separados por vírgula</span></label>
-        <div class="input-wrap">
-          <i data-lucide="server"></i>
-          <input type="text" id="approveGuilds" placeholder="123456789, 987654321">
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Notas internas</label>
-        <div class="input-wrap">
-          <i data-lucide="sticky-note"></i>
-          <textarea id="approveNotes" maxlength="500"></textarea>
-        </div>
-      </div>
-
+      <div class="field"><label>Servidores atribuídos <span class="opt">IDs separados por vírgula</span></label><div class="input-wrap"><i data-lucide="server"></i><input type="text" id="approveGuilds" placeholder="123456789, 987654321"></div></div>
+      <div class="field"><label>Notas internas</label><div class="input-wrap"><i data-lucide="sticky-note"></i><textarea id="approveNotes" maxlength="500"></textarea></div></div>
       <div class="modal-btns">
         <button type="button" class="btn btn-ghost" data-close="modalApprove">Cancelar</button>
-        <button type="submit" class="btn btn-success">
-          <i data-lucide="user-check"></i>
-          Aprovar
-        </button>
+        <button type="submit" class="btn btn-success"><i data-lucide="user-check"></i>Aprovar</button>
       </div>
       <div id="approveMsg" class="msg"></div>
     </form>
@@ -1513,33 +789,14 @@
 <!-- Modal — Enviar key -->
 <div id="modalSendKey" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box">
-    <button class="modal-x" data-close="modalSendKey" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalSendKey" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2>Enviar key para cliente</h2>
     <p class="modal-sub">A key será enviada e o cliente notificado automaticamente.</p>
-
-    <div class="field">
-      <label>Key</label>
-      <div class="input-wrap">
-        <i data-lucide="key"></i>
-        <select id="sendKeyId"></select>
-      </div>
-    </div>
-    <div class="field">
-      <label>Cliente</label>
-      <div class="input-wrap">
-        <i data-lucide="user"></i>
-        <select id="sendKeyUser"></select>
-      </div>
-    </div>
-
+    <div class="field"><label>Key</label><div class="input-wrap"><i data-lucide="key"></i><select id="sendKeyId"></select></div></div>
+    <div class="field"><label>Cliente</label><div class="input-wrap"><i data-lucide="user"></i><select id="sendKeyUser"></select></div></div>
     <div class="modal-btns">
       <button class="btn btn-ghost" data-close="modalSendKey">Cancelar</button>
-      <button class="btn btn-success" id="btnConfirmSendKey">
-        <i data-lucide="send"></i>
-        Enviar
-      </button>
+      <button class="btn btn-success" id="btnConfirmSendKey"><i data-lucide="send"></i>Enviar</button>
     </div>
     <div id="sendKeyMsg" class="msg"></div>
   </div>
@@ -1548,83 +805,47 @@
 <!-- Modal — Ações do servidor (DEV) -->
 <div id="modalDevServerActions" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box">
-    <button class="modal-x" data-close="modalDevServerActions" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalDevServerActions" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2>Ações do servidor</h2>
     <p class="modal-sub" id="devServerActionsId">—</p>
-
     <div class="actions-list">
-      <button class="btn btn-ghost" id="actRename">
-        <i data-lucide="pencil"></i>
-        Renomear servidor
-      </button>
-      <button class="btn btn-ghost" id="actRefresh">
-        <i data-lucide="refresh-cw"></i>
-        Atualizar dados do servidor
-      </button>
-      <button class="btn btn-success" id="actForcePremium">
-        <i data-lucide="gem"></i>
-        Aplicar Force Premium (30 dias)
-      </button>
-      <button class="btn btn-ghost" id="actSyncMembers">
-        <i data-lucide="user-plus"></i>
-        Levar membros (OAuth)
-      </button>
-      <button class="btn btn-danger" id="actLeave">
-        <i data-lucide="log-out"></i>
-        Bot sair do servidor
-      </button>
-      <button class="btn btn-danger btn-nuke" id="actNuke">
-        <i data-lucide="bomb"></i>
-        Nuke — apagar canais e cargos
-      </button>
+      <button class="btn btn-ghost" id="actRename"><i data-lucide="pencil"></i>Renomear servidor</button>
+      <button class="btn btn-ghost" id="actRefresh"><i data-lucide="refresh-cw"></i>Atualizar dados do servidor</button>
+      <button class="btn btn-success" id="actForcePremium"><i data-lucide="gem"></i>Aplicar Force Premium (30 dias)</button>
+      <button class="btn btn-ghost" id="actSyncMembers"><i data-lucide="user-plus"></i>Levar membros (OAuth)</button>
+      <button class="btn btn-danger" id="actLeave"><i data-lucide="log-out"></i>Bot sair do servidor</button>
+      <button class="btn btn-danger btn-nuke" id="actNuke"><i data-lucide="bomb"></i>Nuke — apagar canais e cargos</button>
     </div>
-
     <div id="devServerActionsMsg" class="msg"></div>
   </div>
 </div>
 
-<!-- Modal — Sessões do usuário (DEV olhando outro user) -->
+<!-- Modal — Sessões do usuário (DEV) -->
 <div id="modalUserSessions" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalUserSessions" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalUserSessions" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2>Sessões do usuário</h2>
     <p class="modal-sub" id="userSessionsTarget">—</p>
     <div class="btn-row" style="margin-bottom:14px">
-      <button id="btnRefreshUserSessions" class="btn btn-ghost btn-sm">
-        <i data-lucide="refresh-cw"></i>
-        Atualizar
-      </button>
-      <button id="btnRevokeAllUserSessions" class="btn btn-danger btn-sm">
-        <i data-lucide="ban"></i>
-        Revogar todas
-      </button>
+      <button id="btnRefreshUserSessions" class="btn btn-ghost btn-sm"><i data-lucide="refresh-cw"></i>Atualizar</button>
+      <button id="btnRevokeAllUserSessions" class="btn btn-danger btn-sm"><i data-lucide="ban"></i>Revogar todas</button>
     </div>
-    <div id="userSessionsList">
-      <div class="empty-sm">Carregando…</div>
-    </div>
+    <div id="userSessionsList"><div class="empty-sm">Carregando…</div></div>
   </div>
 </div>
 
-<!-- Modal — Detalhe de evento de auditoria -->
+<!-- Modal — Detalhe de auditoria -->
 <div id="modalAuditDetail" class="modal" role="dialog" aria-modal="true">
   <div class="modal-box modal-lg">
-    <button class="modal-x" data-close="modalAuditDetail" aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+    <button class="modal-x" data-close="modalAuditDetail" aria-label="Fechar"><i data-lucide="x"></i></button>
     <h2>Detalhes do evento</h2>
-    <div id="auditDetailBody" style="margin-top:16px">
-      <div class="empty-sm">Carregando…</div>
-    </div>
+    <div id="auditDetailBody" style="margin-top:16px"><div class="empty-sm">Carregando…</div></div>
   </div>
 </div>
 
-<!-- Toast global -->
+<!-- Toast -->
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-<script src="/assets/app.js?v=1" defer></script>
+<script src="/assets/app.js?v=2" defer></script>
 </body>
 </html>

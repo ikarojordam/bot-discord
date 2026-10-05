@@ -1,80 +1,88 @@
 // ═══════════════════════════════════════════════════════════
 // emojis.js — Central de custom emojis do FrioBot
-// v2 — CORRIGIDO com TODAS as chaves usadas no código
+// v3 — TODOS os IDs conferidos com a lista de emojis do servidor.
+// Para trocar um emoji do bot inteiro, mude só a linha aqui.
+// Formato: '<:nome:id>' (fixo) ou '<a:nome:id>' (animado).
 // ═══════════════════════════════════════════════════════════
-module.exports = {
+const E = {
 
-  // ═══════════════════════════════════════════════════════════
-  // APOSTAS / GELO  ← ESSENCIAL (estava faltando!)
-  // ═══════════════════════════════════════════════════════════
-  gel:         '<:gel_normal:1294507785995948042>',
-  gelNormal:   '<:gel_normal:1294507785995948042>',
-  granada:     '<:gel_normal:1294507785995948042>',
+  // ───────── CHECK / X / SETAS ─────────
+  check:        '<:certo_froid:1550644903455756339>',
+  checkAlt:     '<:36_V:1532466851127361729>',
+  checkAnim:    '<a:checkmark:1542212475649396806>',
+  x:            '<:35_X:1532467009181454557>',
+  xAlt:         '<:4702discordcrossemoji:1550644905037135992>',
+  negativo:     '<:negativo:1311011528501104723>',
+  seta:         '<:setinha:1535354476829999114>',
+  setinha:      '<:setinha:1535354476829999114>',
+  setaAlt:      '<:seta_ghost:1536012641170882671>',
+  setaGhost:    '<:seta_ghost:1548712677650464771>',
+  voltar:       '<:left:1425679402070704208>',
+  proximo:      '<:right:1425679399595937802>',
+  setaAnim:     '<a:FARM_ASETA8:1465662166559494207>',
 
-  // ═══════════════════════════════════════════════════════════
-  // AÇÕES GENÉRICAS
-  // ═══════════════════════════════════════════════════════════
+  // ───────── AÇÕES GENÉRICAS ─────────
   entrar:       '<:membro:1548712679475122326>',
-  sair:         '<:FARM_ASETA2_:1464502194815373480>',
-  adicionar:    '<:adicionar:1493905344445943838>',
-  salvar:       '<:19_salvar:1532467016999370774>',
-  ferramenta:   '<:1_ferramenta:1532467079113085119>',
-  lixo:         '<:11_lixo:1532467081088598177>',
+  sair:         '<:left:1425679402070704208>',
+  adicionar:    '<:add:1425692169443741729>',
+  remover:      '<:remove:1425692171654266922>',
+  salvar:       '<:download:1425674035940954162>',
+  download:     '<:download:1425674035940954162>',
+  copiar:       '<:copiar:1445806733112119498>',
+  editar:       '<:copiar:1445806733112119498>',
+  ferramenta:   '<:30_configuracoes:1532467012901801996>',
+  lixo:         '<:11_lixo:1532466836183056444>',
   lupa:         '<:12_lupa:1532467007671500973>',
-  grafico:      '<:8_grafico:1532467089049260223>',
+  grafico:      '<:analytics:1425675454907547770>',
+  analytics:    '<:analytics:1425675454907547770>',
+  lista:        '<:lista:1425689472078577694>',
+  mapa:         '<:mapa:1425690643610734623>',
   config:       '<:30_configuracoes:1532467012901801996>',
   modo:         '<:modo_1:1550206370392055818>',
+  caixa:        '<:10_caixa:1532467084334858260>',
+  chat:         '<:33_chat:1532467014042517554>',
+  comentarios:  '<:comentarios:1427748669259518163>',
+  megafone:     '<:megafone:1427748671445012530>',
+  carregando:   '<a:Carregando:1503556089243893810>',
+  relogio:      '<a:Carregando:1503556089243893810>',
   caminhao:     '<:40_caminhao:1532464073734619297>',
   cartao:       '<:3_cartao:1532467082527113328>',
   carrinho:     '<:carrinho:1546588205107646645>',
-  relogio:      '<:relogio:1494473331615731714>',
-  obg:          '<:4obg:1535794029135138848>',
+  pessoal:      '<:pessoal:1425690646617915402>',
+  obg:          '<:jesus:1548711229961404610>',
+  jesus:        '<:jesus:1548711229961404610>',
 
-  // ═══════════════════════════════════════════════════════════
-  // CHECK / X / SETAS
-  // ═══════════════════════════════════════════════════════════
-  check:        '<:certo_froid:1550644903455756339>',
-  checkAlt:     '<:36_V:1532466851127361729>',
-  x:            '<:35_X:1532467009181454557>',
-  xAlt:         '<:4702discordcrossemoji:1550644905037135992>',
-  seta:         '<:setinha:1535354476829999114>',
-  setaAlt:      '<:seta:1540309800074748026>',
-  setaGhost:    '<:seta_ghost:1548712677650464771>',
-
-  // ═══════════════════════════════════════════════════════════
-  // PAGAMENTOS
-  // ═══════════════════════════════════════════════════════════
+  // ───────── PAGAMENTOS ─────────
   pix:          '<:pix:1536469531755815094>',
   mercadopago:  '<:mercadopago:1536469538730811454>',
+  nubank:       '<:nubank:1547866072714059838>',
+  ifood:        '<:ifood:1555472156316667974>',
   dinheiro:     '<:whitemoney:1538246799364591656>',
-  valor:        '<:valor_2:1550205889867292794>',
+  valor:        '<:whitemoney:1538246799364591656>',
 
-  // ═══════════════════════════════════════════════════════════
-  // TICKETS / SUPORTE
-  // ═══════════════════════════════════════════════════════════
-  suporte:      '<:suporte:1536012623647088790>',
+  // ───────── TICKETS / SUPORTE ─────────
+  suporte:      '<:suporte:1535864974348652584>',
   suporteAlt:   '<:49suporte:1535354550343434250>',
   reembolso:    '<:REEMBOLSO:1536012636347568219>',
-  duvida:       '<:duvidacluth:1529608732009304205>',
-  presente:     '<a:presente_gift:1536012659995054150>',
+  duvida:       '<:49suporte:1535354550343434250>',
+  presente:     '<a:Nitro_Fantastic_Animated:1547992679999348776>',
+  nitro:        '<a:Nitro_Fantastic_Animated:1547992679999348776>',
+  impulso:      '<a:Impulso:1547863907320864808>',
   regras:       '<:25_regras:1532467011399979229>',
   entrega:      '<:entrega:1548713872951738370>',
 
-  // ═══════════════════════════════════════════════════════════
-  // CARGOS / STAFF
-  // ═══════════════════════════════════════════════════════════
+  // ───────── CARGOS / STAFF ─────────
   staff:        '<:Staff:1464525238988705802>',
-  helper:       '<:helper:1547863130963574894>',
+  helper:       '<:Staff:1464525238988705802>',
   mod:          '<:Mod:1464525237256327387>',
   escudo:       '<:escudo_branco:1535865118007500820>',
   verificado:   '<a:verificado:1548713875149422622>',
-  visto:        '<:vist:1550205993646948523>',
+  verificadoBranco: '<a:verificado_branco_eh68:1536469542396493924>',
+  visto:        '<:certo_froid:1550644903455756339>',
   cliente:      '<:cliente:1493673913430053045>',
   membro:       '<:membro:1548712679475122326>',
 
-  // ═══════════════════════════════════════════════════════════
-  // COROAS / PREMIUM
-  // ═══════════════════════════════════════════════════════════
+  // ───────── COROAS / PREMIUM ─────────
   coroaOwner:   '<a:coroa_vermelha:1548705829774032936>',
   coroaDiretor: '<a:coroa_blue:1548705832001077249>',
   coroaGerente: '<a:coroa_cinza:1548705838145867878>',
@@ -83,18 +91,26 @@ module.exports = {
   coroaOld:     '<a:coroa_old11:1548705842445025351>',
   vip:          '<a:c_VIPTKF:1548710214629331014>',
   gold:         '<a:golddddddd:1548712681199116378>',
-  president:    '<:PresidentRoleIcon:1547869089727520829>',
+  president:    '<a:Coroa:1548705828549296218>',
 
-  // ═══════════════════════════════════════════════════════════
-  // RANKING / CONQUISTAS
-  // ═══════════════════════════════════════════════════════════
+  // ───────── RANKING / CONQUISTAS ─────────
   trofeu:       '<:trofeus_1:1538246805714894898>',
+  trofeuAlt:    '<:trofeu:1449868370106122370>',
   cemHoras:     '<:100hs:1500979766495281192>',
 
-  // ═══════════════════════════════════════════════════════════
-  // EVENTOS / MISC
-  // ═══════════════════════════════════════════════════════════
-  evento:       '<a:evento:1554185023236608000>',
+  // ───────── APOSTAS / FREE FIRE ─────────
+  gel:          '<:gel_normal:1294507785995948042>',
+  gelNormal:    '<:gel_normal:1294507785995948042>',
+  granada:      '<:gel_normal:1294507785995948042>',
+  ump:          '<:UMP:1535865090316828712>',
+  legendApostas:'<:LEGENDAPOSTAS:1535865058590982234>',
+  royalApostas: '<a:ROYALAPOSTAS:1464501263323627652>',
+
+  // ───────── EVENTOS / MISC ─────────
+  evento:       '<:lista:1425689472078577694>',
   discord:      '<:discord:1527188455023448114>',
-  emote8k:      '<a:emote8k:1463792250537513077>',
+  tiktok:       '<:Tiktok:1465662216874361098>',
+  emote8k:      '<a:whitertx:1463792974982021164>',
 };
+
+module.exports = E;

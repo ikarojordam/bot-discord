@@ -8,7 +8,7 @@
 // - Escalação automática, cooldown, limite por thread
 // - Suporte multi-idioma (PT, EN, ES, FR, DE, IT)
 //
-// Versão: 6.3.0
+// ✅ v6.4.0 — adicionado `respond()` (API pura usada pelo index.js)
 // ============================================================
 
 'use strict';
@@ -80,107 +80,73 @@ const PRODUCTS = [
 // ============================================================
 // 4. INTENÇÕES
 // ============================================================
-// Cada intenção tem:
-//  - key:        chave única (vira categoria)
-//  - verbs:      variações do verbo (usadas em {verb})
-//  - answer:     função (product) → resposta
-//  - quick:      sugestões rápidas (opcional)
-//  - products:   (opcional) restringir a produtos específicos
-//
-// Algumas intenções só fazem sentido para certos produtos.
-// Por exemplo, 'acessar' só para Conta de Blox Fruits e Streaming.
-// ============================================================
-
 const INTENTS = [
-  // -------- COMPRA --------
   {
     key: 'comprar',
     verbs: ['comprar', 'adquirir', 'fazer a compra de'],
     answer: (p) => `Para comprar ${p}, consulte a oferta disponível na loja e siga as instruções de compra. Se precisar de ajuda, abra um ticket de Dúvidas.`,
     quick: ['Ver loja', 'Formas de pagamento', 'Abrir ticket de dúvida'],
   },
-
-  // -------- PREÇO / VALOR --------
   {
     key: 'preco',
     verbs: ['saber o preço do', 'consultar o valor do', 'ver quanto custa o'],
     answer: (p) => `O valor de ${p} pode variar conforme a oferta disponível. Consulte a loja para ver o preço atual.`,
     quick: ['Ver loja', 'Formas de pagamento'],
   },
-
-  // -------- COMO FUNCIONA --------
   {
     key: 'entender',
     verbs: ['entender como funciona', 'saber como funciona', 'obter informações sobre'],
     answer: (p) => `Para entender como funciona ${p}, consulte a descrição do produto. Se ainda tiver dúvidas, abra um ticket de Dúvidas.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- RECEBER --------
   {
     key: 'receber',
     verbs: ['receber'],
     answer: (p) => `Após a compra de ${p}, siga as instruções de entrega indicadas pela loja. Se não receber, abra um ticket de Produto Não Recebido.`,
     quick: ['Abrir ticket de produto não recebido', 'Falar com staff'],
   },
-
-  // -------- ENTREGA --------
   {
     key: 'entrega',
     verbs: ['obter a entrega do', 'receber a entrega do'],
     answer: (p) => `Após a compra de ${p}, siga as instruções de entrega indicadas pela loja. Se não receber, abra um ticket de Produto Não Recebido.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- CONFIGURAR --------
   {
     key: 'configurar',
     verbs: ['configurar', 'personalizar', 'solicitar a configuração do'],
     answer: (p) => `A configuração de ${p} depende do produto adquirido. Consulte a descrição ou abra um ticket para receber orientação.`,
     quick: ['Abrir ticket', 'Ver descrição'],
   },
-
-  // -------- PERSONALIZAÇÃO (pré-compra) --------
   {
     key: 'personalizacao',
     verbs: ['personalização'],
     answer: (p) => `Para verificar opções de personalização de ${p}, consulte a oferta ou abra um ticket de Dúvidas antes da compra.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- SUPORTE --------
   {
     key: 'suporte',
     verbs: ['pedir suporte para', 'solicitar ajuda com', 'receber suporte sobre'],
     answer: (p) => `Para suporte relacionado a ${p}, abra um ticket e informe o pedido, o problema e as informações necessárias.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- RENOVAR --------
   {
     key: 'renovar',
     verbs: ['renovar', 'saber como renovar', 'solicitar a renovação do'],
     answer: (p) => `Para saber como renovar ${p}, consulte as condições atuais da loja ou abra um ticket de Dúvidas.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- UPGRADE --------
   {
     key: 'upgrade',
     verbs: ['upgrade'],
     answer: (p) => `Para informações sobre ${p}, consulte a descrição da oferta ou abra um ticket de Dúvidas.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- PROBLEMA --------
   {
     key: 'problema',
     verbs: ['resolver um problema com', 'pedir ajuda com um problema no', 'informar um problema no'],
     answer: (p) => `Se houver um problema com ${p}, abra um ticket de Problema com Produto e explique o ocorrido. Envie provas quando necessário.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- TROCAR (Streaming, Conta Blox Fruits) --------
   {
     key: 'trocar',
     verbs: ['trocar', 'pedir a troca do', 'solicitar a troca do'],
@@ -188,8 +154,6 @@ const INTENTS = [
     answer: (p) => `Para solicitar a troca de ${p}, abra um ticket e explique o motivo, enviando os dados da compra.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- CANCELAR (Streaming, Nitrada) --------
   {
     key: 'cancelar',
     verbs: ['cancelar', 'solicitar o cancelamento do', 'pedir o cancelamento do'],
@@ -197,24 +161,18 @@ const INTENTS = [
     answer: (p) => `Para solicitar o cancelamento de ${p}, abra um ticket e informe os dados da compra para análise.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- REEMBOLSO --------
   {
     key: 'reembolso',
     verbs: ['solicitar reembolso do', 'pedir reembolso do', 'saber como funciona o reembolso do'],
     answer: (p) => `Para solicitar reembolso de ${p}, abra um ticket de Reembolso e informe o pedido e o motivo da solicitação.`,
     quick: ['Abrir ticket de reembolso', 'Falar com staff'],
   },
-
-  // -------- PRAZO --------
   {
     key: 'prazo',
     verbs: ['saber o prazo de', 'consultar o prazo para', 'saber quanto demora para'],
     answer: (p) => `O prazo de ${p} depende da modalidade e das condições da oferta. Consulte a descrição ou abra um ticket para confirmar.`,
     quick: ['Abrir ticket', 'Ver descrição'],
   },
-
-  // -------- ACESSAR (Conta Blox Fruits, Streaming) --------
   {
     key: 'acessar',
     verbs: ['acessar', 'receber acesso ao', 'recuperar o acesso ao'],
@@ -222,8 +180,6 @@ const INTENTS = [
     answer: (p) => `Para obter ou recuperar acesso relacionado a ${p}, abra um ticket e informe os dados necessários da compra.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- ATIVAR (Streaming, Nitrada) --------
   {
     key: 'ativar',
     verbs: ['ativar', 'solicitar ativação do'],
@@ -231,8 +187,6 @@ const INTENTS = [
     answer: (p) => `Para ativar ${p}, siga as instruções fornecidas após a compra. Se houver erro, abra um ticket de suporte.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- VALIDADE (Nitro Link) --------
   {
     key: 'validade',
     verbs: ['consultar a validade do', 'saber até quando vale o', 'verificar a validade do'],
@@ -240,8 +194,6 @@ const INTENTS = [
     answer: (p) => `Para consultar a validade de ${p}, verifique a descrição da oferta ou solicite confirmação pelo suporte.`,
     quick: ['Ver descrição', 'Abrir ticket'],
   },
-
-  // -------- GARANTIA (Conta Blox Fruits) --------
   {
     key: 'garantia',
     verbs: ['consultar a garantia do', 'saber se existe garantia para', 'ver as condições de garantia do'],
@@ -249,8 +201,6 @@ const INTENTS = [
     answer: (p) => `As condições de garantia de ${p} dependem da oferta. Consulte a descrição ou peça orientação no suporte.`,
     quick: ['Ver descrição', 'Abrir ticket'],
   },
-
-  // -------- QUANTIDADE (Impulsos, Membros) --------
   {
     key: 'quantidade',
     verbs: ['consultar a quantidade disponível de', 'saber quantos', 'ver as quantidades de'],
@@ -258,8 +208,6 @@ const INTENTS = [
     answer: (p) => `A quantidade disponível de ${p} depende da oferta atual. Consulte a loja para verificar as opções.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- STATUS (Puxar Dados, Membros) --------
   {
     key: 'status',
     verbs: ['consultar o status do', 'ver o andamento do', 'saber o status do'],
@@ -267,8 +215,6 @@ const INTENTS = [
     answer: (p) => `Para consultar o status de ${p}, tenha os dados da compra em mãos e abra um ticket de suporte se necessário.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- DADOS (Conta Blox Fruits) --------
   {
     key: 'dados',
     verbs: ['receber os dados de', 'consultar os dados de', 'saber como funciona o acesso aos dados de'],
@@ -276,8 +222,6 @@ const INTENTS = [
     answer: (p) => `Para informações sobre dados de ${p}, consulte as condições da oferta e abra um ticket de Dúvidas se necessário.`,
     quick: ['Ver descrição', 'Abrir ticket'],
   },
-
-  // -------- ALTERAR / MODIFICAR (Sites) --------
   {
     key: 'alterar',
     verbs: ['alterar', 'solicitar uma alteração no', 'modificar'],
@@ -285,8 +229,6 @@ const INTENTS = [
     answer: (p) => `Para solicitar uma alteração em ${p}, abra um ticket informando exatamente o que deseja modificar.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- MANUTENÇÃO (Sites) --------
   {
     key: 'manutencao',
     verbs: ['solicitar manutenção para', 'pedir manutenção do', 'saber como funciona a manutenção do'],
@@ -294,8 +236,6 @@ const INTENTS = [
     answer: (p) => `Para manutenção de ${p}, abra um ticket de suporte e explique o que precisa ser corrigido.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- DOMÍNIO (Sites) --------
   {
     key: 'dominio',
     verbs: ['consultar opções de domínio para', 'saber como configurar o domínio do', 'adicionar um domínio ao'],
@@ -303,8 +243,6 @@ const INTENTS = [
     answer: (p) => `Para verificar opções de domínio relacionadas a ${p}, consulte a oferta e abra um ticket caso precise de orientação.`,
     quick: ['Ver descrição', 'Abrir ticket'],
   },
-
-  // -------- CRIAÇÃO (Sites) --------
   {
     key: 'criacao',
     verbs: ['criação'],
@@ -312,8 +250,6 @@ const INTENTS = [
     answer: (p) => `Para informações sobre ${p}, consulte a descrição da oferta ou abra um ticket de Dúvidas.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- REQUISITOS (Puxar Dados) --------
   {
     key: 'requisitos',
     verbs: ['requisitos'],
@@ -321,8 +257,6 @@ const INTENTS = [
     answer: (p) => `Para informações sobre ${p}, consulte a descrição da oferta ou abra um ticket de Dúvidas.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- RESULTADO (Puxar Dados) --------
   {
     key: 'resultado',
     verbs: ['consultar o resultado de', 'receber o resultado de', 'saber o resultado de'],
@@ -330,8 +264,6 @@ const INTENTS = [
     answer: (p) => `Para consultar o resultado relacionado a ${p}, utilize o canal indicado pela loja ou abra um ticket de suporte.`,
     quick: ['Abrir ticket', 'Falar com staff'],
   },
-
-  // -------- PROMOÇÃO / DESCONTO (Produtos R$ 1) --------
   {
     key: 'promocao',
     verbs: ['consultar promoção de', 'saber se existe desconto no', 'ver ofertas para'],
@@ -339,8 +271,6 @@ const INTENTS = [
     answer: (p) => `Promoções e descontos de ${p} dependem das ofertas ativas. Consulte a loja para verificar as condições atuais.`,
     quick: ['Ver loja', 'Abrir ticket'],
   },
-
-  // -------- PAGAR (Produtos R$ 1) --------
   {
     key: 'pagar',
     verbs: ['pagar', 'saber como pagar', 'consultar as formas de pagamento de'],
@@ -348,8 +278,6 @@ const INTENTS = [
     answer: (p) => `Para pagar ${p}, utilize uma das formas de pagamento disponibilizadas pela loja e guarde o comprovante.`,
     quick: ['Ver loja', 'Formas de pagamento'],
   },
-
-  // -------- DISPONIBILIDADE (Produtos R$ 1) --------
   {
     key: 'disponibilidade',
     verbs: ['ver se está disponível o', 'consultar a disponibilidade do', 'saber se ainda tem o'],
@@ -360,88 +288,47 @@ const INTENTS = [
 ];
 
 // ============================================================
-// 5. INTENÇÕES DE TICKET (12 tipos)
+// 5. INTENÇÕES DE TICKET
 // ============================================================
-// Essas usam templates fixos (não os de {verb}).
-// Cada uma produz uma resposta específica sobre o tipo de ticket.
-// ============================================================
-
 const TICKET_INTENTS = [
-  {
-    key: 'ticket_receber_produto',
-    action: 'receber produto',
+  { key: 'ticket_receber_produto', action: 'receber produto',
     answer: (p) => `Use este ticket para receber ou verificar uma compra de ${p}. Envie o comprovante e os dados do pedido.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_produto_nao_recebido',
-    action: 'produto não recebido',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_produto_nao_recebido', action: 'produto não recebido',
     answer: (p) => `Use este ticket quando o pagamento de ${p} foi realizado, mas o produto ainda não chegou. Envie o comprovante e as informações da compra.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_produto_errado',
-    action: 'produto errado',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_produto_errado', action: 'produto errado',
     answer: (p) => `Use este ticket quando o ${p} recebido estiver diferente do comprado. Envie o comprovante e, se possível, prints do pedido.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_duvidas',
-    action: 'dúvidas',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_duvidas', action: 'dúvidas',
     answer: (p) => `Use este ticket para dúvidas sobre ${p}, serviços, pagamentos, regras ou funcionamento da loja.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_parcerias',
-    action: 'parcerias',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_parcerias', action: 'parcerias',
     answer: (p) => `Use este ticket para enviar propostas de parceria relacionadas a ${p}. Explique seu projeto, servidor ou conteúdo e apresente sua proposta.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_vagas',
-    action: 'vagas',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_vagas', action: 'vagas',
     answer: (p) => `Use este ticket para candidaturas relacionadas a ${p}. Informe a vaga desejada, sua experiência e as informações solicitadas pela equipe.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_reembolso',
-    action: 'reembolso',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_reembolso', action: 'reembolso',
     answer: (p) => `Use este ticket para solicitar análise de reembolso de ${p}. Informe o pedido e explique o motivo da solicitação.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_pagamento',
-    action: 'pagamento',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_pagamento', action: 'pagamento',
     answer: (p) => `Use este ticket para problemas relacionados a pagamentos de ${p}. Envie o comprovante e descreva o que aconteceu.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_problema_produto',
-    action: 'problema com produto',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_problema_produto', action: 'problema com produto',
     answer: (p) => `Use este ticket quando houver algum problema com ${p} já recebido. Explique o problema e envie provas quando necessário.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_reclamacao',
-    action: 'reclamação',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_reclamacao', action: 'reclamação',
     answer: (p) => `Use este ticket para registrar uma reclamação relacionada a ${p}. Descreva o ocorrido com o máximo de detalhes possível.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_denuncia',
-    action: 'denúncia',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_denuncia', action: 'denúncia',
     answer: (p) => `Use este ticket para denunciar uma situação ou usuário relacionado a ${p}. Apresente as informações e provas disponíveis.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
-  {
-    key: 'ticket_sugestao',
-    action: 'sugestão',
+    quick: ['Abrir ticket', 'Falar com staff'] },
+  { key: 'ticket_sugestao', action: 'sugestão',
     answer: (p) => `Use este ticket para enviar sugestões sobre ${p}, serviços, eventos ou melhorias da loja.`,
-    quick: ['Abrir ticket', 'Falar com staff'],
-  },
+    quick: ['Abrir ticket', 'Falar com staff'] },
 ];
 
-// Templates específicos para intenções de ticket
 const TICKET_TEMPLATES = [
   'Qual ticket eu abro para {action} do {product}?',
   'Onde posso solicitar {action} referente ao {product}?',
@@ -454,7 +341,7 @@ const TICKET_TEMPLATES = [
 ];
 
 // ============================================================
-// 6. TEMPLATES POR TOM (para intenções normais)
+// 6. TEMPLATES POR TOM
 // ============================================================
 const TEMPLATES_INFORMAL = [
   'mano, como faço para {verb} o {product}?',
@@ -488,10 +375,6 @@ const TEMPLATES_NEUTRAL = [
 // ============================================================
 // 7. MULTI-IDIOMA
 // ============================================================
-// Estrutura mais simples: 5 intenções por produto, 1 template
-// por intenção, resposta fixa. Tom neutro.
-// ============================================================
-
 const LANGUAGES = {
   English: {
     templates: {
@@ -582,84 +465,31 @@ function generateFAQDatabase() {
   const db = [];
   let id = 0;
 
-  // -------- 8.1 Intenções normais × produtos --------
   for (const intent of INTENTS) {
     const productsForIntent = intent.products || PRODUCTS;
-
     for (const product of productsForIntent) {
       const triggers = [];
-
-      // Combina cada verbo com cada template (informal, formal, neutro)
       for (const verb of intent.verbs) {
-        for (const tpl of TEMPLATES_INFORMAL) {
-          triggers.push(
-            tpl.replace(/\{verb\}/g, verb).replace(/\{product\}/g, product),
-          );
-        }
-        for (const tpl of TEMPLATES_FORMAL) {
-          triggers.push(
-            tpl.replace(/\{verb\}/g, verb).replace(/\{product\}/g, product),
-          );
-        }
-        for (const tpl of TEMPLATES_NEUTRAL) {
-          triggers.push(
-            tpl.replace(/\{verb\}/g, verb).replace(/\{product\}/g, product),
-          );
-        }
+        for (const tpl of TEMPLATES_INFORMAL) triggers.push(tpl.replace(/\{verb\}/g, verb).replace(/\{product\}/g, product));
+        for (const tpl of TEMPLATES_FORMAL) triggers.push(tpl.replace(/\{verb\}/g, verb).replace(/\{product\}/g, product));
+        for (const tpl of TEMPLATES_NEUTRAL) triggers.push(tpl.replace(/\{verb\}/g, verb).replace(/\{product\}/g, product));
       }
-
-      // Nota: "personalização" e "upgrade" geram gramática quebrada
-      // propositalmente, pois replicam o padrão do arquivo original.
-
-      db.push({
-        id: ++id,
-        cat: intent.key,
-        product,
-        tone: 'misto',
-        triggers,
-        responses: [intent.answer(product)],
-        quick: intent.quick || [],
-        weight: 1,
-      });
+      db.push({ id: ++id, cat: intent.key, product, tone: 'misto', triggers, responses: [intent.answer(product)], quick: intent.quick || [], weight: 1 });
     }
   }
 
-  // -------- 8.2 Intenções de ticket × produtos --------
   for (const ticket of TICKET_INTENTS) {
     for (const product of PRODUCTS) {
-      const triggers = TICKET_TEMPLATES.map((tpl) =>
-        tpl.replace(/\{action\}/g, ticket.action).replace(/\{product\}/g, product),
-      );
-
-      db.push({
-        id: ++id,
-        cat: ticket.key,
-        product,
-        tone: 'misto',
-        triggers,
-        responses: [ticket.answer(product)],
-        quick: ticket.quick || [],
-        weight: 1,
-      });
+      const triggers = TICKET_TEMPLATES.map((tpl) => tpl.replace(/\{action\}/g, ticket.action).replace(/\{product\}/g, product));
+      db.push({ id: ++id, cat: ticket.key, product, tone: 'misto', triggers, responses: [ticket.answer(product)], quick: ticket.quick || [], weight: 1 });
     }
   }
 
-  // -------- 8.3 Multi-idioma --------
   for (const [lang, cfg] of Object.entries(LANGUAGES)) {
     for (const [intentKey, tpl] of Object.entries(cfg.templates)) {
       for (const product of PRODUCTS) {
         const question = tpl.replace(/\{product\}/g, product);
-        db.push({
-          id: ++id,
-          cat: `lang_${intentKey}`,
-          product,
-          tone: 'neutro',
-          lang,
-          triggers: [question],
-          responses: [cfg.answers[intentKey](product)],
-          quick: [],
-          weight: 1,
-        });
+        db.push({ id: ++id, cat: `lang_${intentKey}`, product, tone: 'neutro', lang, triggers: [question], responses: [cfg.answers[intentKey](product)], quick: [], weight: 1 });
       }
     }
   }
@@ -672,15 +502,9 @@ function generateFAQDatabase() {
 // ============================================================
 const FAQ_DATABASE = generateFAQDatabase();
 
-// Log resumido no boot
 if (process.env.FAQ_BOOT_LOG !== '0') {
-  const totalTriggers = FAQ_DATABASE.reduce(
-    (acc, e) => acc + e.triggers.length,
-    0,
-  );
-  console.log(
-    `[FAQ] Base carregada: ${FAQ_DATABASE.length} entradas · ${totalTriggers} triggers · ${PRODUCTS.length} produtos · ${INTENTS.length + TICKET_INTENTS.length} intenções · ${Object.keys(LANGUAGES).length + 1} idiomas`,
-  );
+  const totalTriggers = FAQ_DATABASE.reduce((acc, e) => acc + e.triggers.length, 0);
+  console.log(`[FAQ] Base carregada: ${FAQ_DATABASE.length} entradas · ${totalTriggers} triggers · ${PRODUCTS.length} produtos · ${INTENTS.length + TICKET_INTENTS.length} intenções · ${Object.keys(LANGUAGES).length + 1} idiomas`);
 }
 
 // ============================================================
@@ -716,9 +540,7 @@ function normalize(text) {
   s = s.replace(/[^a-z0-9\s]/g, ' ');
   s = s.replace(/\s+/g, ' ').trim();
   const tokens = s.split(' ');
-  const mapped = tokens
-    .map((t) => (Object.prototype.hasOwnProperty.call(SYNONYMS, t) ? SYNONYMS[t] : t))
-    .filter(Boolean);
+  const mapped = tokens.map((t) => (Object.prototype.hasOwnProperty.call(SYNONYMS, t) ? SYNONYMS[t] : t)).filter(Boolean);
   return mapped.join(' ').trim();
 }
 
@@ -765,10 +587,7 @@ function findBestMatch(normalizedMsg) {
   let bestScore = 0;
   for (const entry of FAQ_DATABASE) {
     const s = scoreEntry(normalizedMsg, entry);
-    if (s > bestScore) {
-      bestScore = s;
-      best = entry;
-    }
+    if (s > bestScore) { bestScore = s; best = entry; }
   }
   return { entry: best, score: bestScore };
 }
@@ -793,13 +612,8 @@ const state = {
   counters: new Map(),
   startAt: Date.now(),
   stats: {
-    totalMessages: 0,
-    totalReplies: 0,
-    totalEscalations: 0,
-    totalSilenced: 0,
-    totalLowScore: 0,
-    totalCooldown: 0,
-    totalLimitReached: 0,
+    totalMessages: 0, totalReplies: 0, totalEscalations: 0,
+    totalSilenced: 0, totalLowScore: 0, totalCooldown: 0, totalLimitReached: 0,
   },
 };
 
@@ -819,9 +633,7 @@ function checkCounter(threadId) {
   return true;
 }
 
-function resetCounter(threadId) {
-  state.counters.delete(threadId);
-}
+function resetCounter(threadId) { state.counters.delete(threadId); }
 
 function resetCooldownsForThread(threadId) {
   for (const key of state.cooldowns.keys()) {
@@ -851,11 +663,83 @@ function pickQuick(entry, count) {
 }
 
 // ============================================================
-// 16. HANDLER PRINCIPAL
+// 16. ✅ API PRINCIPAL CONSUMIDA PELO index.js
+// ============================================================
+// Uso:
+//   const FAQ = require('./ia-ticket');
+//   const result = FAQ.respond(texto, { user, guild });
+//   //   → { text, escalate, category?, product?, score? }   quando casa
+//   //   → { text, escalate: true, category: 'escalation' }  palavra crítica
+//   //   → null                                              sem match
+// ============================================================
+function respond(text, context = {}) {
+  if (!text || typeof text !== 'string') return null;
+
+  const raw = text.trim();
+  if (raw.length < FAQ_CONFIG.minLength) return null;
+  if (raw.length > FAQ_CONFIG.maxLength) return null;
+
+  for (const p of FAQ_CONFIG.ignorePrefixes) {
+    if (raw.startsWith(p)) return null;
+  }
+
+  const normalized = normalize(raw);
+  if (!normalized) return null;
+
+  state.stats.totalMessages++;
+
+  // 1) Escalação — palavras críticas
+  if (detectEscalation(normalized)) {
+    state.stats.totalEscalations++;
+    return {
+      text:
+        '🚨 **Atendimento prioritário solicitado**\n' +
+        'Sua mensagem foi marcada para atendimento humano. ' +
+        'Um membro da staff vai te responder assim que possível. 🙏',
+      escalate: true,
+      category: 'escalation',
+    };
+  }
+
+  // 2) Match normal
+  const { entry, score } = findBestMatch(normalized);
+
+  if (FAQ_CONFIG.verbose) {
+    console.log(`[FAQ] score=${score.toFixed(2)} cat=${entry?.cat} prod=${entry?.product} msg="${raw.slice(0, 60)}"`);
+  }
+
+  if (!entry || score < FAQ_CONFIG.minScore) {
+    state.stats.totalLowScore++;
+    return null;
+  }
+
+  let body = pickResponse(entry);
+  if (!body) {
+    state.stats.totalSilenced++;
+    return null;
+  }
+
+  const quick = pickQuick(entry, FAQ_CONFIG.quickSuggestions);
+  if (quick.length > 0) {
+    body += '\n\n**Sugestões rápidas:**\n' + quick.map((q) => `• ${q}`).join('\n');
+  }
+
+  state.stats.totalReplies++;
+
+  return {
+    text: body,
+    escalate: false,
+    category: entry.cat,
+    product: entry.product,
+    score,
+  };
+}
+
+// ============================================================
+// 17. HANDLER AUTÔNOMO (envia sozinho — alternativa)
 // ============================================================
 async function handleTicketFAQ(message, ticketData = {}, options = {}) {
   if (!message || !message.channel) return false;
-
   state.stats.totalMessages++;
 
   if (message.author?.bot) return false;
@@ -869,60 +753,38 @@ async function handleTicketFAQ(message, ticketData = {}, options = {}) {
     if (raw.startsWith(p)) return false;
   }
 
-  if (
-    FAQ_CONFIG.ignoreIfMentionsBot &&
-    message.mentions?.users?.has?.(message.client?.user?.id)
-  ) {
-    return false;
-  }
+  if (FAQ_CONFIG.ignoreIfMentionsBot && message.mentions?.users?.has?.(message.client?.user?.id)) return false;
 
-  if (ticketData && (ticketData.status === 'closed' || ticketData.status === 'fechado')) {
-    return false;
-  }
+  if (ticketData && (ticketData.status === 'closed' || ticketData.status === 'fechado')) return false;
   if (ticketData && ticketData.locked === true) return false;
 
   const threadId = message.channel.id;
   const userId = message.author.id;
 
-  if (!checkCooldown(threadId, userId)) {
-    state.stats.totalCooldown++;
-    return false;
-  }
-
-  if (!checkCounter(threadId)) {
-    state.stats.totalLimitReached++;
-    return false;
-  }
+  if (!checkCooldown(threadId, userId)) { state.stats.totalCooldown++; return false; }
+  if (!checkCounter(threadId)) { state.stats.totalLimitReached++; return false; }
 
   const normalized = normalize(raw);
   if (!normalized) return false;
 
   if (detectEscalation(normalized)) {
     state.stats.totalEscalations++;
-    try {
-      await sendEscalation(message, ticketData, raw);
-    } catch (e) {
-      console.error('[FAQ] Erro ao escalar:', e?.message || e);
-    }
+    try { await sendEscalation(message, ticketData, raw); }
+    catch (e) { console.error('[FAQ] Erro ao escalar:', e?.message || e); }
     return true;
   }
 
   const { entry, score } = findBestMatch(normalized);
 
   if (FAQ_CONFIG.verbose) {
-    console.log(
-      `[FAQ] thread=${threadId} score=${score.toFixed(2)} cat=${entry?.cat} prod=${entry?.product} msg="${raw.slice(0, 60)}"`,
-    );
+    console.log(`[FAQ] thread=${threadId} score=${score.toFixed(2)} cat=${entry?.cat} prod=${entry?.product} msg="${raw.slice(0, 60)}"`);
   }
 
   if (!entry || score < FAQ_CONFIG.minScore) {
     state.stats.totalLowScore++;
     if (FAQ_CONFIG.escalateOnLowScore) {
-      try {
-        await sendEscalation(message, ticketData, raw);
-      } catch (e) {
-        console.error('[FAQ] Erro ao escalar (lowScore):', e?.message || e);
-      }
+      try { await sendEscalation(message, ticketData, raw); }
+      catch (e) { console.error('[FAQ] Erro ao escalar (lowScore):', e?.message || e); }
       return true;
     }
     state.stats.totalSilenced++;
@@ -930,16 +792,11 @@ async function handleTicketFAQ(message, ticketData = {}, options = {}) {
   }
 
   const responseText = pickResponse(entry);
-  if (!responseText) {
-    state.stats.totalSilenced++;
-    return false;
-  }
+  if (!responseText) { state.stats.totalSilenced++; return false; }
 
   const quick = pickQuick(entry, FAQ_CONFIG.quickSuggestions);
   let finalText = responseText;
-  if (quick.length > 0) {
-    finalText += '\n\n**Sugestões rápidas:**\n' + quick.map((q) => `• ${q}`).join('\n');
-  }
+  if (quick.length > 0) finalText += '\n\n**Sugestões rápidas:**\n' + quick.map((q) => `• ${q}`).join('\n');
 
   try {
     await message.reply({ content: finalText, allowedMentions: { repliedUser: false } });
@@ -952,7 +809,7 @@ async function handleTicketFAQ(message, ticketData = {}, options = {}) {
 }
 
 // ============================================================
-// 17. ESCALAÇÃO
+// 18. ESCALAÇÃO (helper interno)
 // ============================================================
 async function sendEscalation(message, ticketData = {}, originalText = '') {
   const content =
@@ -970,21 +827,16 @@ async function sendEscalation(message, ticketData = {}, originalText = '') {
 }
 
 // ============================================================
-// 18. UTILITÁRIOS
+// 19. UTILITÁRIOS
 // ============================================================
 function testFAQ(text) {
   const normalized = normalize(text || '');
   const escalation = detectEscalation(normalized);
   const { entry, score } = findBestMatch(normalized);
   const willReply = !escalation && entry && score >= FAQ_CONFIG.minScore;
-
   return {
-    input: text,
-    normalized,
-    escalation,
-    entry: entry
-      ? { id: entry.id, cat: entry.cat, product: entry.product, tone: entry.tone, lang: entry.lang || 'pt' }
-      : null,
+    input: text, normalized, escalation,
+    entry: entry ? { id: entry.id, cat: entry.cat, product: entry.product, tone: entry.tone, lang: entry.lang || 'pt' } : null,
     score: Number(score.toFixed(3)),
     willReply,
     response: willReply ? pickResponse(entry) : null,
@@ -995,28 +847,21 @@ function testFAQ(text) {
 function getFAQStats() {
   const totalEntries = FAQ_DATABASE.length;
   const totalTriggers = FAQ_DATABASE.reduce((a, e) => a + e.triggers.length, 0);
-
-  const byCat = {};
-  const byProduct = {};
-  const byLang = {};
+  const byCat = {}, byProduct = {}, byLang = {};
   for (const e of FAQ_DATABASE) {
     byCat[e.cat] = (byCat[e.cat] || 0) + 1;
     byProduct[e.product] = (byProduct[e.product] || 0) + 1;
     const l = e.lang || 'pt';
     byLang[l] = (byLang[l] || 0) + 1;
   }
-
   return {
-    version: '6.3.0',
-    entries: totalEntries,
-    triggers: totalTriggers,
+    version: '6.4.0',
+    entries: totalEntries, triggers: totalTriggers,
     products: PRODUCTS.length,
     intents: INTENTS.length + TICKET_INTENTS.length,
     languages: Object.keys(LANGUAGES).length + 1,
     escalationKeywords: ESCALATION_KEYWORDS.length,
-    categories: byCat,
-    productsBreakdown: byProduct,
-    languagesBreakdown: byLang,
+    categories: byCat, productsBreakdown: byProduct, languagesBreakdown: byLang,
     config: { ...FAQ_CONFIG },
     runtime: { ...state.stats },
     uptimeMs: Date.now() - state.startAt,
@@ -1029,22 +874,22 @@ function reloadFAQ() {
   return true;
 }
 
-/**
- * Consulta manual de entradas por produto.
- * Útil para debug / inspeção.
- */
 function findByProduct(product, limit = 50) {
-  return FAQ_DATABASE
-    .filter((e) => e.product === product)
-    .slice(0, limit)
+  return FAQ_DATABASE.filter((e) => e.product === product).slice(0, limit)
     .map((e) => ({ id: e.id, cat: e.cat, tone: e.tone, lang: e.lang || 'pt', triggers: e.triggers.slice(0, 3) }));
 }
 
 // ============================================================
-// 19. EXPORTS
+// 20. EXPORTS
 // ============================================================
 module.exports = {
+  // ✅ API consumida pelo index.js
+  respond,
+
+  // Handler autônomo (envia sozinho)
   handleTicketFAQ,
+
+  // Utilitários
   testFAQ,
   getFAQStats,
   reloadFAQ,
@@ -1052,6 +897,7 @@ module.exports = {
   resetCounter,
   resetCooldownsForThread,
 
+  // Dados
   FAQ_DATABASE,
   FAQ_CONFIG,
   ESCALATION_KEYWORDS,
@@ -1060,12 +906,9 @@ module.exports = {
   TICKET_INTENTS,
   LANGUAGES,
 
+  // Internos (debug)
   _internal: {
-    normalize,
-    tokenize,
-    scoreEntry,
-    findBestMatch,
-    detectEscalation,
-    generateFAQDatabase,
+    normalize, tokenize, scoreEntry, findBestMatch, detectEscalation,
+    generateFAQDatabase, pickResponse, pickQuick,
   },
 };

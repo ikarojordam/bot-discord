@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL — app.js v3.0 (COMPLETO)
-// Painel logado — SPA
+// FRIO PANEL — app.js v3.1.0
+// + Editar meu perfil (cliente)
+// + Botão Editar em cada usuário (dev)
 // ═══════════════════════════════════════════════════════════
 'use strict';
 
@@ -790,6 +791,7 @@ async function loadRecentActivity() {
     force_premium_add:'gem', force_premium_remove:'trash-2',
     broadcast_global:'megaphone', approve_user:'user-check', update_user:'pencil',
     access_denied:'ban', take_members:'user-plus', refresh_guild:'refresh-cw',
+    self_update_profile:'user-cog',
   };
 
   wrap.innerHTML = list.map(a => {
@@ -889,6 +891,10 @@ async function loadServers() {
   }
   APP.servers = r.servers || [];
   renderServersGrid();
+
+  $('btnRefreshServers')?.addEventListener('click', loadServers, { once:true });
+  $('serverSearch')?.addEventListener('input', renderServersGrid, { once:true });
+  $('serverSort')?.addEventListener('change', renderServersGrid, { once:true });
 }
 
 function renderServersGrid() {
@@ -1006,6 +1012,8 @@ async function loadMyKeys() {
       </div>
     </div>`).join('');
   refreshIcons(wrap);
+
+  $('btnRefreshMyKeys')?.addEventListener('click', loadMyKeys, { once:true });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1212,7 +1220,6 @@ async function openSendKeyModal() {
   openModal('modalSendKey');
 }
 
-// (continuação na próxima resposta — quando cortar, me diga "continua" e eu sigo EXATAMENTE do ponto onde parou, sem repetir)
 // ═══════════════════════════════════════════════════════════
 // ➤ PÁGINA: PACKS (dev)
 // ═══════════════════════════════════════════════════════════
@@ -1275,7 +1282,7 @@ async function loadPacksTable() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ➤ PÁGINA: TICKETS GLOBAL (admin)
+// ➤ PÁGINA: TICKETS GLOBAL
 // ═══════════════════════════════════════════════════════════
 async function loadTicketsGlobal() {
   const wrap = $('ticketsGlobalTable');
@@ -1307,7 +1314,7 @@ async function loadTicketsGlobal() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ➤ PÁGINA: FINANCEIRO (admin)
+// ➤ PÁGINA: FINANCEIRO
 // ═══════════════════════════════════════════════════════════
 async function loadFinancial() {
   const wrap = $('financialStats');
@@ -1338,7 +1345,7 @@ async function loadFinancial() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ➤ PÁGINA: DEV — GERENCIAR SERVIDORES
+// ➤ PÁGINA: DEV — SERVIDORES
 // ═══════════════════════════════════════════════════════════
 async function loadDevServers() {
   const wrap = $('devServersList');
@@ -1655,7 +1662,7 @@ async function loadBroadcast() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ➤ PÁGINA: DEV — BACKUP & SYNC
+// ➤ PÁGINA: DEV — BACKUP
 // ═══════════════════════════════════════════════════════════
 async function loadBackup() {
   $('btnDownloadBackup')?.addEventListener('click', () => {
@@ -1672,7 +1679,7 @@ async function loadBackup() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ➤ PÁGINA: DEV — USUÁRIOS
+// ➤ PÁGINA: DEV — USUÁRIOS (com botão Editar)
 // ═══════════════════════════════════════════════════════════
 async function loadUsuarios() {
   const wrap = $('usersTable');
@@ -1710,6 +1717,9 @@ async function loadUsuarios() {
           <td>${u.ativo ? '<span class="tag tag-ok">Ativo</span>' : '<span class="tag tag-bad">Inativo</span>'}</td>
           <td class="text-mut">${timeAgo(u.created_at)}</td>
           <td>
+            <button class="btn btn-ghost btn-xs" data-user-edit="${escapeHtml(u.user_id)}" title="Editar">
+              ${icon('pencil')}
+            </button>
             <button class="btn btn-ghost btn-xs" data-user-sessions="${escapeHtml(u.user_id)}" data-user-email="${escapeHtml(u.email)}" title="Sessões">
               ${icon('monitor')}
             </button>
@@ -1722,6 +1732,13 @@ async function loadUsuarios() {
     </table></div>`;
   refreshIcons(wrap);
 
+  wrap.querySelectorAll('[data-user-edit]').forEach(b => {
+    b.addEventListener('click', () => {
+      const uid = b.dataset.userEdit;
+      const user = list.find(x => x.user_id === uid);
+      if (user) openNewUserModal(user);
+    });
+  });
   wrap.querySelectorAll('[data-user-sessions]').forEach(b => {
     b.addEventListener('click', () => openUserSessions(b.dataset.userSessions, b.dataset.userEmail));
   });
@@ -1739,7 +1756,7 @@ async function loadUsuarios() {
   ['userFilterRole','userFilterPlan','userFilterAtivo'].forEach(id => {
     $(id)?.addEventListener('change', loadUsuarios, { once:true });
   });
-  $('btnNovoUsuario')?.addEventListener('click', openNewUserModal, { once:true });
+  $('btnNovoUsuario')?.addEventListener('click', () => openNewUserModal(null), { once:true });
 }
 
 function openNewUserModal(editUser = null) {
@@ -1765,6 +1782,7 @@ function bindUserModal() {
   $('userForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearMsg('modalUserMsg');
+
     const id = $('modalUserId').value;
     const body = {
       email: ($('modalUserEmail').value || '').trim(),
@@ -1775,20 +1793,38 @@ function bindUserModal() {
       assigned_guilds: ($('modalUserGuilds').value || '').split(',').map(s => s.trim()).filter(Boolean),
       notes: ($('modalUserNotes').value || '').trim() || null,
     };
-    if (!body.discord_id) return setMsg('modalUserMsg', 'ID do Discord é obrigatório.', 'error');
-    if (!/^\d{15,25}$/.test(body.discord_id)) return setMsg('modalUserMsg', 'ID do Discord inválido.', 'error');
+
+    if (!body.email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email)) {
+      return setMsg('modalUserMsg', 'E-mail inválido.', 'error');
+    }
+    if (!body.discord_id) {
+      return setMsg('modalUserMsg', 'ID do Discord é obrigatório.', 'error');
+    }
+    if (!/^\d{15,25}$/.test(body.discord_id)) {
+      return setMsg('modalUserMsg', 'ID do Discord inválido.', 'error');
+    }
+
     if (!id) {
       const pwd = ($('modalUserPassword').value || '').trim();
       if (pwd) body.password = pwd;
     }
 
     const r = id
-      ? await api(`/api/dev/usuarios/${id}`, { method:'PATCH', body })
-      : await api('/api/dev/usuarios', { method:'POST', body });
+      ? await api(`/api/dev/usuarios/${id}`, { method: 'PATCH', body })
+      : await api('/api/dev/usuarios', { method: 'POST', body });
 
-    if (!r.ok) return setMsg('modalUserMsg', r.error || 'Erro', 'error');
-    if (r.temp_password) setMsg('modalUserMsg', `Usuário criado. Senha temporária: ${r.temp_password}`, 'ok');
-    else setMsg('modalUserMsg', 'Salvo com sucesso.', 'ok');
+    if (!r.ok) {
+      let msg = r.error || 'Erro.';
+      if (r.code === 'EMAIL_TAKEN') msg = 'E-mail já cadastrado em outra conta.';
+      if (r.code === 'DISCORD_ID_TAKEN') msg = 'Discord ID já cadastrado em outra conta.';
+      return setMsg('modalUserMsg', msg, 'error');
+    }
+
+    if (r.temp_password) {
+      setMsg('modalUserMsg', `Usuário criado. Senha temporária: ${r.temp_password}`, 'ok');
+    } else {
+      setMsg('modalUserMsg', 'Salvo com sucesso.', 'ok');
+    }
     toast('Salvo.');
     loadUsuarios();
     if (!r.temp_password) setTimeout(() => closeModal('modalUser'), 1200);
@@ -1796,7 +1832,7 @@ function bindUserModal() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ➤ PÁGINA: DEV — APROVAÇÕES PENDENTES
+// ➤ PÁGINA: DEV — APROVAÇÕES
 // ═══════════════════════════════════════════════════════════
 async function loadPending() {
   const wrap = $('pendingList');
@@ -1861,7 +1897,7 @@ function bindApproveModal() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// MODAL — SESSÕES DO USUÁRIO (DEV vendo outro user)
+// MODAL — SESSÕES DO USUÁRIO
 // ═══════════════════════════════════════════════════════════
 function openUserSessions(userId, email) {
   APP.currentUserSessions = userId;
@@ -2064,6 +2100,67 @@ function bindForgotModal() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// ⚡ MODAL — EDITAR MEU PERFIL (cliente)
+// ═══════════════════════════════════════════════════════════
+function bindProfileModal() {
+  $('btnEditProfile')?.addEventListener('click', () => {
+    const emailInput = $('profileEmail');
+    const discordInput = $('profileDiscord');
+    if (emailInput) emailInput.value = APP.user?.email || '';
+    if (discordInput) discordInput.value = APP.admin?.discord_id || '';
+    clearMsg('profileMsg');
+    openModal('modalProfile');
+  });
+
+  $('profileForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearMsg('profileMsg');
+
+    const email = ($('profileEmail').value || '').trim();
+    const discord_id = ($('profileDiscord').value || '').trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return setMsg('profileMsg', 'E-mail inválido.', 'error');
+    }
+    if (!/^\d{15,25}$/.test(discord_id)) {
+      return setMsg('profileMsg', 'ID do Discord inválido (15–25 dígitos).', 'error');
+    }
+
+    const btn = $('btnSaveProfile');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `${icon('loader-2','spin')}<span>Salvando…</span>`;
+    refreshIcons(btn);
+
+    const r = await api('/api/me/profile', {
+      method: 'PATCH',
+      body: { email, discord_id },
+    });
+
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    refreshIcons(btn);
+
+    if (!r.ok) {
+      let msg = r.error || 'Erro ao salvar.';
+      if (r.code === 'EMAIL_TAKEN') msg = 'Este e-mail já está em uso.';
+      if (r.code === 'DISCORD_ID_TAKEN') msg = 'Este ID do Discord já está cadastrado.';
+      return setMsg('profileMsg', msg, 'error');
+    }
+
+    if (r.admin) {
+      APP.user = { ...APP.user, email: r.admin.email || APP.user.email };
+      APP.admin = { ...APP.admin, discord_id: r.admin.discord_id ?? APP.admin.discord_id };
+      renderUserInfo();
+    }
+
+    setMsg('profileMsg', 'Perfil atualizado com sucesso.', 'ok');
+    toast('Perfil atualizado.');
+    setTimeout(() => closeModal('modalProfile'), 1200);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
 // REGISTRO DE PÁGINAS
 // ═══════════════════════════════════════════════════════════
 registerPage('dashboard',           loadDashboard);
@@ -2087,7 +2184,7 @@ registerPage('pending',             loadPending);
 registerPage('audit',               loadAudit);
 
 // ═══════════════════════════════════════════════════════════
-// BIND DE MODAIS (uma vez, no boot)
+// BIND DE MODAIS
 // ═══════════════════════════════════════════════════════════
 function bindAllModals() {
   bindUserModal();
@@ -2098,6 +2195,7 @@ function bindAllModals() {
   bindKillSwitch();
   bindMaintenance();
   bindForcePremium();
+  bindProfileModal();   // ← NOVO
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2111,15 +2209,12 @@ document.addEventListener('DOMContentLoaded', () => {
   bootApp();
 });
 
-// Bloqueia acesso pelo botão "voltar" se o usuário acabou de sair
 window.addEventListener('pageshow', (e) => {
   if (e.persisted && !APP.user) {
-    // página veio do cache do browser sem sessão — força reload
     window.location.reload();
   }
 });
 
-// Reduz ruído em produção
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
   console.log = () => {};
   console.debug = () => {};

@@ -1,6 +1,6 @@
 {
   "name": "frio-bot",
-  "version": "6.8.4",
+  "version": "6.9.2",
   "description": "FrioBot — Sistema completo para servidores Discord",
   "main": "index.js",
   "engines": {

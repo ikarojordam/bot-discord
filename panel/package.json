@@ -1,7 +1,7 @@
 {
   "name": "frio-panel",
-  "version": "6.0.0",
-  "description": "Painel profissional de gerenciamento do Frio Bot (Discord)",
+  "version": "6.1.0",
+  "description": "Frio Panel — painel web de gerenciamento do Frio Bot para Discord",
   "main": "server.js",
   "private": true,
   "engines": {
@@ -30,10 +30,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/seu-usuario/frio-panel"
+    "url": "https://github.com/ikarojordam/bot-discord"
   },
   "bugs": {
     "url": "https://github.com/seu-usuario/frio-panel/issues"
   },
-  "homepage": "https://github.com/seu-usuario/frio-panel#readme"
+  "homepage": "https://frio-painel.onrender.com"
 }

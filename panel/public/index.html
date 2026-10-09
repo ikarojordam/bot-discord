@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0b12">
+<title>Frio Panel — Controle total do seu bot Discord</title>
+<meta name="description" content="Painel completo para gerenciar bots Discord: tickets, apostas, lojas, streamers e automações. Seguro, rápido e profissional.">
+<meta property="og:title" content="Frio Panel">
+<meta property="og:description" content="Controle seus módulos, servidores, tickets e automações em um só lugar.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/landing.css?v=20261009">
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════ NAVBAR ═══════════════ -->
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/assets/logo.png" alt="Frio Panel" class="nav-logo">
+      <span>Frio Panel</span>
+    </a>
+
+    <nav class="nav-links" id="navLinks">
+      <a href="#inicio"><i data-lucide="home"></i>Início</a>
+      <a href="#recursos"><i data-lucide="sparkles"></i>Recursos</a>
+      <a href="#planos"><i data-lucide="layers-3"></i>Tiers</a>
+      <a href="#como-funciona"><i data-lucide="workflow"></i>Como funciona</a>
+      <a href="#faq"><i data-lucide="circle-help"></i>FAQ</a>
+      <a href="/terms"><i data-lucide="file-text"></i>Termos</a>
+    </nav>
+
+    <div class="nav-actions">
+      <a href="/login" class="btn btn-ghost btn-sm">
+        <i data-lucide="log-in"></i>Entrar
+      </a>
+      <a href="#" class="btn btn-primary btn-sm" id="navAddBot">
+        <i data-lucide="plus-circle"></i>Adicionar Bot
+      </a>
+      <button class="nav-burger" id="navBurger" aria-label="Menu">
+        <i data-lucide="menu"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero" id="inicio">
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+
+  <div class="hero-inner">
+    <div class="hero-left">
+      <span class="pill">
+        <i data-lucide="zap"></i>
+        <span>Sistema profissional para Discord</span>
+      </span>
+
+      <h1>
+        Seu bot Discord.
+        <span class="grad">Seu painel de controle.</span>
+      </h1>
+
+      <p class="hero-sub">
+        Organize os módulos do seu bot em um só lugar. Gerencie servidores, tickets, loja, filas e moderação sem ficar perdido entre comandos e canais.
+      </p>
+
+      <div class="hero-cta">
+        <a href="/login" class="btn btn-primary btn-lg">
+          <i data-lucide="layout-dashboard"></i>Entrar no Painel
+        </a>
+        <a href="#" class="btn btn-ghost btn-lg" id="heroAddBot">
+          <i data-lucide="discord"></i>Adicionar ao Discord
+        </a>
+      </div>
+
+      <ul class="hero-feats">
+        <li><i data-lucide="check-circle-2"></i>Visão geral em um só lugar</li>
+        <li><i data-lucide="check-circle-2"></i>Módulos organizados</li>
+        <li><i data-lucide="check-circle-2"></i>Controle pelo navegador</li>
+      </ul>
+    </div>
+
+    <div class="hero-right">
+      <div class="mockup">
+        <div class="mockup-bar">
+          <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+          <span class="mockup-url">friopanel.app / visão geral</span>
+        </div>
+        <div class="mockup-body">
+          <div class="mockup-side">
+            <div class="mock-line lg"></div>
+            <div class="mock-line"></div>
+            <div class="mock-line"></div>
+            <div class="mock-line"></div>
+            <div class="mock-line short"></div>
+          </div>
+          <div class="mockup-main">
+            <div class="mock-cards">
+              <div class="mock-card"><div class="mock-tag blue"></div><div class="mock-bar"></div></div>
+              <div class="mock-card"><div class="mock-tag green"></div><div class="mock-bar"></div></div>
+              <div class="mock-card"><div class="mock-tag amber"></div><div class="mock-bar"></div></div>
+            </div>
+            <div class="mock-chart"></div>
+            <div class="mock-chart"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="quick-strip" aria-label="Principais áreas do painel">
+  <div class="quick-strip-inner">
+    <div><i data-lucide="layout-dashboard"></i><span><b>Visão geral</b><small>O que importa, de relance</small></span></div>
+    <div><i data-lucide="ticket"></i><span><b>Atendimento</b><small>Tickets e organização</small></span></div>
+    <div><i data-lucide="shopping-bag"></i><span><b>Operação</b><small>Loja, filas e módulos</small></span></div>
+    <div><i data-lucide="sliders-horizontal"></i><span><b>Configuração</b><small>Fluxos no seu ritmo</small></span></div>
+  </div>
+</section>
+
+<!-- ═══════════════ RECURSOS ═══════════════ -->
+<section class="section" id="recursos">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="sparkles"></i>Recursos</span>
+    <h2>Tudo que seu bot precisa, em um só painel</h2>
+    <p>Ferramentas modulares para você operar, escalar e monitorar com clareza.</p>
+  </div>
+
+  <div class="grid-feats">
+    <div class="feat">
+      <div class="feat-icon blue"><i data-lucide="layout-dashboard"></i></div>
+      <h3>Dashboard em tempo real</h3>
+      <p>Status do bot, servidores, usuários, receita e alertas em uma visão unificada.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon purple"><i data-lucide="server"></i></div>
+      <h3>Multi-servidor</h3>
+      <p>Gerencie vários servidores Discord com permissão validada no backend.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon green"><i data-lucide="ticket"></i></div>
+      <h3>Sistema de tickets</h3>
+      <p>Painéis personalizáveis, formulários, prioridades, avaliações e transcripts.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon amber"><i data-lucide="gamepad-2"></i></div>
+      <h3>Apostas &amp; mediadores</h3>
+      <p>Filas, threads automáticas, PIX por mediador, blacklist e análise de disputas.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon red"><i data-lucide="shopping-cart"></i></div>
+      <h3>Loja integrada</h3>
+      <p>Produtos, estoque, cupons, PIX/Mercado Pago e entrega automática.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon cyan"><i data-lucide="radio"></i></div>
+      <h3>Streamers</h3>
+      <p>Fila dedicada, threads privadas, mediação de apostas com streamer.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon pink"><i data-lucide="shield"></i></div>
+      <h3>Moderação</h3>
+      <p>Anti-link, anti-convite, anti-raid, blacklist global e kill switch.</p>
+    </div>
+
+    <div class="feat">
+      <div class="feat-icon lime"><i data-lucide="scroll-text"></i></div>
+      <h3>Auditoria completa</h3>
+      <p>Toda ação registrada: quem, quando, de onde, com filtros e exportação.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ TIERS ═══════════════ -->
+<section class="section tier-section" id="planos">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="layers-3"></i>Níveis de acesso</span>
+    <h2>Um nível para cada fase do projeto</h2>
+    <p>Conheça a proposta de cada tier. O acesso real aos módulos depende do plano e da key atribuídos à sua conta.</p>
+  </div>
+  <div class="tier-grid">
+    <article class="tier-card tier-basic">
+      <div class="tier-top"><span class="tier-symbol"><i data-lucide="leaf"></i></span><span class="tier-label">ESSENCIAL</span></div>
+      <h3>Basic</h3><p class="tier-desc">Para começar com o que é fundamental.</p>
+      <ul><li><i data-lucide="check"></i>Recursos essenciais do bot</li><li><i data-lucide="check"></i>Configuração inicial</li><li><i data-lucide="check"></i>Organização dos módulos disponíveis</li></ul>
+      <a class="btn btn-ghost tier-cta" href="/login">Acessar painel <i data-lucide="arrow-up-right"></i></a>
+    </article>
+    <article class="tier-card tier-premium">
+      <div class="tier-top"><span class="tier-symbol"><i data-lucide="zap"></i></span><span class="tier-label">MAIS RECURSOS</span></div>
+      <h3>Premium</h3><p class="tier-desc">Para quem quer ampliar a rotina de gerenciamento.</p>
+      <ul><li><i data-lucide="check"></i>Base do Basic</li><li><i data-lucide="check"></i>Mais possibilidades de operação</li><li><i data-lucide="check"></i>Fluxos de trabalho ampliados, quando habilitados</li></ul>
+      <a class="btn btn-primary tier-cta" href="/login">Acessar painel <i data-lucide="arrow-up-right"></i></a>
+      <span class="tier-ribbon">DESTAQUE</span>
+    </article>
+    <article class="tier-card tier-ultra">
+      <div class="tier-top"><span class="tier-symbol"><i data-lucide="rocket"></i></span><span class="tier-label">AVANÇADO</span></div>
+      <h3>Ultra</h3><p class="tier-desc">Para operações com mais módulos e demandas.</p>
+      <ul><li><i data-lucide="check"></i>Recursos dos níveis anteriores</li><li><i data-lucide="check"></i>Capacidade ampliada conforme a key</li><li><i data-lucide="check"></i>Mais opções para operações maiores</li></ul>
+      <a class="btn btn-ghost tier-cta" href="/login">Acessar painel <i data-lucide="arrow-up-right"></i></a>
+    </article>
+    <article class="tier-card tier-unlimited">
+      <div class="tier-top"><span class="tier-symbol"><i data-lucide="infinity"></i></span><span class="tier-label">MÁXIMO</span></div>
+      <h3>Unlimited</h3><p class="tier-desc">Para quem precisa do maior nível disponível.</p>
+      <ul><li><i data-lucide="check"></i>Maior nível da linha de tiers</li><li><i data-lucide="check"></i>Recursos habilitados pela licença</li><li><i data-lucide="check"></i>Ideal para uma operação mais completa</li></ul>
+      <a class="btn btn-ghost tier-cta" href="/login">Acessar painel <i data-lucide="arrow-up-right"></i></a>
+    </article>
+  </div>
+  <p class="tier-footnote"><i data-lucide="info"></i> Os nomes indicam níveis de licença, não uma lista garantida de funcionalidades. Consulte os detalhes da sua key ou fale com o suporte para confirmar o que está habilitado.</p>
+</section>
+
+<!-- ═══════════════ COMO FUNCIONA ═══════════════ -->
+<section class="section section-alt" id="como-funciona">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="workflow"></i>Como funciona</span>
+    <h2>Em 4 passos você está dentro</h2>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Crie sua conta</h3>
+      <p>Cadastro por e-mail e senha. Confirmação por e-mail obrigatória.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>Aguarde aprovação</h3>
+      <p>O desenvolvedor aprova o acesso e define seu plano e permissões.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Vincule servidores</h3>
+      <p>Adicione o bot nos seus servidores Discord e autorize o acesso.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <h3>Gerencie tudo</h3>
+      <p>Configure tickets, apostas, loja e módulos direto no painel.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ BENEFÍCIOS ═══════════════ -->
+<section class="section section-alt" id="beneficios">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="heart-handshake"></i>Benefícios</span>
+    <h2>Por que usar o Frio Panel</h2>
+  </div>
+
+  <div class="grid-benefits">
+    <div class="benefit"><i data-lucide="timer"></i><h4>Economize tempo</h4><p>Configure tudo pelo navegador, sem comandos complexos.</p></div>
+    <div class="benefit"><i data-lucide="trending-up"></i><h4>Escale sem dor</h4><p>Multi-servidor, multi-cliente, multi-plano — do primeiro ao milésimo.</p></div>
+    <div class="benefit"><i data-lucide="palette"></i><h4>Identidade própria</h4><p>Personalize embeds, painéis, cores e fluxos por servidor.</p></div>
+    <div class="benefit"><i data-lucide="headset"></i><h4>Suporte dedicado</h4><p>Canal direto com o desenvolvedor pelo próprio painel.</p></div>
+  </div>
+</section>
+
+<!-- ═══════════════ FAQ ═══════════════ -->
+<section class="section section-alt faq-section" id="faq">
+  <div class="section-head">
+    <span class="section-tag"><i data-lucide="circle-help"></i>Dúvidas frequentes</span>
+    <h2>Respostas rápidas, sem complicação</h2>
+    <p>O básico para você saber por onde começar.</p>
+  </div>
+  <div class="faq-list">
+    <details class="faq-item"><summary>O que é o Frio Panel?<span class="faq-plus"><i data-lucide="plus"></i></span></summary><p>É uma interface web para organizar e gerenciar os recursos compatíveis do Frio Bot, como servidores, tickets, loja, filas e moderação.</p></details>
+    <details class="faq-item"><summary>Como consigo acesso ao painel?<span class="faq-plus"><i data-lucide="plus"></i></span></summary><p>Crie uma conta com e-mail e senha, confirme seu e-mail e aguarde a aprovação do desenvolvedor. O acesso só fica disponível depois que a conta for aprovada.</p></details>
+    <details class="faq-item"><summary>Posso entrar com minha conta do Discord?<span class="faq-plus"><i data-lucide="plus"></i></span></summary><p>Não. O login do site é feito exclusivamente com e-mail e senha. O Discord pode ser usado em fluxos de autorização do bot, quando necessário.</p></details>
+    <details class="faq-item"><summary>Qual é a diferença entre Basic, Premium, Ultra e Unlimited?<span class="faq-plus"><i data-lucide="plus"></i></span></summary><p>São níveis de licença. Os recursos liberados para sua conta dependem da key e das permissões atribuídas. Se tiver dúvida sobre um recurso específico, confirme com o suporte antes de adquirir ou ativar uma licença.</p></details>
+    <details class="faq-item"><summary>Esqueci minha senha. O que faço?<span class="faq-plus"><i data-lucide="plus"></i></span></summary><p>Abra a página de login e use a opção “Esqueci a senha”. Confira também as pastas de spam e lixo eletrônico para mensagens de confirmação ou recuperação.</p></details>
+    <details class="faq-item"><summary>O bot não aparece ou uma função não funciona?<span class="faq-plus"><i data-lucide="plus"></i></span></summary><p>Confira se o bot está no servidor correto, se a conta tem acesso aprovado e se sua licença permite o recurso. Se o problema continuar, fale com o suporte e informe o que você estava tentando fazer.</p></details>
+  </div>
+</section>
+
+<!-- ═══════════════ CTA FINAL ═══════════════ -->
+<section class="cta-final">
+  <div class="cta-box">
+    <h2>Pronto para modernizar seu bot?</h2>
+    <p>Entre na sua conta ou solicite acesso para começar a organizar sua operação.</p>
+    <div class="hero-cta center">
+      <a href="/login" class="btn btn-primary btn-lg">
+        <i data-lucide="log-in"></i>Entrar no Painel
+      </a>
+      <a href="/register" class="btn btn-ghost btn-lg">
+        <i data-lucide="user-plus"></i>Criar conta
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="/assets/logo.png" alt="Frio Panel">
+      <p>Painel profissional para gerenciamento de bots Discord.</p>
+    </div>
+
+    <div class="footer-col">
+      <h5>Produto</h5>
+      <a href="#recursos">Recursos</a>
+      <a href="#planos">Tiers</a>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#faq">Perguntas frequentes</a>
+      <a href="/login">Entrar</a>
+    </div>
+
+    <div class="footer-col">
+      <h5>Legal</h5>
+      <a href="/terms">Termos de Uso</a>
+      <a href="/privacy">Política de Privacidade</a>
+      <a href="/terms#lgpd">LGPD</a>
+    </div>
+
+    <div class="footer-col">
+      <h5>Comunidade</h5>
+      <a href="#" id="footDiscord" target="_blank" rel="noopener">Discord</a>
+      <a href="#" id="footSupport">Suporte</a>
+      <a href="/terms#contato">Contato</a>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <span>&copy; <span id="year"></span> Frio Panel. Todos os direitos reservados.</span>
+    <span class="footer-meta">Feito com segurança e café ☕</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // Ano dinâmico
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Lucide icons
+  if (window.lucide) {
+    try { window.lucide.createIcons(); } catch (e) { console.warn('lucide', e); }
+  }
+
+  // Navbar scrolled
+  const nav = document.getElementById('nav');
+  const onScroll = () => {
+    if (window.scrollY > 12) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Menu mobile
+  const burger = document.getElementById('navBurger');
+  const links = document.getElementById('navLinks');
+  burger?.addEventListener('click', () => {
+    links?.classList.toggle('open');
+    burger.classList.toggle('active');
+  });
+  links?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+    links.classList.remove('open');
+    burger?.classList.remove('active');
+  }));
+
+  // Smooth scroll
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href');
+      if (!id || id === '#') return;
+      const el = document.querySelector(id);
+      if (el) {
+        e.preventDefault();
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // Botão "Adicionar Bot" — OAuth2 do Discord
+  // O client_id é obtido de forma segura via API pública (nunca hardcoded no HTML público).
+  async function getDiscordInviteUrl() {
+    try {
+      const r = await fetch('/api/public-config', { credentials: 'omit' });
+      const d = await r.json();
+      if (!d?.discord_client_id) return null;
+      const params = new URLSearchParams({
+        client_id: d.discord_client_id,
+        permissions: '8', // Administrator (ajuste conforme necessário)
+        scope: 'bot applications.commands',
+      });
+      return `https://discord.com/oauth2/authorize?${params}`;
+    } catch { return null; }
+  }
+
+  const addBotHandler = async (e) => {
+    e.preventDefault();
+    const url = await getDiscordInviteUrl();
+    if (!url) {
+      alert('Não foi possível gerar o link do bot. Tente novamente em instantes.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  document.getElementById('navAddBot')?.addEventListener('click', addBotHandler);
+  document.getElementById('heroAddBot')?.addEventListener('click', addBotHandler);
+  document.getElementById('footDiscord')?.setAttribute('href', '#');
+
+  // Reveal on scroll
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        en.target.classList.add('in');
+        io.unobserve(en.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.feat, .sec-item, .benefit, .step').forEach(el => io.observe(el));
+})();
+</script>
+</body>
+</html>

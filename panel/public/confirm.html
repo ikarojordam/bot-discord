@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Confirmar e-mail — Frio Painel</title>
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="stylesheet" href="/assets/auth.css?v=20261009">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css?v=20261010">
+</head>
+<body>
+<div class="auth-page active">
+  <div class="aurora"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="orb orb-4"></div></div>
+
+  <div class="auth-wrapper">
+    <div class="auth-form-card" id="card" style="margin:auto;max-width:480px;text-align:center">
+
+      <!-- ESTADO: VALIDANDO -->
+      <div id="s-loading">
+        <div style="font-size:56px;margin-bottom:16px;animation:pulse 1.4s ease-in-out infinite">📧</div>
+        <h1>Validando e-mail</h1>
+        <p class="auth-sub">Aguarde enquanto confirmamos seu cadastro.</p>
+        <div style="margin-top:24px;display:flex;justify-content:center">
+          <div class="spinner"></div>
+        </div>
+      </div>
+
+      <!-- ESTADO: SUCESSO -->
+      <div id="s-success" style="display:none">
+        <div style="font-size:60px;margin-bottom:16px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1)">✅</div>
+        <h1 style="background:linear-gradient(135deg,#fff,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent">E-mail confirmado!</h1>
+        <p class="auth-sub" id="okSub">
+          Sua conta foi verificada com sucesso.<br>
+          Agora aguarde a <strong>aprovação da staff</strong> para acessar o painel.
+        </p>
+
+        <div style="padding:14px 16px;background:rgba(88,101,242,.1);border:1px solid rgba(88,101,242,.3);border-radius:12px;margin:20px 0;text-align:left">
+          <p style="font-size:12.5px;color:var(--txt-2);margin:0;line-height:1.6">
+            <strong style="color:#a5b4fc">📬 Próximos passos:</strong><br>
+            1. Você receberá uma notificação no Discord quando for aprovado<br>
+            2. Só então poderá fazer login no painel<br>
+            3. Dúvidas? Entre em contato com a staff
+          </p>
+        </div>
+
+        <a href="/" class="btn btn-success btn-block" style="text-decoration:none">
+          🚀 Ir pro login
+        </a>
+        <p class="hint" style="margin-top:14px">Redirecionando em <strong id="countdown">10</strong>s...</p>
+      </div>
+
+      <!-- ESTADO: JÁ CONFIRMADO -->
+      <div id="s-already" style="display:none">
+        <div style="font-size:60px;margin-bottom:16px">✨</div>
+        <h1 style="background:linear-gradient(135deg,#fff,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent">E-mail já confirmado</h1>
+        <p class="auth-sub">Sua conta já está verificada. Aguarde aprovação ou faça login.</p>
+        <a href="/" class="btn btn-primary btn-block" style="text-decoration:none">
+          🚀 Ir pro login
+        </a>
+      </div>
+
+      <!-- ESTADO: ERRO -->
+      <div id="s-error" style="display:none">
+        <div style="font-size:60px;margin-bottom:16px">⚠️</div>
+        <h1 style="background:linear-gradient(135deg,#fff,#fca5a5);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Não foi possível confirmar</h1>
+        <p class="auth-sub" id="errMsg">O link expirou ou já foi utilizado.</p>
+
+        <div class="btn-row" style="margin-top:20px;justify-content:center;flex-wrap:wrap">
+          <a href="/" class="btn btn-ghost" style="text-decoration:none">🏠 Ir pro login</a>
+          <button class="btn btn-primary" id="btnResend">📧 Reenviar e-mail</button>
+        </div>
+
+        <div id="resendMsg" class="msg"></div>
+
+        <div style="margin-top:22px;padding-top:22px;border-top:1px solid var(--glass-border)">
+          <p class="hint" style="margin-bottom:10px">Ou informe o e-mail usado no cadastro:</p>
+          <div class="input-icon" style="margin-bottom:10px">
+            <span>📧</span>
+            <input type="email" id="manualEmail" placeholder="seu@email.com">
+          </div>
+          <button class="btn btn-ghost btn-block" id="btnManualResend">📧 Reenviar por e-mail</button>
+          <div id="manualMsg" class="msg"></div>
+        </div>
+      </div>
+
+      <!-- ESTADO: LOGADO -->
+      <div id="s-logged" style="display:none">
+        <div style="font-size:60px;margin-bottom:16px">👋</div>
+        <h1>Você já está logado</h1>
+        <p class="auth-sub">Redirecionando para o painel...</p>
+        <a href="/" class="btn btn-primary btn-block" style="text-decoration:none">
+          🚀 Ir pro painel
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<style>
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(.94)} }
+@keyframes popIn { from{opacity:0;transform:scale(0)} to{opacity:1;transform:scale(1)} }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══ EXTRAI TOKENS E LIMPA URL ═══
+  const hash = new URLSearchParams(location.hash.substring(1));
+  const query = new URLSearchParams(location.search);
+
+  const accessToken = hash.get('access_token') || query.get('access_token');
+  const refreshToken = hash.get('refresh_token') || query.get('refresh_token');
+  const tokenHash = query.get('token_hash');
+  const plainToken = query.get('token');
+  const type = query.get('type') || hash.get('type');
+  const errDesc = query.get('error_description') || hash.get('error_description');
+
+  // ⚡ Limpa URL
+  try { history.replaceState(null, '', location.pathname); } catch {}
+
+  // ═══ REFS ═══
+  const $ = (id) => document.getElementById(id);
+  const sLoad = $('s-loading'), sOk = $('s-success'), sAlready = $('s-already'),
+        sErr = $('s-error'), sLogged = $('s-logged');
+
+  function show(state) {
+    [sLoad, sOk, sAlready, sErr, sLogged].forEach(el => el && (el.style.display = 'none'));
+    state && (state.style.display = 'block');
+  }
+
+  function toast(text, type = 'ok') {
+    const el = $('toast');
+    if (!el) return;
+    el.textContent = text;
+    el.className = `toast ${type} active`;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('active'), 3200);
+  }
+
+  function showError(msg) {
+    $('errMsg').textContent = msg || 'Erro ao confirmar.';
+    show(sErr);
+  }
+
+  function showSuccess(alreadyConfirmed) {
+    if (alreadyConfirmed) {
+      show(sAlready);
+      setTimeout(() => { location.href = '/'; }, 5000);
+      return;
+    }
+    show(sOk);
+    let s = 10;
+    const cd = $('countdown');
+    const id = setInterval(() => {
+      s--;
+      if (cd) cd.textContent = s;
+      if (s <= 0) { clearInterval(id); location.href = '/'; }
+    }, 1000);
+  }
+
+  // ═══ VERIFICA SE JÁ ESTÁ LOGADO ═══
+  (async () => {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'include' });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.ok && d.admin) {
+          show(sLogged);
+          setTimeout(() => { location.href = '/'; }, 2000);
+          return true;
+        }
+      }
+    } catch {}
+    return false;
+  })();
+
+  // ═══ PROCESSAMENTO PRINCIPAL ═══
+  (async function process() {
+    // Já logado? Espera um pouco pra dar tempo de checar
+    await new Promise(r => setTimeout(r, 300));
+    if (sLogged.style.display === 'block') return;
+
+    // Erro direto na URL
+    if (errDesc) return showError(decodeURIComponent(errDesc));
+
+    // Sem token nenhum
+    if (!accessToken && !plainToken && !tokenHash) {
+      // Se type=signup foi clicado e já não tem token, pode já estar confirmado
+      if (type === 'signup') return showSuccess(true);
+      return showError('Nenhum token encontrado no link. Use o link completo do e-mail.');
+    }
+
+    // ═══ FORMATO 1: access_token (Supabase) ═══
+    if (accessToken) {
+      try {
+        const r = await fetch('/api/auth/validate-confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ access_token: accessToken }),
+        });
+        const d = await r.json();
+
+        if (d.ok && d.valid) {
+          if (d.already_confirmed) return showSuccess(true);
+          // Supabase já confirmou pelo clique no link
+          return showSuccess(false);
+        }
+        return showError(d.error || 'Link inválido.');
+      } catch {
+        return showError('Erro de conexão. Tente novamente.');
+      }
+    }
+
+    // ═══ FORMATO 2: token custom ═══
+    if (plainToken) {
+      try {
+        const r = await fetch('/api/auth/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token: plainToken }),
+        });
+        const d = await r.json();
+
+        if (r.ok && d.ok !== false) {
+          if (d.message && d.message.toLowerCase().includes('já confirmado')) {
+            return showSuccess(true);
+          }
+          return showSuccess(false);
+        }
+        return showError(d.error || 'Token inválido ou expirado.');
+      } catch {
+        return showError('Erro de conexão. Tente novamente.');
+      }
+    }
+
+    // ═══ FORMATO 3: token_hash ═══
+    if (tokenHash) {
+      try {
+        const r = await fetch('/api/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token_hash: tokenHash, type: 'signup' }),
+        });
+        const d = await r.json();
+
+        if (r.ok && d.ok !== false) return showSuccess(false);
+        return showError(d.error || 'Token inválido ou expirado.');
+      } catch {
+        return showError('Erro de conexão. Tente novamente.');
+      }
+    }
+
+    showError('Formato de link não reconhecido.');
+  })();
+
+  // ═══ REENVIAR VIA TOKEN ═══
+  $('btnResend')?.addEventListener('click', async () => {
+    const b = $('btnResend');
+    const em = $('resendMsg');
+
+    // Se tem plainToken, usa endpoint específico
+    if (plainToken) {
+      b.disabled = true;
+      b.textContent = '⏳ Enviando...';
+      try {
+        const r = await fetch('/api/auth/resend-confirmation-by-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token: plainToken }),
+        });
+        const d = await r.json();
+        em.textContent = r.ok && d.ok !== false ? '✅ E-mail reenviado!' : '❌ ' + (d.error || 'Erro');
+        em.className = 'msg ' + (r.ok ? 'ok' : 'error');
+        em.style.display = 'block';
+      } catch {
+        em.textContent = '❌ Erro de conexão.';
+        em.className = 'msg error';
+        em.style.display = 'block';
+      }
+      b.disabled = false;
+      b.textContent = '📧 Reenviar e-mail';
+      return;
+    }
+
+    // Se não tem token, pede email na seção de baixo
+    $('manualEmail')?.focus();
+    em.textContent = '⚠️ Informe o e-mail na seção abaixo.';
+    em.className = 'msg error';
+    em.style.display = 'block';
+  });
+
+  // ═══ REENVIAR MANUAL (por email) ═══
+  $('btnManualResend')?.addEventListener('click', async () => {
+    const email = $('manualEmail').value.trim();
+    const em = $('manualMsg');
+    const b = $('btnManualResend');
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      em.textContent = '⚠️ E-mail inválido.';
+      em.className = 'msg error';
+      em.style.display = 'block';
+      return;
+    }
+
+    b.disabled = true;
+    b.textContent = '⏳ Enviando...';
+    try {
+      const r = await fetch('/api/auth/resend-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json();
+      em.textContent = r.ok && d.ok !== false ? '✅ Se o e-mail existir, enviaremos instruções.' : '❌ ' + (d.error || 'Erro');
+      em.className = 'msg ' + (r.ok ? 'ok' : 'error');
+      em.style.display = 'block';
+    } catch {
+      em.textContent = '❌ Erro de conexão.';
+      em.className = 'msg error';
+      em.style.display = 'block';
+    }
+    b.disabled = false;
+    b.textContent = '📧 Reenviar por e-mail';
+  });
+
+  // ═══ ANTI-CLICKJACK ═══
+  if (window.top !== window.self) {
+    try { window.top.location = window.self.location; } catch {}
+  }
+})();
+</script>
+</body>
+</html>

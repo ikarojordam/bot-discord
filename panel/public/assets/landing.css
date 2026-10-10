@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   FRIO PANEL — Landing Page CSS
+   FRIO PAINEL — Landing Page CSS
    ═══════════════════════════════════════════════════════════ */
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -444,7 +444,7 @@ body{
 }
 
 
-/* ═══ FRIO PANEL 2026 — visual refresh ═══ */
+/* ═══ FRIO PAINEL 2026 — visual refresh ═══ */
 :root{--ice:#7dd3fc;--ice-2:#38bdf8;--panel:#0b1020;--panel-line:rgba(148,163,184,.16)}
 html{scroll-behavior:smooth;scroll-padding-top:88px}
 body{background:radial-gradient(ellipse at 50% -20%,rgba(37,99,235,.16),transparent 48%),#070a12}

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// FRIO PANEL — app.js v3.1.0
+// FRIO PAINEL — app.js v3.1.0
 // + Editar meu perfil (cliente)
 // + Botão Editar em cada usuário (dev)
 // ═══════════════════════════════════════════════════════════

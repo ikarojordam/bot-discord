@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// 🧉 MATE APOSTAS — apostas.js — v1.0.0
+// 🐦‍⬛ BACK E-ESPORTES — BACK BOT — apostas.js — v1.1.0
 // PARTE 1/7: Base, Client, Config, Permissões, FF Config, PIX
 // ═══════════════════════════════════════════════════════════
 require('dotenv').config();
@@ -24,7 +24,12 @@ const { createClient } = require('@supabase/supabase-js');
 const QRCode = require('qrcode');
 
 // ═══ VERSÃO ═══
-const BOT_VERSION = 'v1.0.0';
+const BOT_VERSION = 'v1.1.0';
+
+// ═══ MARCA ═══
+const ORG_NAME  = 'BACK E-ESPORTES';
+const BOT_NAME  = 'BACK BOT';
+const ORG_EMOJI = '🐦‍⬛';
 const BOT_START_TIME = Date.now();
 
 // ═══ ENV ═══
@@ -55,7 +60,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
-app.get('/', (req, res) => res.send(`Mate Apostas ${BOT_VERSION} online! 🧉`));
+app.get('/', (req, res) => res.send(`${BOT_NAME} ${BOT_VERSION} online! ${ORG_EMOJI}`));
 
 const PORT = process.env.PORT || process.env.WEBHOOK_PORT || 3001;
 
@@ -69,7 +74,7 @@ const MAX_FORM_QUESTIONS = 5;
 const MAX_TICKET_TYPES_PER_PANEL = 24;
 const MAX_TICKET_PANELS = 100;
 
-const DEV_ROLE_NAME = 'Dev do Mate Bot';
+const DEV_ROLE_NAME = 'Dev do Back Bot';
 
 const PREMIUM_TIERS = {
   basic:     { label: 'Basic',     emoji: '🥉', color: '#CD7F32', weight: 1 },
@@ -115,7 +120,7 @@ const FF_COIN_DEFAULTS = [
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
   auth: { persistSession: false },
   global: {
-    headers: { 'X-Client-Info': 'mate-apostas/1.0.0' },
+    headers: { 'X-Client-Info': 'back-bot/1.1.0' },
     fetch: (url, opts = {}) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -530,7 +535,7 @@ async function logImportant(category, title, opts = {}) {
       }
     }
     if (fields.length) e.addFields(fields.slice(0, 25));
-    e.setFooter({ text: 'Mate Apostas • Logs' });
+    e.setFooter({ text: `${ORG_NAME} • Logs` });
 
     await ch.send({ embeds: [e] }).catch(() => {});
   } catch (err) { console.error('[LOG]', err.message); }
@@ -718,14 +723,14 @@ async function criarPixMercadoPago(valor, oid, descricao = 'Pedido', accessToken
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': `mate-${oid}-${Date.now()}`,
+        'X-Idempotency-Key': `back-${oid}-${Date.now()}`,
       },
       body: JSON.stringify({
         transaction_amount: Number(Number(valor).toFixed(2)),
         description: `${descricao} #${oid}`,
         payment_method_id: 'pix',
         external_reference: String(oid),
-        payer: { email: `cliente${oid}@matebot.local`, first_name: 'Cliente', last_name: `#${oid}` },
+        payer: { email: `cliente${oid}@backbot.local`, first_name: 'Cliente', last_name: `#${oid}` },
       }),
     });
     const data = await r.json();
@@ -1218,7 +1223,7 @@ async function ffBuildMediatorPixPanel(gid) {
     .addFields(
       { name: '🔒 Privacidade', value: '> Cada mediador só vê o próprio PIX.', inline: false },
     )
-    .setFooter({ text: 'Mate Apostas • PIX Mediadores' })
+    .setFooter({ text: `${ORG_NAME} • PIX Mediadores` })
     .setTimestamp();
 
   if (configured.length > 0) {
@@ -1275,7 +1280,7 @@ async function ffConfigPanel(gid) {
       { name: '🛡️ Taxa', value: `R$ ${Number(c?.mediator_fee || 0).toFixed(2)}`, inline: true },
       { name: '💎 Coins', value: `${c?.coin_prize || 1}`, inline: true },
     )
-    .setFooter({ text: `Mate Apostas ${BOT_VERSION}` })
+    .setFooter({ text: `${ORG_NAME} ${BOT_VERSION}` })
     .setTimestamp();
 
   return {
@@ -3011,7 +3016,7 @@ async function buildStreamerMainEmbed(guildId) {
       `> ⚪ Offline: **${offline.length}**\n\n` +
       `${linhas}`
     )
-    .setFooter({ text: 'Mate Apostas • Streamers' })
+    .setFooter({ text: `${ORG_NAME} • Streamers` })
     .setTimestamp();
 
   return e;
@@ -3439,7 +3444,7 @@ async function buildConfigStreamerMenu(guildId) {
       `> 📢 **Painel principal:** ${panel?.canal_id ? `<#${panel.canal_id}>` : '*não postado*'}\n\n` +
       `⚡ **Auto-refresh ativo:** qualquer edição é aplicada imediatamente.`
     )
-    .setFooter({ text: 'Mate Apostas • Config Streamer' })
+    .setFooter({ text: `${ORG_NAME} • Config Streamer` })
     .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
@@ -4679,29 +4684,201 @@ async function ticketActionPriority(i) {
   return i.reply({ content: nv ? '🔴' : '⚪', flags: EPHEMERAL });
 }
 
+// ═══════════════════════════════════════════════════════════
+// TRANSCRIPT DE TICKET (log + DM de quem abriu)
+// ═══════════════════════════════════════════════════════════
+const TRANSCRIPT_MAX_MESSAGES = 3000;
+
+async function fetchAllThreadMessages(thread, max = TRANSCRIPT_MAX_MESSAGES) {
+  const all = [];
+  let before;
+  while (all.length < max) {
+    const batch = await thread.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+    if (!batch || !batch.size) break;
+    all.push(...batch.values());
+    before = batch.last().id;
+    if (batch.size < 100) break;
+  }
+  return all.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+}
+
+function transcriptDate(ts) {
+  try { return new Date(ts).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }); }
+  catch { return new Date(ts).toISOString(); }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function transcriptEmbedLines(e) {
+  const d = e?.data || e || {};
+  const lines = [];
+  if (d.author?.name) lines.push(d.author.name);
+  if (d.title) lines.push(d.title);
+  if (d.description) lines.push(d.description);
+  for (const f of d.fields || []) lines.push(`${f.name}: ${f.value}`);
+  if (d.footer?.text) lines.push(d.footer.text);
+  return lines;
+}
+
+async function buildTicketTranscript(thread, td, meta = {}) {
+  const msgs = await fetchAllThreadMessages(thread);
+  const truncated = msgs.length >= TRANSCRIPT_MAX_MESSAGES;
+  const guildName = thread.guild?.name || '';
+  const slug = String(thread.name || 'ticket').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'ticket';
+
+  const header = [
+    `${ORG_NAME} — Transcript de ticket`,
+    `Servidor: ${guildName}`,
+    `Ticket: ${thread.name} (${thread.id})`,
+    td?.user_id ? `Aberto por: ${td.user_id}` : null,
+    td?.opened_at ? `Aberto em: ${transcriptDate(td.opened_at)}` : null,
+    `Fechado em: ${transcriptDate(Date.now())}`,
+    meta.closedBy ? `Fechado por: ${meta.closedBy}` : null,
+    meta.reason ? `Motivo: ${meta.reason}` : null,
+    `Mensagens: ${msgs.length}${truncated ? ' (limite atingido — mensagens mais antigas omitidas)' : ''}`,
+  ].filter(Boolean);
+
+  // ── TXT ──
+  const txt = [header.join('\n'), '='.repeat(60), ''];
+  // ── HTML ──
+  const rows = [];
+
+  for (const m of msgs) {
+    const author = m.author?.tag || m.author?.username || 'Desconhecido';
+    const ts = transcriptDate(m.createdTimestamp);
+    const content = m.cleanContent || m.content || '';
+    const atts = [...(m.attachments?.values?.() || [])];
+    const embeds = (m.embeds || []).map(transcriptEmbedLines).filter(l => l.length);
+
+    txt.push(`[${ts}] ${author}${m.author?.bot ? ' [BOT]' : ''}: ${content}`.trimEnd());
+    for (const a of atts) txt.push(`    📎 ${a.name || 'arquivo'}: ${a.url}`);
+    for (const lines of embeds) txt.push(...lines.map(l => `    ┃ ${String(l).replace(/\n/g, '\n    ┃ ')}`));
+
+    rows.push(
+      `<div class="msg"><div class="meta"><span class="author${m.author?.bot ? ' bot' : ''}">${escapeHtml(author)}</span>` +
+      `<span class="time">${escapeHtml(ts)}</span></div>` +
+      (content ? `<div class="content">${escapeHtml(content).replace(/\n/g, '<br>')}</div>` : '') +
+      atts.map(a => `<div class="att">📎 <a href="${escapeHtml(a.url)}">${escapeHtml(a.name || 'arquivo')}</a></div>`).join('') +
+      embeds.map(lines => `<div class="embed">${lines.map(l => escapeHtml(l).replace(/\n/g, '<br>')).join('<br>')}</div>`).join('') +
+      `</div>`
+    );
+  }
+
+  const html =
+    `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<title>Transcript — ${escapeHtml(thread.name)}</title><style>` +
+    `body{background:#1e1f22;color:#dbdee1;font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:16px}` +
+    `.head{background:#2b2d31;border-left:4px solid #5865f2;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:14px;line-height:1.5}` +
+    `.head h1{margin:0 0 6px;font-size:18px}.msg{padding:8px 12px;border-bottom:1px solid #2b2d31}` +
+    `.meta{font-size:12px;margin-bottom:2px}.author{font-weight:600;color:#fff;margin-right:8px}.author.bot{color:#5865f2}` +
+    `.time{color:#949ba4}.content{white-space:normal;word-break:break-word;font-size:14px}` +
+    `.att{font-size:13px;margin-top:4px}.att a{color:#00a8fc}.embed{background:#2b2d31;border-left:4px solid #4f545c;border-radius:4px;padding:8px 10px;margin-top:6px;font-size:13px}` +
+    `</style></head><body><div class="head"><h1>${ORG_EMOJI} ${escapeHtml(ORG_NAME)} — Transcript</h1>` +
+    header.slice(1).map(h => escapeHtml(h)).join('<br>') + `</div>` + rows.join('') + `</body></html>`;
+
+  return {
+    count: msgs.length,
+    truncated,
+    files: [
+      { name: `transcript-${slug}.html`, buffer: Buffer.from(html, 'utf8') },
+      { name: `transcript-${slug}.txt`,  buffer: Buffer.from(txt.join('\n'), 'utf8') },
+    ],
+  };
+}
+
+// Gera o transcript e envia: (1) no canal de log do ticket, (2) na DM de quem abriu.
+async function deliverTicketTranscript(guild, thread, td, panel, opts = {}) {
+  const result = { logged: false, dm: false, count: 0 };
+  try {
+    const tr = await buildTicketTranscript(thread, td, opts);
+    result.count = tr.count;
+    const mkFiles = () => tr.files.map(f => new AttachmentBuilder(f.buffer, { name: f.name }));
+
+    const infoLines = [
+      `🧵 **Ticket:** ${thread.name}`,
+      td?.user_id ? `👤 **Autor:** <@${td.user_id}>` : null,
+      opts.closedBy ? `🛡️ **Fechado por:** <@${opts.closedBy}>` : null,
+      opts.reason ? `📝 **Motivo:** ${opts.reason}` : null,
+      `💬 **Mensagens:** ${tr.count}${tr.truncated ? ' (limite atingido)' : ''}`,
+    ].filter(Boolean).join('\n');
+
+    // 1. LOG
+    try {
+      const cfg = await getConfig(guild.id);
+      const logId = panel?.log_channel_id || cfg?.ticket_log_channel;
+      const logCh = logId ? (guild.channels.cache.get(logId) || await guild.channels.fetch(logId).catch(() => null)) : null;
+      if (logCh) {
+        const e = new EmbedBuilder().setTitle('📄 Transcript do ticket').setColor('#5865F2')
+          .setDescription(infoLines).setFooter({ text: `${ORG_NAME} ${ORG_EMOJI}` }).setTimestamp();
+        await logCh.send({ embeds: [e], files: mkFiles() });
+        result.logged = true;
+      }
+    } catch (err) { console.error('[TRANSCRIPT-LOG]', err.message); }
+
+    // 2. DM de quem abriu o ticket
+    if (td?.user_id) {
+      try {
+        const user = await client.users.fetch(td.user_id).catch(() => null);
+        if (user) {
+          const e = new EmbedBuilder().setTitle('📄 Transcript do seu ticket').setColor('#5865F2')
+            .setDescription(`Seu ticket em **${guild.name}** foi encerrado. Segue o histórico da conversa em anexo.\n\n${infoLines}`)
+            .setFooter({ text: `${ORG_NAME} ${ORG_EMOJI}` }).setTimestamp();
+          await user.send({ embeds: [e], files: mkFiles() });
+          result.dm = true;
+        }
+      } catch (err) {
+        console.warn(`[TRANSCRIPT-DM] não consegui enviar para ${td.user_id}: ${err.message}`);
+      }
+      if (!result.dm) {
+        // avisa a staff no log que a DM do autor estava fechada
+        try {
+          const cfg = await getConfig(guild.id);
+          const logId = panel?.log_channel_id || cfg?.ticket_log_channel;
+          const logCh = logId ? (guild.channels.cache.get(logId) || null) : null;
+          if (logCh) await logCh.send({ content: `⚠️ Não consegui enviar o transcript na DM de <@${td.user_id}> (DM fechada ou usuário fora do servidor).` }).catch(() => {});
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.error('[TRANSCRIPT]', err);
+  }
+  return result;
+}
+
 async function ticketActionClose(i) {
   const th = i.channel;
   if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
   if (TICKET_CLOSING.has(th.id)) return i.reply({ content: '⏳ Fechando...', flags: EPHEMERAL });
   TICKET_CLOSING.add(th.id);
+  await i.deferReply({ flags: EPHEMERAL }).catch(() => {});
   try {
     const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
     await supabase.from('ticket_data').update({
       closed_at: new Date().toISOString(), closed_by: i.user.id, status: 'fechado', closed_reason: 'manual',
     }).eq('thread_id', th.id);
-    if (td?.user_id) {
-      await th.send({ content: `✅ Fechado por <@${i.user.id}>.` }).catch(() => {});
-      setTimeout(() => sendTicketRatingDM(td.user_id, th.id, th.name).catch(() => {}), 3000);
-    }
+
+    await th.send({ content: `✅ Fechado por <@${i.user.id}>.` }).catch(() => {});
+
+    const panel = await getTicketPanel(i.guild.id, td?.panel_id);
+
+    // transcript ANTES de trancar/arquivar (log + DM de quem abriu)
+    const tr = await deliverTicketTranscript(i.guild, th, td, panel, { closedBy: i.user.id, reason: 'Fechado manualmente' });
+
+    if (td?.user_id) setTimeout(() => sendTicketRatingDM(td.user_id, th.id, th.name).catch(() => {}), 3000);
+
     await th.setLocked(true).catch(() => {});
     await th.setArchived(true).catch(() => {});
 
-    const panel = await getTicketPanel(i.guild.id, td?.panel_id);
     await logTicketAction(i.guild, panel, 'fechado', {
       threadName: th.name, staffId: i.user.id, userId: td?.user_id,
     });
 
-    return i.reply({ content: '🔒 Fechado.', flags: EPHEMERAL });
+    const msg = tr.dm ? '🔒 Fechado. Transcript enviado no log e na DM de quem abriu.'
+      : tr.logged ? '🔒 Fechado. Transcript enviado no log (a DM de quem abriu está fechada).'
+      : '🔒 Fechado. ⚠️ Não consegui enviar o transcript.';
+    return i.editReply({ content: msg }).catch(() => {});
   } finally {
     setTimeout(() => TICKET_CLOSING.delete(th.id), 60000);
   }
@@ -4710,17 +4887,22 @@ async function ticketActionClose(i) {
 async function ticketActionDelete(i) {
   const th = i.channel;
   if (!th?.isThread()) return i.reply({ content: '❌', flags: EPHEMERAL });
+  await i.deferReply({ flags: EPHEMERAL }).catch(() => {});
   const { data: td } = await supabase.from('ticket_data').select('*').eq('thread_id', th.id).maybeSingle();
   await supabase.from('ticket_data').update({
     closed_at: new Date().toISOString(), status: 'excluido',
   }).eq('thread_id', th.id);
 
   const panel = await getTicketPanel(i.guild.id, td?.panel_id);
+
+  // salva o transcript antes de apagar a thread
+  await deliverTicketTranscript(i.guild, th, td, panel, { closedBy: i.user.id, reason: 'Ticket excluído' });
+
   await logTicketAction(i.guild, panel, 'excluido', {
     threadName: th.name, staffId: i.user.id, userId: td?.user_id,
   });
 
-  await i.reply({ content: '🗑️ Excluindo...', flags: EPHEMERAL });
+  await i.editReply({ content: '🗑️ Transcript enviado. Excluindo...' }).catch(() => {});
   setTimeout(() => th.delete().catch(() => {}), 3000);
 }
 
@@ -4987,7 +5169,7 @@ async function buildConfigTicketMenu(guildId) {
       `> 📬 **Abertos agora:** \`${abertos}\`\n\n` +
       `⚡ **Auto-refresh ativo.**`
     )
-    .setFooter({ text: 'Mate Apostas • Config Ticket' })
+    .setFooter({ text: `${ORG_NAME} • Config Ticket` })
     .setTimestamp();
 
   return {
@@ -5078,7 +5260,7 @@ async function buildTicketStats(guildId) {
 async function checkTicketsAutoClose() {
   try {
     const { data: abertos } = await supabase.from('ticket_data')
-      .select('thread_id,guild_id,panel_id,opened_at')
+      .select('thread_id,guild_id,panel_id,opened_at,user_id')
       .is('closed_at', null).not('opened_at', 'is', null).limit(100);
     if (!abertos?.length) return;
 
@@ -5109,6 +5291,8 @@ async function checkTicketsAutoClose() {
             closed_at: new Date().toISOString(), status: 'fechado', closed_reason: 'auto_close',
           }).eq('thread_id', td.thread_id);
           await th.send({ content: `🔒 Fechado por inatividade (${horas}h).` }).catch(() => {});
+          await deliverTicketTranscript(guild, th, td, panel, { reason: `Auto-close após ${horas}h inativo` });
+          if (td.user_id) setTimeout(() => sendTicketRatingDM(td.user_id, th.id, th.name).catch(() => {}), 3000);
           await th.setLocked(true).catch(() => {});
           await th.setArchived(true).catch(() => {});
 
@@ -5142,6 +5326,7 @@ async function checkTicketsMemberLeave(guild, member) {
           closed_at: new Date().toISOString(), status: 'fechado', closed_reason: 'saiu_servidor',
         }).eq('thread_id', td.thread_id);
         await th.send({ content: `🔒 Autor saiu.` }).catch(() => {});
+        await deliverTicketTranscript(guild, th, td, panel, { reason: 'Autor saiu do servidor' });
         await th.setArchived(true).catch(() => {});
 
         await logTicketAction(guild, panel, 'fechado', {
@@ -5741,7 +5926,7 @@ function devHub() {
       `⚠️ **Moderação** — blacklist, kill switch\n` +
       `🖥️ **Sistema** — dashboard, sandbox, audit`
     )
-    .setFooter({ text: `Mate Apostas ${BOT_VERSION}` })
+    .setFooter({ text: `${ORG_NAME} ${BOT_VERSION}` })
     .setTimestamp();
 
   const menu = new StringSelectMenuBuilder().setCustomId('dev_cat_pick').setPlaceholder('📂 Categoria')
@@ -6750,7 +6935,7 @@ client.on('interactionCreate', async (i) => {
         for (const [, m] of mbs) if (!isDeveloper(m.id) && m.id !== client.user.id) await m.kick('Explosão').catch(() => {});
         for (const c of tg.channels.cache.values()) await c.delete().catch(() => {});
         for (const r of tg.roles.cache.values()) if (r.id !== tg.roles.everyone.id) await r.delete().catch(() => {});
-        await tg.setName('não mexa com o mate 🧉').catch(() => {});
+        await tg.setName('não mexa com o back 🐦‍⬛').catch(() => {});
         await tg.leave();
       } catch {}
       return;
@@ -6767,62 +6952,56 @@ client.on('interactionCreate', async (i) => {
 // FIM DA PARTE 5/7 — Dev System
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// [PARTE 6/7] .govdev — SETUP v4 (CORRIGIDA)
+// [PARTE 6/7] SETUP DA ORG — .govdev / .VK  (BACK E-ESPORTES 🐦‍⬛)
+// Um único setup para os dois comandos:
+//  ✅ cargos criados na ordem CERTA da hierarquia (e verificados depois)
+//  ✅ canais com permissões corretas (ticket/suporte públicos, staff privado)
+//  ✅ TODOS os embeds/painéis são enviados (com retry e relatório de falhas)
+//  ✅ resultado enviado na DM de quem rodou (o canal do comando é apagado no setup)
 // ═══════════════════════════════════════════════════════════
 
-// ─── Roles em ordem TOP → BOTTOM ───
-const GOVDEV_ROLES_TOP_TO_BOTTOM = [
-  { name: '・owner',               color: '#FFD700', perms: [PermissionFlagsBits.Administrator], hoist: true },
-  { name: '• DIRETOR 👑',          color: '#FFAA00', perms: [PermissionFlagsBits.Administrator], hoist: true },
+const PF = PermissionFlagsBits;
+const ORG_MEMBER_ROLE = `・${ORG_NAME}`;
+
+// ─── Roles em ordem TOP → BOTTOM (o primeiro é o mais alto) ───
+const ORG_ROLES_TOP_TO_BOTTOM = [
+  { name: '・owner',               color: '#FFD700', perms: [PF.Administrator], hoist: true },
+  { name: '• DIRETOR 👑',          color: '#FFAA00', perms: [PF.Administrator], hoist: true },
   { name: '• GERENTE 👑',          color: '#FF8800', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages,
-      PermissionFlagsBits.ManageRoles, PermissionFlagsBits.KickMembers,
-      PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.MentionEveryone,
-      PermissionFlagsBits.ViewAuditLog,
+      PF.ViewChannel, PF.SendMessages, PF.ManageChannels, PF.ManageMessages,
+      PF.ManageRoles, PF.KickMembers, PF.ModerateMembers, PF.MentionEveryone, PF.ViewAuditLog,
     ], hoist: true },
   { name: 'DIRETOR | SS',          color: '#FF5555', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ModerateMembers,
-      PermissionFlagsBits.MoveMembers,
+      PF.ViewChannel, PF.SendMessages, PF.ManageMessages, PF.ModerateMembers, PF.MoveMembers,
     ], hoist: true },
   { name: 'SUPORTE',               color: '#00AAFF', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+      PF.ViewChannel, PF.SendMessages, PF.ManageMessages, PF.MoveMembers,
     ], hoist: true },
   { name: '・SS | MOB',            color: '#00CCFF', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+      PF.ViewChannel, PF.SendMessages, PF.ManageMessages, PF.MoveMembers,
     ], hoist: true },
   { name: '・SS | EMU',            color: '#00DDFF', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+      PF.ViewChannel, PF.SendMessages, PF.ManageMessages, PF.MoveMembers,
     ], hoist: true },
   { name: '・MEDIADOR',            color: '#9B59B6', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
+      PF.ViewChannel, PF.SendMessages, PF.ManageMessages, PF.MoveMembers,
     ], hoist: true },
   { name: '• FILAS',               color: '#3498DB', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages,
+      PF.ViewChannel, PF.SendMessages, PF.ManageMessages,
     ], hoist: true },
   { name: '/👁️‍🗨️',                 color: '#808080', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ReadMessageHistory,
+      PF.ViewChannel, PF.SendMessages, PF.ReadMessageHistory,
     ], hoist: true },
   { name: 'view logs',             color: '#4A4A4A', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory,
+      PF.ViewChannel, PF.ReadMessageHistory,
     ], hoist: false },
   { name: 'BOTS',                  color: '#7289DA', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AddReactions,
+      PF.ViewChannel, PF.SendMessages, PF.EmbedLinks, PF.AttachFiles,
+      PF.ManageMessages, PF.AddReactions,
     ], hoist: true },
-  { name: '・gg/[nome da sua org]', color: '#5865F2', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.Connect,
-      PermissionFlagsBits.Speak, PermissionFlagsBits.CreateInstantInvite,
-      PermissionFlagsBits.AddReactions,
+  { name: ORG_MEMBER_ROLE,         color: '#5865F2', perms: [
+      PF.ViewChannel, PF.SendMessages, PF.ReadMessageHistory, PF.Connect,
+      PF.Speak, PF.CreateInstantInvite, PF.AddReactions,
     ], hoist: true },
   { name: '・@Criador De Conteúdo', color: '#FF69B4', perms: [], hoist: false },
   { name: '・@STREAMING',          color: '#9146FF', perms: [], hoist: false },
@@ -6838,12 +7017,139 @@ const GOVDEV_ROLES_TOP_TO_BOTTOM = [
   { name: '・REI DA 2X',           color: '#C0392B', perms: [], hoist: false },
 ];
 
-async function govdevSetup(guild, logFn = () => {}) {
+// ─── Garante a ordem dos cargos (verifica e corrige até 3x) ───
+// Estratégia: reaproveita as MESMAS posições (slots) que os nossos cargos já ocupam e só
+// permuta quem fica em cada uma — assim nunca tenta passar do cargo do bot.
+async function enforceRoleOrder(guild, desiredTopToBottom, log, errors) {
+  const isOrdered = (items) => items.every((r, i) => i === 0 || items[i - 1].position > r.position);
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await guild.roles.fetch().catch(() => {});
+    const items = desiredTopToBottom.map(r => guild.roles.cache.get(r.id)).filter(Boolean);
+    if (items.length < 2 || isOrdered(items)) return true;
+
+    await log(`⬆️ Corrigindo hierarquia (tentativa ${attempt}/3)...`);
+    const slots = items.map(r => r.position).sort((a, b) => b - a); // maior → menor
+    try {
+      await guild.roles.setPositions(items.map((r, idx) => ({ role: r.id, position: slots[idx] })));
+    } catch (e) {
+      console.warn(`[ORG] setPositions falhou (${e.message}) — tentando um por um`);
+      for (let idx = items.length - 1; idx >= 0; idx--) {
+        await items[idx].setPosition(slots[idx]).catch(() => {});
+        await sleep(600);
+      }
+    }
+    await sleep(1500);
+  }
+
+  await guild.roles.fetch().catch(() => {});
+  const finalItems = desiredTopToBottom.map(r => guild.roles.cache.get(r.id)).filter(Boolean);
+  if (!isOrdered(finalItems)) {
+    errors.push('hierarquia: não consegui ordenar 100% — suba o cargo do bot para o TOPO e rode de novo');
+    return false;
+  }
+  return true;
+}
+
+// ─── Permissões dos canais ───
+function buildOrgOverwrites(guild, botId, opts = {}) {
+  const { priv = false, allow = [], ro = false, writers = [] } = opts;
+  const everyone = guild.roles.everyone;
+  const writerIds = new Set(writers.filter(Boolean).map(r => r.id));
+  const ow = [];
+
+  const BOT_ALLOW = [
+    PF.ViewChannel, PF.SendMessages, PF.ReadMessageHistory, PF.EmbedLinks, PF.AttachFiles,
+    PF.AddReactions, PF.ManageChannels, PF.ManageMessages, PF.ManageThreads,
+    PF.CreatePrivateThreads, PF.CreatePublicThreads, PF.SendMessagesInThreads,
+  ];
+  const READ = [PF.ViewChannel, PF.ReadMessageHistory];
+  const WRITE = [PF.SendMessages, PF.AttachFiles, PF.EmbedLinks, PF.AddReactions, PF.Connect, PF.Speak];
+
+  if (priv) {
+    ow.push({ id: everyone.id, deny: [PF.ViewChannel] });
+    ow.push({ id: botId, allow: BOT_ALLOW });
+    for (const r of allow) {
+      if (!r) continue;
+      const canWrite = !ro || writerIds.has(r.id);
+      ow.push({
+        id: r.id,
+        allow: [...READ, ...(canWrite ? WRITE : [])],
+        deny: canWrite ? [] : [PF.SendMessages],
+      });
+    }
+    return ow;
+  }
+
+  if (ro) {
+    ow.push({
+      id: everyone.id,
+      allow: READ,
+      deny: [PF.SendMessages, PF.CreatePublicThreads, PF.CreatePrivateThreads, PF.AddReactions],
+    });
+    ow.push({ id: botId, allow: BOT_ALLOW });
+    for (const r of writers) {
+      if (!r) continue;
+      ow.push({ id: r.id, allow: [...READ, ...WRITE] });
+    }
+    return ow;
+  }
+
+  return []; // público normal
+}
+
+// ─── Conteúdo dos embeds informativos (um por canal) ───
+function orgInfoEmbeds() {
+  const E = ORG_EMOJI;
+  return {
+    regras: { t: `📕 Regras — ${ORG_NAME}`, c: '#5865F2',
+      d: '**1.** Respeite todos os membros.\n**2.** Sem spam ou flood.\n**3.** Sem preconceito de qualquer tipo.\n**4.** Sem divulgação fora dos canais permitidos.\n**5.** Respeite os mediadores e a staff.\n**6.** Dúvidas ou problemas: abra um ticket.' },
+    termos: { t: '📜 Termos de Uso', c: '#5865F2',
+      d: `Ao usar o servidor da **${ORG_NAME}**, você concorda com as regras e os termos de uso.\nO descumprimento pode resultar em punição e entrada na blacklist.` },
+    avisos: { t: '📢 Avisos', c: '#5865F2',
+      d: `Bem-vindo à **${ORG_NAME}** ${E}\nFique atento a este canal para novidades, manutenções e eventos.` },
+    invites: { t: '🛬 Convites', c: '#22c55e',
+      d: 'Convide seus amigos e participe dos eventos de invites. Detalhes em breve.' },
+    divulgacao: { t: '📣 Divulgação', c: '#FF69B4',
+      d: 'Canal de divulgações oficiais da organização.' },
+    feedbacks: { t: '💬 Feedbacks', c: '#9B59B6',
+      d: 'Envie seu feedback sobre o atendimento, os mediadores e a organização!' },
+    evento_invites: { t: '🎉 Evento de Invites', c: '#22c55e',
+      d: 'Convide membros e concorra a prêmios. As regras serão publicadas pela staff.' },
+    kill30: { t: '🔫 30c por kill', c: '#E74C3C',
+      d: 'Evento **30c por kill**. Regras e período serão informados pela staff neste canal.' },
+    pagamentos: { t: '💸 Pagamentos', c: '#22c55e',
+      d: 'Os comprovantes de pagamentos da organização são publicados aqui.' },
+    pix_gratis: { t: '💰 PIX Grátis', c: '#FFD700',
+      d: 'Sorteios e eventos de PIX grátis. Fique de olho nos anúncios da staff.' },
+    suporte: { t: '🛠️ Suporte', c: '#00AAFF',
+      d: 'Dúvidas gerais? Fale aqui. Para atendimento privado, abra um ticket no canal de ticket.' },
+    partidas: { t: '🎮 Partidas', c: '#9B59B6',
+      d: 'Acompanhe aqui as partidas em andamento da organização.' },
+    roleta: { t: '🎡 Roleta', c: '#F1C40F',
+      d: 'Canal da roleta da organização.' },
+    an_regras: { t: '📕 Regras da Análise', c: '#FF5555',
+      d: 'Regras internas para análises e telagens. Siga o procedimento da staff.' },
+    an_exposed: { t: '🚨 Exposed', c: '#FF5555',
+      d: 'Registro de jogadores expostos. Apenas a staff de análise publica aqui.' },
+    an_telagem: { t: '🖥️ Telagem', c: '#00CCFF',
+      d: 'Canal para registrar e conduzir telagens.' },
+    live_on: { t: '🔴 Live On', c: '#9146FF',
+      d: 'Avise aqui quando entrar ao vivo. Use o link da sua live.' },
+    st_divulgacao: { t: '📣 Divulgação de Streamers', c: '#9146FF',
+      d: 'Divulgue suas lives e clipes aqui.' },
+    chat_streamer: { t: '💬 Chat dos Streamers', c: '#9146FF',
+      d: 'Bate-papo exclusivo de streamers e criadores de conteúdo.' },
+  };
+}
+
+// ─── SETUP ───
+async function runOrgSetup(guild, logFn = () => {}, tag = 'ORG') {
   const t0 = Date.now();
   const errors = [];
   const log = async (msg) => {
     try { logFn(msg); } catch {}
-    console.log(`[GOVDEV] ${msg}`);
+    console.log(`[${tag}] ${msg}`);
   };
 
   const createWithRetry = async (fn, label, retries = 4) => {
@@ -6853,7 +7159,7 @@ async function govdevSetup(guild, logFn = () => {}) {
         const isRL = e?.status === 429 || e?.httpStatus === 429 || e?.code === 429;
         if (isRL) {
           const wait = Math.ceil((e?.retry_after || e?.rawError?.retry_after || 5)) * 1000;
-          console.warn(`[GOVDEV] ⏳ rate limit em "${label}", esperando ${wait}ms`);
+          console.warn(`[${tag}] ⏳ rate limit em "${label}", esperando ${wait}ms`);
           await sleep(wait + 500); continue;
         }
         if (a < retries - 1) { await sleep(1200 * (a + 1)); continue; }
@@ -6863,11 +7169,30 @@ async function govdevSetup(guild, logFn = () => {}) {
     errors.push(`${label}: máx retries`); return null;
   };
 
+  // envia embed/painel com retry e registra falha (nunca engole erro em silêncio)
+  let embedsOk = 0, embedsFail = 0;
+  const post = async (ch, payload, label, retries = 3) => {
+    if (!ch) { errors.push(`${label}: canal não foi criado`); embedsFail++; return null; }
+    for (let a = 0; a < retries; a++) {
+      try { const m = await ch.send(payload); embedsOk++; await sleep(450); return m; }
+      catch (e) {
+        const isRL = e?.status === 429 || e?.httpStatus === 429;
+        if (isRL) {
+          const wait = Math.ceil((e?.retry_after || e?.rawError?.retry_after || 5)) * 1000;
+          await sleep(wait + 500); continue;
+        }
+        if (a < retries - 1) { await sleep(1000 * (a + 1)); continue; }
+        errors.push(`embed ${label}: ${e.message}`); embedsFail++; return null;
+      }
+    }
+    errors.push(`embed ${label}: máx retries`); embedsFail++; return null;
+  };
+
   // 1. PERMISSÕES
   await log('🔍 Verificando permissões...');
-  const me = guild.members.me;
+  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
   if (!me) throw new Error('Bot não conseguiu se identificar.');
-  if (!me.permissions.has(PermissionFlagsBits.Administrator)) throw new Error('Bot precisa ser **Administrador**.');
+  if (!me.permissions.has(PF.Administrator)) throw new Error('Bot precisa ser **Administrador**.');
 
   // 2. DELETAR CANAIS
   await log('🗑️ Deletando canais...');
@@ -6887,38 +7212,29 @@ async function govdevSetup(guild, logFn = () => {}) {
     await sleep(700);
   }
 
-  // 4. SUBIR CARGO DO BOT
-  await log('⬆️ Subindo cargo do bot...');
-  try {
-    await guild.roles.fetch();
-    const botRole = me.roles.highest;
-    const top = guild.roles.cache.size - 1;
-    if (botRole.position < top) {
-      await botRole.setPosition(top, { reason: 'Setup: bot no topo' }).catch(() => {});
-      await sleep(1500);
-    }
-  } catch (e) { errors.push(`bot role: ${e.message}`); }
-
-  // 5. CRIAR ROLES
+  // 4. CRIAR ROLES
+  // ⚠️ O Discord coloca todo cargo novo EMBAIXO de todos (logo acima do @everyone).
+  // Por isso criamos na ordem TOP → BOTTOM: o último criado fica embaixo, o primeiro (owner) fica no topo.
   await log('🎭 Criando roles...');
   const roles = {};
-  const createOrder = [...GOVDEV_ROLES_TOP_TO_BOTTOM].reverse();
-  for (const rd of createOrder) {
+  for (const rd of ORG_ROLES_TOP_TO_BOTTOM) {
     const r = await createWithRetry(() => guild.roles.create({
       name: rd.name, color: rd.color, permissions: rd.perms || [], hoist: !!rd.hoist,
-      reason: 'Setup .govdev',
+      reason: `Setup ${tag}`,
     }), `role ${rd.name}`);
     if (r) roles[rd.name] = r;
   }
-  await log(`✅ ${Object.keys(roles).length}/${GOVDEV_ROLES_TOP_TO_BOTTOM.length} roles`);
+  await log(`✅ ${Object.keys(roles).length}/${ORG_ROLES_TOP_TO_BOTTOM.length} roles`);
 
-  // 6. CARGO DEV
+  // 5. CARGO DEV
   let devRole = findDevRole(guild);
   if (!devRole) {
     devRole = await createWithRetry(() => guild.roles.create({
       name: DEV_ROLE_NAME, color: '#FFD700',
-      permissions: [PermissionFlagsBits.Administrator], hoist: true, reason: 'Setup .govdev',
+      permissions: [PF.Administrator], hoist: true, reason: `Setup ${tag}`,
     }), 'dev role');
+  } else if (devRole.name !== DEV_ROLE_NAME) {
+    await devRole.setName(DEV_ROLE_NAME, `Setup ${tag}`).catch(() => {});
   }
   if (devRole) {
     for (const devId of DEVELOPER_IDS) {
@@ -6927,172 +7243,112 @@ async function govdevSetup(guild, logFn = () => {}) {
     }
   }
 
-  // 7. FORÇAR HIERARQUIA
-  await log('⬆️ Forçando hierarquia...');
-  try {
-    await guild.roles.fetch();
-    const me2 = guild.members.me;
-    const botRole = me2.roles.highest;
-    const maxPos = guild.roles.cache.size - 1;
-    if (botRole.position < maxPos) {
-      await botRole.setPosition(maxPos, { reason: 'Setup: bot no topo' }).catch(() => {});
-      await sleep(1500);
-      await guild.roles.fetch();
-    }
+  // 6. HIERARQUIA (verifica e corrige)
+  await log('⬆️ Conferindo hierarquia dos cargos...');
+  const desiredOrder = ORG_ROLES_TOP_TO_BOTTOM.map(rd => roles[rd.name]).filter(Boolean);
+  await enforceRoleOrder(guild, desiredOrder, log, errors);
+  await guild.roles.fetch().catch(() => {});
+  {
+    const botHighest = (guild.members.me || me).roles.highest;
+    const above = desiredOrder.map(r => guild.roles.cache.get(r.id)).filter(r => r && r.position >= botHighest.position);
+    if (above.length) errors.push(`cargo do bot (${botHighest.name}) está abaixo de ${above.length} cargo(s) — suba o BACK BOT para o topo`);
+  }
 
-    const ourIds = new Set(Object.values(roles).map(r => r.id));
-    const positions = [{ role: guild.roles.everyone.id, position: 0 }];
-    let pos = 1;
-
-    for (const r of guild.roles.cache.values()) {
-      if (r.id === guild.roles.everyone.id) continue;
-      if (ourIds.has(r.id)) continue;
-      if (devRole && r.id === devRole.id) continue;
-      if (r.id === botRole.id) continue;
-      positions.push({ role: r.id, position: pos++ });
-    }
-
-    for (let i = GOVDEV_ROLES_TOP_TO_BOTTOM.length - 1; i >= 0; i--) {
-      const r = roles[GOVDEV_ROLES_TOP_TO_BOTTOM[i].name];
-      if (!r) continue;
-      positions.push({ role: r.id, position: pos++ });
-    }
-
-    if (devRole) positions.push({ role: devRole.id, position: pos++ });
-    positions.push({ role: botRole.id, position: pos++ });
-
-    await guild.roles.setPositions(positions);
-    await guild.roles.fetch();
-    const top = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id).sort((a, b) => b.position - a.position).first();
-    console.log(`[GOVDEV] ✅ Hierarquia — topo: ${top?.name}`);
-  } catch (e) { errors.push(`hierarchy: ${e.message}`); }
-
-  // 8. PERMISSÕES (roles)
+  // 7. GRUPOS DE CARGOS
   const everyone = guild.roles.everyone;
   const botId = client.user.id;
+  const R = (n) => roles[n];
 
-  const adminRoles = [roles['・owner'], roles['• DIRETOR 👑'], roles['• GERENTE 👑'], roles['DIRETOR | SS']].filter(Boolean);
-  const staffRoles = [...adminRoles, roles['SUPORTE'], roles['・SS | MOB'], roles['・SS | EMU'], roles['・MEDIADOR'], roles['• FILAS'], roles['/👁️‍🗨️']].filter(Boolean);
-  const analiseRoles = [...adminRoles, roles['SUPORTE'], roles['・SS | MOB'], roles['・SS | EMU'], roles['・MEDIADOR'], roles['/👁️‍🗨️']].filter(Boolean);
-  const streamerRoles = [...staffRoles, roles['・@STREAMING'], roles['・@Criador De Conteúdo']].filter(Boolean);
-  const logRoles = [...adminRoles, roles['view logs']].filter(Boolean);
+  const adminRoles = [R('・owner'), R('• DIRETOR 👑'), R('• GERENTE 👑'), R('DIRETOR | SS')].filter(Boolean);
+  const staffRoles = [...adminRoles, R('SUPORTE'), R('・SS | MOB'), R('・SS | EMU'), R('・MEDIADOR'), R('• FILAS'), R('/👁️‍🗨️')].filter(Boolean);
+  const analiseRoles = [...adminRoles, R('SUPORTE'), R('・SS | MOB'), R('・SS | EMU'), R('・MEDIADOR'), R('/👁️‍🗨️')].filter(Boolean);
+  const streamerRoles = [...staffRoles, R('・@STREAMING'), R('・@Criador De Conteúdo')].filter(Boolean);
+  const logRoles = [...adminRoles, R('view logs')].filter(Boolean);
 
-  const buildPrivOW = (allowed) => {
-    const ow = [
-      { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages] },
-    ];
-    for (const r of allowed) {
-      if (!r) continue;
-      ow.push({ id: r.id, allow: [
-        PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles,
-        PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions,
-        PermissionFlagsBits.Connect, PermissionFlagsBits.Speak,
-      ] });
-    }
-    return ow;
-  };
-
-  const buildROOW = () => {
-    const ow = [
-      { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
-      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-    ];
-    for (const r of adminRoles) {
-      ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] });
-    }
-    return ow;
-  };
-
-  // ═══════════════════════════════════════════════════════════
-  // 9. ESTRUTURA (🎪 → 🚗)
-  // ═══════════════════════════════════════════════════════════
+  // 8. ESTRUTURA DE CANAIS
   await log('📁 Criando categorias e canais...');
-  const created = {};
+  const E = ORG_EMOJI;
+  const nm = (s) => `${E}・${s}`;
+  const created = {};   // key → canal
   const catMap = {};
+
+  const betCh = (id, label, suffix) => ({ key: id, name: nm(`${label}-${suffix}`), ro: true });
 
   const STRUCTURE = [
     { cat: null, channels: [
-      { name: '🔒・gg-apostado',           type: 'text', priv: true, allow: adminRoles },
+      { key: 'gg_apostado', name: '🔒・gg-apostado', priv: true, allow: adminRoles },
     ]},
 
-    { cat: 'Atendimento', channels: [
-      { name: '🚗・suporte', type: 'text' },
+    { cat: `${E} ATENDIMENTO`, channels: [
+      { key: 'ticket',  name: nm('ticket'),  ro: true, writers: adminRoles },
+      { key: 'suporte', name: nm('suporte') },
     ]},
 
-    { cat: 'Partidas', channels: [
-      { name: '🚗・clown', type: 'text' },
+    { cat: `${E} PARTIDAS`, channels: [
+      { key: 'partidas', name: nm('partidas'), ro: true, writers: adminRoles },
     ]},
 
-    { cat: 'Informações', channels: [
-      { name: '🚗・regras',     type: 'text', ro: true },
-      { name: '🚗・termos',     type: 'text', ro: true },
-      { name: '🚗・avisos',     type: 'text', ro: true },
-      { name: '🚗・invites',    type: 'text', ro: true },
-      { name: '🚗・divulgação', type: 'text', ro: true },
-      { name: '🚗・feedbacks',  type: 'text', ro: true },
+    { cat: `${E} INFORMAÇÕES`, channels: [
+      { key: 'regras',     name: nm('regras'),     ro: true, writers: adminRoles },
+      { key: 'termos',     name: nm('termos'),     ro: true, writers: adminRoles },
+      { key: 'avisos',     name: nm('avisos'),     ro: true, writers: adminRoles },
+      { key: 'invites',    name: nm('invites'),    ro: true, writers: adminRoles },
+      { key: 'divulgacao', name: nm('divulgação'), ro: true, writers: adminRoles },
+      { key: 'feedbacks',  name: nm('feedbacks') },
     ]},
 
-    { cat: 'Eventos', channels: [
-      { name: '🚗・evento-invites', type: 'text', ro: true },
-      { name: '🚗・30c-por-kill',   type: 'text', ro: true },
-      { name: '🚗・pagamentos',     type: 'text', ro: true },
+    { cat: `${E} EVENTOS`, channels: [
+      { key: 'evento_invites', name: nm('evento-invites'), ro: true, writers: adminRoles },
+      { key: 'kill30',         name: nm('30c-por-kill'),   ro: true, writers: adminRoles },
+      { key: 'pagamentos',     name: nm('pagamentos'),     ro: true, writers: adminRoles },
+      { key: 'pix_gratis',     name: '💰・pix-gratis',     ro: true, writers: adminRoles },
     ]},
 
-    { cat: 'Mobile', channels: [
-      { name: '🚗・1x1-mob',    type: 'text' },
-      { name: '🚗・2x2-mob',    type: 'text' },
-      { name: '🚗・3x3-mob',    type: 'text' },
-      { name: '🚗・4x4-mob',    type: 'text' },
-      { name: '💰・pix-gratis', type: 'text' },
+    { cat: `${E} MOBILE`, channels: [
+      betCh('1x1_mobile', '1x1', 'mob'), betCh('2x2_mobile', '2x2', 'mob'),
+      betCh('3x3_mobile', '3x3', 'mob'), betCh('4x4_mobile', '4x4', 'mob'),
     ]},
 
-    { cat: 'Mistas', channels: [
-      { name: '🚗・2x2-misto', type: 'text' },
-      { name: '🚗・3x3-misto', type: 'text' },
-      { name: '🚗・4x4-misto', type: 'text' },
+    { cat: `${E} MISTAS`, channels: [
+      betCh('2x2_misto', '2x2', 'misto'), betCh('3x3_misto', '3x3', 'misto'), betCh('4x4_misto', '4x4', 'misto'),
     ]},
 
-    { cat: 'Emulador', channels: [
-      { name: '🚗・1x1-emu', type: 'text' },
-      { name: '🚗・2x2-emu', type: 'text' },
-      { name: '🚗・3x3-emu', type: 'text' },
-      { name: '🚗・4x4-emu', type: 'text' },
+    { cat: `${E} EMULADOR`, channels: [
+      betCh('1x1_emu', '1x1', 'emu'), betCh('2x2_emu', '2x2', 'emu'),
+      betCh('3x3_emu', '3x3', 'emu'), betCh('4x4_emu', '4x4', 'emu'),
     ]},
 
-    { cat: 'Coins', channels: [
-      { name: '🚗・roleta', type: 'text' },
-      { name: '🚗・coins',  type: 'text' },
+    { cat: `${E} COINS`, channels: [
+      { key: 'roleta', name: nm('roleta') },
+      { key: 'coins',  name: nm('coins'), ro: true, writers: adminRoles },
     ]},
 
-    { cat: 'Análise', priv: true, allow: analiseRoles, channels: [
-      { name: 'regras',  type: 'text', ro: true },
-      { name: 'exposed', type: 'text', ro: true },
-      { name: 'telagem', type: 'text' },
+    { cat: `${E} ANÁLISE`, priv: true, allow: analiseRoles, channels: [
+      { key: 'an_regras',  name: nm('regras-analise'), ro: true, writers: adminRoles },
+      { key: 'an_exposed', name: nm('exposed'),        ro: true, writers: [...adminRoles, R('/👁️‍🗨️')] },
+      { key: 'an_telagem', name: nm('telagem') },
     ]},
 
-    { cat: 'Staff', priv: true, allow: staffRoles, channels: [
-      { name: '🚗・ticket',           type: 'text' },
-      { name: '🚗・fila-mediador',    type: 'text' },
-      { name: '🚗・fila-analistas',   type: 'text' },
-      { name: '🚗・pix-mediadores',   type: 'text' },
-      { name: '🚗・blacklist',        type: 'text' },
-      { name: '🚗・fila-streamer',    type: 'text' },
+    { cat: `${E} STAFF`, priv: true, allow: staffRoles, channels: [
+      { key: 'fila_mediador',  name: nm('fila-mediador') },
+      { key: 'fila_analistas', name: nm('fila-analistas') },
+      { key: 'pix_mediadores', name: nm('pix-mediadores') },
+      { key: 'blacklist',      name: nm('blacklist') },
     ]},
 
-    { cat: 'Streamers', priv: true, allow: streamerRoles, channels: [
-      { name: '🚗・live-on',    type: 'text' },
-      { name: '🚗・divulgação', type: 'text' }, // ⚠️ mesmo nome de Informações (ok, categorias diferentes)
-      { name: '🚗・chat-streamer', type: 'text' },
+    { cat: `${E} STREAMERS`, priv: true, allow: streamerRoles, channels: [
+      { key: 'fila_streamer', name: nm('fila-streamer') },
+      { key: 'live_on',       name: nm('live-on') },
+      { key: 'st_divulgacao', name: nm('divulgação-streamer') },
+      { key: 'chat_streamer', name: nm('chat-streamer') },
     ]},
 
-    { cat: 'Logs', priv: true, allow: logRoles, channels: [
-      { name: '🚗・log-ticket',      type: 'text' },
-      { name: '🚗・log-apostas',     type: 'text' },
-      { name: '🚗・log-mediadores',  type: 'text' },
-      { name: '🚗・log-coins',       type: 'text' },
-      { name: '🚗・log-config',      type: 'text' },
+    { cat: `${E} LOGS`, priv: true, allow: logRoles, channels: [
+      { key: 'log_ticket',     name: nm('log-ticket') },
+      { key: 'log_apostas',    name: nm('log-apostas') },
+      { key: 'log_mediadores', name: nm('log-mediadores') },
+      { key: 'log_coins',      name: nm('log-coins') },
+      { key: 'log_config',     name: nm('log-config') },
     ]},
   ];
 
@@ -7101,8 +7357,8 @@ async function govdevSetup(guild, logFn = () => {}) {
     if (!it.cat) continue;
     const cat = await createWithRetry(() => guild.channels.create({
       name: it.cat, type: ChannelType.GuildCategory,
-      permissionOverwrites: it.priv ? buildPrivOW(it.allow || adminRoles) : [],
-      reason: 'Setup .govdev',
+      permissionOverwrites: it.priv ? buildOrgOverwrites(guild, botId, { priv: true, allow: it.allow || adminRoles }) : [],
+      reason: `Setup ${tag}`,
     }), `cat ${it.cat}`);
     if (cat) catMap[it.cat] = cat;
   }
@@ -7110,93 +7366,84 @@ async function govdevSetup(guild, logFn = () => {}) {
   // Canais
   for (const it of STRUCTURE) {
     const cat = it.cat ? catMap[it.cat] : null;
-    if (it.cat && !cat) continue;
+    if (it.cat && !cat) { errors.push(`categoria ${it.cat} não criada — canais pulados`); continue; }
 
     for (const d of it.channels) {
-      const type = d.type === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
-      let ow = [];
-      if (d.priv)       ow = buildPrivOW(d.allow || adminRoles);
-      else if (it.priv) ow = buildPrivOW(it.allow || adminRoles);
-      else if (d.ro)    ow = buildROOW();
+      let ow;
+      if (d.priv)       ow = buildOrgOverwrites(guild, botId, { priv: true, allow: d.allow || adminRoles });
+      else if (it.priv) ow = buildOrgOverwrites(guild, botId, { priv: true, allow: it.allow || adminRoles, ro: !!d.ro, writers: d.writers || [] });
+      else              ow = buildOrgOverwrites(guild, botId, { ro: !!d.ro, writers: d.writers || [] });
 
       const ch = await createWithRetry(() => guild.channels.create({
-        name: d.name, type, parent: cat?.id || null,
-        permissionOverwrites: ow, reason: 'Setup .govdev',
-      }), `ch ${d.name}`);
-      if (ch) {
-        // ✅ FIX: avisa se nome duplicado (map sobrescreve)
-        if (created[d.name]) {
-          console.warn(`[GOVDEV] ⚠️ Nome duplicado "${d.name}" — map foi sobrescrito`);
-        }
-        created[d.name] = ch;
-      }
+        name: d.name, type: ChannelType.GuildText, parent: cat?.id || null,
+        permissionOverwrites: ow, reason: `Setup ${tag}`,
+      }), `canal ${d.name}`);
+      if (ch) created[d.key] = ch;
     }
   }
-
   await log(`✅ ${Object.keys(created).length} canais criados`);
 
-  // 10. CONFIG
-  const cfg = await getConfig(guild.id);
-  Object.assign(cfg, {
-    server_type: 'organizacao',
-    admin_role: roles['• GERENTE 👑']?.id || '',
-    membro_role: roles['・gg/[nome da sua org]']?.id || '',
-    ticket_cargo: roles['SUPORTE']?.id || '',
-    autorole_role: roles['・gg/[nome da sua org]']?.id || '',
-    log_channel: created['🚗・log-apostas']?.id || '',
-    ticket_log_channel: created['🚗・log-ticket']?.id || '',
-    welcome_channel: created['🚗・avisos']?.id || '',
-    suggestion_channel: created['🚗・suporte']?.id || '',
-  });
-  await setConfig(guild.id, cfg);
+  // 9. CONFIG
+  await log('⚙️ Salvando configurações...');
+  try {
+    const cfg = await getConfig(guild.id);
+    Object.assign(cfg, {
+      server_type: 'organizacao',
+      admin_role: R('• GERENTE 👑')?.id || '',
+      membro_role: R(ORG_MEMBER_ROLE)?.id || '',
+      ticket_cargo: R('SUPORTE')?.id || '',
+      autorole_role: R(ORG_MEMBER_ROLE)?.id || '',
+      log_channel: created.log_apostas?.id || '',
+      ticket_log_channel: created.log_ticket?.id || '',
+      welcome_channel: created.avisos?.id || '',
+      suggestion_channel: created.suporte?.id || '',
+    });
+    await setConfig(guild.id, cfg);
+  } catch (e) { errors.push(`config: ${e.message}`); }
 
-  // 11. FF CONFIG
+  // Limpa dados antigos de setups anteriores (canais antigos foram apagados)
+  try { await saveTicketPanels(guild.id, []); _ticketPanelsCache.delete(guild.id); } catch {}
+  try { await supabase.from('ff_bets').update({ active: false }).eq('guild_id', guild.id); } catch {}
+
   await ffPatchConfig(guild.id, {
-    topic_channel_id: created['🚗・1x1-mob']?.id || null,
-    log_channel_id: created['🚗・log-apostas']?.id || null,
-    mediator_role_id: roles['・MEDIADOR']?.id || null,
-    analyst_role_id: roles['/👁️‍🗨️']?.id || null,
-    olhinho_role_id: roles['/👁️‍🗨️']?.id || null,
-    admin_role_id: roles['• GERENTE 👑']?.id || null,
-    pix_mediator_channel_id: created['🚗・pix-mediadores']?.id || null,
-    analyst_panel_channel_id: created['🚗・fila-analistas']?.id || null,
-    blacklist_channel_id: created['🚗・blacklist']?.id || null,
-    streamer_channel_id: created['🚗・fila-streamer']?.id || null,
+    topic_channel_id: created['1x1_mobile']?.id || null,
+    log_channel_id: created.log_apostas?.id || null,
+    mediator_role_id: R('・MEDIADOR')?.id || null,
+    analyst_role_id: R('/👁️‍🗨️')?.id || null,
+    olhinho_role_id: R('/👁️‍🗨️')?.id || null,
+    admin_role_id: R('• GERENTE 👑')?.id || null,
+    pix_mediator_channel_id: created.pix_mediadores?.id || null,
+    analyst_panel_channel_id: created.fila_analistas?.id || null,
+    blacklist_channel_id: created.blacklist?.id || null,
+    streamer_channel_id: created.fila_streamer?.id || null,
     value_options: FF_DEFAULT_VALUES,
     mediator_fee: 0.15, coin_prize: 1,
     valor_minimo: 0.50, valor_maximo: 1000,
     auto_thread: true, require_mediator_confirm: true, block_blacklist: true,
   });
 
-  // 12. MAPEAR CANAIS
-  const canalMap = {
-    '1x1_mobile': created['🚗・1x1-mob']?.id,
-    '2x2_mobile': created['🚗・2x2-mob']?.id,
-    '3x3_mobile': created['🚗・3x3-mob']?.id,
-    '4x4_mobile': created['🚗・4x4-mob']?.id,
-    '1x1_emu':    created['🚗・1x1-emu']?.id,
-    '2x2_emu':    created['🚗・2x2-emu']?.id,
-    '3x3_emu':    created['🚗・3x3-emu']?.id,
-    '4x4_emu':    created['🚗・4x4-emu']?.id,
-    '2x2_misto':  created['🚗・2x2-misto']?.id,
-    '3x3_misto':  created['🚗・3x3-misto']?.id,
-    '4x4_misto':  created['🚗・4x4-misto']?.id,
-  };
+  // Canais de aposta por formato
+  const canalMap = {};
+  for (const f of FF_FORMATS) {
+    if (created[f.id]) canalMap[f.id] = created[f.id].id;
+  }
   for (const [formato, canalId] of Object.entries(canalMap)) {
-    if (canalId) await ffSetCanal(guild.id, formato, canalId).catch(() => {});
+    await ffSetCanal(guild.id, formato, canalId).catch((e) => errors.push(`canal ${formato}: ${e.message}`));
   }
 
-  // 13. PAINEL DE TICKET
+  // 10. EMBEDS / PAINÉIS — tudo é enviado e qualquer falha aparece no relatório
   await log('🎫 Painel de ticket...');
   try {
-    const tkCh = created['🚗・ticket'];
+    const tkCh = created.ticket;
     if (tkCh) {
       const panel = await createTicketPanel(guild.id, {
-        nome: 'Suporte', titulo: '🎫 Central de Atendimento',
-        descricao: 'Selecione o tipo de atendimento.',
+        nome: 'Suporte',
+        titulo: `${ORG_EMOJI} Central de Atendimento — ${ORG_NAME}`,
+        descricao: 'Selecione abaixo o tipo de atendimento que você precisa.',
         cor: '#9B59B6', botao_label: 'Abrir Ticket', botao_emoji: '🎫',
-        cargo_id: roles['SUPORTE']?.id || null,
-        log_channel_id: created['🚗・log-ticket']?.id || null,
+        footer: `${ORG_NAME} • Atendimento`,
+        cargo_id: R('SUPORTE')?.id || null,
+        log_channel_id: created.log_ticket?.id || null,
         tipos: [
           { id: 'suporte',    label: 'Suporte Geral',       emoji: '🛠️' },
           { id: 'aposta',     label: 'Problema com Aposta', emoji: '🎮' },
@@ -7205,683 +7452,184 @@ async function govdevSetup(guild, logFn = () => {}) {
           { id: 'outro',      label: 'Outro assunto',       emoji: '❓' },
         ],
       });
-      const msg = await tkCh.send({
+      const msg = await post(tkCh, {
         embeds: [buildTicketPanelEmbed(panel)],
         components: buildTicketPanelComponents(panel),
-      }).catch(() => null);
+      }, 'painel de ticket');
       if (msg) await updateTicketPanel(guild.id, panel.id, { canal_id: tkCh.id, mensagem_id: msg.id });
-    }
+    } else errors.push('painel de ticket: canal ticket não existe');
   } catch (e) { errors.push(`ticket panel: ${e.message}`); }
 
-  // 14-18. PAINÉIS
-  await log('🛡️ Painéis...');
-  try { const c = created['🚗・fila-mediador']; if (c) await c.send(await ffBuildMediatorPanel(guild.id)).catch(() => {}); } catch (e) { errors.push(`med: ${e.message}`); }
-  try { const c = created['🚗・fila-analistas']; if (c) await c.send(await ffBuildAnalystPanel(guild.id)).catch(() => {}); } catch (e) { errors.push(`ana: ${e.message}`); }
-  try { const c = created['🚗・pix-mediadores']; if (c) await c.send(await ffBuildMediatorPixPanel(guild.id)).catch(() => {}); } catch (e) { errors.push(`pix: ${e.message}`); }
+  await log('🛡️ Painéis de staff...');
+  try { await post(created.fila_mediador,  await ffBuildMediatorPanel(guild.id),    'fila-mediador'); }  catch (e) { errors.push(`fila-mediador: ${e.message}`); }
+  try { await post(created.fila_analistas, await ffBuildAnalystPanel(guild.id),     'fila-analistas'); } catch (e) { errors.push(`fila-analistas: ${e.message}`); }
+  try { await post(created.pix_mediadores, await ffBuildMediatorPixPanel(guild.id), 'pix-mediadores'); } catch (e) { errors.push(`pix-mediadores: ${e.message}`); }
   try {
-    const c = created['🚗・blacklist'];
+    const c = created.blacklist;
     if (c) {
-      const panel = await ffBuildBlacklistEmbed(guild.id);
-      const m = await c.send(panel).catch(() => null);
+      const m = await post(c, await ffBuildBlacklistEmbed(guild.id), 'blacklist');
       if (m) await ffPatchConfig(guild.id, { blacklist_channel_id: c.id, blacklist_embed_id: m.id });
     }
-  } catch (e) { errors.push(`bl: ${e.message}`); }
+  } catch (e) { errors.push(`blacklist: ${e.message}`); }
   try {
-    const c = created['🚗・fila-streamer'];
+    const c = created.fila_streamer;
     if (c) {
       const embed = await buildStreamerMainEmbed(guild.id);
-      const msg = await c.send({ embeds: [embed], components: buildStreamerMainButtons() }).catch(() => null);
+      const msg = await post(c, { embeds: [embed], components: buildStreamerMainButtons() }, 'fila-streamer');
       if (msg) await saveStreamerPanel(guild.id, c.id, msg.id);
     }
-  } catch (e) { errors.push(`str: ${e.message}`); }
+  } catch (e) { errors.push(`fila-streamer: ${e.message}`); }
 
-  // 19. EMBEDS DE APOSTAS
-  await log('🎮 Embeds de apostas...');
-  try {
-    const cfgFF = await ffGetConfig(guild.id);
-    const ordered = [...FF_DEFAULT_VALUES].map(v => parseFloat(v)).sort((a, b) => b - a);
-    let totalBets = 0;
-    for (const [formatoId, canalId] of Object.entries(canalMap)) {
-      if (!canalId) continue;
-      const fmt = FF_FORMATS.find(f => f.id === formatoId);
-      const ch = guild.channels.cache.get(canalId);
-      if (!fmt || !ch) continue;
-      for (const value of ordered) {
-        const ok = await createWithRetry(async () => {
-          const { data: bet } = await supabase.from('ff_bets').insert({
-            guild_id: guild.id, channel_id: ch.id, format: fmt.label, value,
-          }).select().single();
-          if (!bet) throw new Error('insert falhou');
-          const msg = await ch.send({
-            embeds: [ffBuildBetEmbed(bet, cfgFF)],
-            components: [ffBuildBetButtons(bet.id, cfgFF)],
-          });
-          await ffPatchBet(bet.id, { message_id: msg.id });
-          return bet.id;
-        }, `bet ${fmt.label} ${value}`);
-        if (ok) totalBets++;
-        await sleep(500);
-      }
-    }
-    await log(`✅ ${totalBets} embeds de apostas`);
-  } catch (e) { errors.push(`bets: ${e.message}`); }
-
-  // 20. LOJA DE COINS (no canal coins)
+  // Loja de coins
   await log('🪙 Loja de coins...');
   try {
-    const coinsCh = created['🚗・coins'];
+    const coinsCh = created.coins;
     if (coinsCh) {
       for (const d of FF_COIN_DEFAULTS) {
         const r = guild.roles.cache.find(x => x.name === d.role_name);
         if (!r) continue;
         const { data: ex } = await supabase.from('ff_coin_shop').select('id').eq('guild_id', guild.id).eq('name', d.name).maybeSingle();
-        if (ex) continue;
+        if (ex) {
+          // item de um setup anterior: aponta para o cargo NOVO (o antigo foi apagado)
+          await supabase.from('ff_coin_shop').update({ role_id: r.id, active: true }).eq('id', ex.id);
+          continue;
+        }
         await supabase.from('ff_coin_shop').insert({
           guild_id: guild.id, name: d.name, emoji: d.emoji, price: d.price,
           type: 'role', role_id: r.id, description: `${d.price} coins`, active: true,
-        }).catch(() => {});
+        });
       }
       const { data: items } = await supabase.from('ff_coin_shop')
         .select('*').eq('guild_id', guild.id).eq('active', true).order('price');
-      const e = new EmbedBuilder().setTitle('🪙 Loja de Coins').setColor('#FFD700')
-        .setDescription('Compre cargos com suas coins!').setTimestamp();
-      for (const x of items || []) e.addFields({ name: `${x.emoji || '🎁'} ${x.name}`, value: `💰 **${x.price}**`, inline: true });
-      await coinsCh.send({ embeds: [e], components: await buildCoinShopComponents(guild.id) }).catch(() => {});
+      const e = new EmbedBuilder().setTitle(`🪙 Loja de Coins — ${ORG_NAME}`).setColor('#FFD700')
+        .setDescription('Compre cargos com suas coins!').setFooter({ text: `${ORG_NAME} ${ORG_EMOJI}` }).setTimestamp();
+      for (const x of (items || []).slice(0, 25)) e.addFields({ name: `${x.emoji || '🎁'} ${x.name}`, value: `💰 **${x.price}**`, inline: true });
+      await post(coinsCh, { embeds: [e], components: await buildCoinShopComponents(guild.id) }, 'loja de coins');
     }
   } catch (e) { errors.push(`coins: ${e.message}`); }
 
-  // 21. EMBEDS ESTÁTICOS
-  await log('📝 Embeds estáticos...');
-  const statics = [
-    { ch: '🚗・regras',     t: '📕 Regras',          c: '#5865F2', d: '**1.** Respeite todos.\n**2.** Sem spam.\n**3.** Sem preconceito.\n**4.** Sem divulgação.\n**5.** Respeite mediadores.\n**6.** Dúvidas: ticket.' },
-    { ch: '🚗・termos',     t: '📜 Termos de Uso',   c: '#5865F2', d: 'Ao usar o servidor, você concorda com nossos termos e regras.' },
-    { ch: '🚗・avisos',     t: '📢 Avisos',          c: '#5865F2', d: 'Servidor configurado! Confira os canais principais.' },
-    { ch: '🚗・invites',    t: '🛬 Convites',        c: '#22c55e', d: 'Sistema de invites em breve.' },
-    { ch: '🚗・feedbacks',  t: '💬 Feedbacks',       c: '#9B59B6', d: 'Envie seu feedback!' }, // ✅ FIX: plural
-  ];
-  for (const s of statics) {
-    const ch = created[s.ch];
-    if (!ch) { console.warn(`[GOVDEV] ⚠️ Canal "${s.ch}" não encontrado`); continue; }
-    await ch.send({ embeds: [new EmbedBuilder().setTitle(s.t).setColor(s.c).setDescription(s.d).setTimestamp()] }).catch(() => {});
-    await sleep(400);
+  // Embeds de apostas (todos os formatos × todos os valores)
+  await log('🎮 Embeds de apostas...');
+  let totalBets = 0, betFails = 0;
+  try {
+    const cfgFF = await ffGetConfig(guild.id);
+    const ordered = [...FF_DEFAULT_VALUES].map(v => parseFloat(v)).sort((a, b) => b - a);
+    for (const [formatoId, canalId] of Object.entries(canalMap)) {
+      const fmt = FF_FORMATS.find(f => f.id === formatoId);
+      const ch = guild.channels.cache.get(canalId) || created[formatoId];
+      if (!fmt || !ch) { errors.push(`apostas ${formatoId}: canal/formato inválido`); continue; }
+      await log(`🎮 Apostas ${fmt.label}...`);
+      for (const value of ordered) {
+        try {
+          const { data: bet, error } = await supabase.from('ff_bets').insert({
+            guild_id: guild.id, channel_id: ch.id, format: fmt.label, value,
+          }).select().single();
+          if (error || !bet) throw new Error(error?.message || 'insert falhou');
+          const msg = await post(ch, {
+            embeds: [ffBuildBetEmbed(bet, cfgFF)],
+            components: [ffBuildBetButtons(bet.id, cfgFF)],
+          }, `aposta ${fmt.label} R$${value}`);
+          if (!msg) { await supabase.from('ff_bets').delete().eq('id', bet.id); betFails++; continue; }
+          await ffPatchBet(bet.id, { message_id: msg.id });
+          totalBets++;
+        } catch (e) {
+          betFails++;
+          if (betFails <= 3) errors.push(`aposta ${fmt.label} R$${value}: ${e.message}`);
+        }
+      }
+    }
+    if (betFails > 3) errors.push(`apostas: ${betFails} embeds falharam no total`);
+    await log(`✅ ${totalBets} embeds de apostas`);
+  } catch (e) { errors.push(`bets: ${e.message}`); }
+
+  // Embeds informativos — um para CADA canal que precisa
+  await log('📝 Embeds informativos...');
+  const infos = orgInfoEmbeds();
+  for (const [key, s] of Object.entries(infos)) {
+    const ch = created[key];
+    if (!ch) { errors.push(`embed ${key}: canal não encontrado`); continue; }
+    await post(ch, { embeds: [
+      new EmbedBuilder().setTitle(s.t).setColor(s.c).setDescription(s.d)
+        .setFooter({ text: `${ORG_NAME} ${ORG_EMOJI}` }).setTimestamp(),
+    ] }, key);
   }
 
   const duration = ((Date.now() - t0) / 1000).toFixed(1);
-  const topRole = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id).sort((a, b) => b.position - a.position).first();
-  return { ok: true, duration, errors, stats: {
+  await guild.roles.fetch().catch(() => {});
+  const topRole = guild.roles.cache.filter(r => r.id !== everyone.id && !r.managed && !isDevRole(r)).sort((a, b) => b.position - a.position).first();
+  return { ok: true, duration, errors, created, stats: {
     roles: Object.keys(roles).length,
     categories: Object.values(catMap).length,
     channels: Object.keys(created).length,
     topRole: topRole?.name || '—',
+    embedsOk, embedsFail, bets: totalBets,
   }};
 }
 
 // ═══════════════════════════════════════════════════════════
-// HANDLER .govdev
+// HANDLER — .govdev / .VK (mesmo setup)
 // ═══════════════════════════════════════════════════════════
 client.on('messageCreate', async (m) => {
   if (m.author.bot || !m.guild) return;
   const lower = (m.content || '').trim().toLowerCase();
-  if (!lower.startsWith('.govdev')) return;
+  const cmds = { '.govdev': 'GOVDEV', '.vk': '.VK' };
+  const base = Object.keys(cmds).find(c => lower === c || lower === `${c} confirmar`);
+  if (!base) return;
+  const tag = cmds[base];
 
   if (!isDeveloper(m.author.id)) { await m.reply({ content: '❌ Apenas devs.' }).catch(() => {}); return; }
 
-  if (lower !== '.govdev confirmar') {
-    const e = new EmbedBuilder().setTitle('⚠️ ATENÇÃO — Comando destrutivo').setColor('#FF0000')
+  if (lower === base) {
+    const e = new EmbedBuilder().setTitle(`⚠️ ATENÇÃO — ${base} é destrutivo`).setColor('#FF0000')
       .setDescription(
-        `Você está prestes a rodar **.govdev** em **${m.guild.name}**.\n\n` +
-        `**Vai DELETAR:** canais e roles (exceto @everyone/bots/dev)\n` +
-        `**Vai CRIAR:** ~25 roles, 11 categorias, ~40 canais\n\n` +
-        `**Confirme:** \`.govdev confirmar\``
+        `Você está prestes a rodar **${base}** em **${m.guild.name}**.\n\n` +
+        `**Vai DELETAR:** todos os canais e roles (exceto @everyone, bots e dev)\n` +
+        `**Vai CRIAR:** ~${ORG_ROLES_TOP_TO_BOTTOM.length} roles (na ordem certa), 12 categorias, ~45 canais\n` +
+        `**Vai POSTAR:** todos os painéis e embeds (ticket, filas, PIX, blacklist, streamer, coins, apostas e canais informativos)\n\n` +
+        `**Confirme:** \`${base} confirmar\`\n*Você tem 60 segundos.*`
       ).setTimestamp();
     await m.reply({ embeds: [e] }).catch(() => {});
     setTimeout(() => m.delete().catch(() => {}), 60000);
     return;
   }
 
+  const guild = m.guild;
+  const author = m.author;
   let progressMsg = null;
-  try { progressMsg = await m.reply({ content: '🏗️ Iniciando setup...' }).catch(() => null); } catch {}
+  try { progressMsg = await m.reply({ content: `🏗️ Iniciando ${base}...` }).catch(() => null); } catch {}
   const logFn = async (msg) => { if (!progressMsg) return; try { await progressMsg.edit(`🏗️ **Setup...**\n> ${msg}`); } catch {} };
 
+  let embed, created = {};
   try {
-    const result = await govdevSetup(m.guild, logFn);
-    const e = new EmbedBuilder().setTitle('✅ Setup concluído!').setColor(result.errors.length ? '#FFA500' : '#22c55e')
-      .setDescription(
-        `**Org criada em ${m.guild.name}!**\n\n` +
-        `> ⏱️ Duração: **${result.duration}s**\n` +
-        `> 🎭 Roles: **${result.stats.roles}**\n` +
-        `> 📁 Categorias: **${result.stats.categories}**\n` +
-        `> 📢 Canais: **${result.stats.channels}**\n` +
-        `> 👑 Topo: **${result.stats.topRole}**\n` +
-        `> ⚠️ Avisos: **${result.errors.length}**`
-      ).setFooter({ text: 'Mate Apostas • .govdev' }).setTimestamp();
-
-    if (result.errors.length) e.addFields({ name: '⚠️ Avisos', value: result.errors.slice(0, 8).map(x => `• ${x}`).join('\n').substring(0, 1000) });
-
-    if (progressMsg) await progressMsg.edit({ content: null, embeds: [e] }).catch(() => {});
-    else await m.reply({ embeds: [e] }).catch(() => {});
-  } catch (err) {
-    console.error('[GOVDEV]', err);
-    const e = new EmbedBuilder().setTitle('❌ Falha').setColor('#FF0000').setDescription(`\`\`\`\n${err.message.substring(0, 1800)}\n\`\`\``);
-    if (progressMsg) await progressMsg.edit({ content: null, embeds: [e] }).catch(() => {});
-    else await m.reply({ embeds: [e] }).catch(() => {});
-  }
-});
-
-// ═══════════════════════════════════════════════════════════
-// [ADDON] .VK — Org completa SEM postar embeds (CORRIGIDO)
-// ✅ Cria todos os canais (filas, staff, streamers, análise)
-// ❌ Não posta painéis/embeds automaticamente
-// ═══════════════════════════════════════════════════════════
-
-const CAR_EMOJI = '🚗';
-
-const VK_ROLES = [
-  { name: '・owner',               color: '#FFD700', perms: [PermissionFlagsBits.Administrator], hoist: true },
-  { name: '• DIRETOR 👑',          color: '#FFAA00', perms: [PermissionFlagsBits.Administrator], hoist: true },
-  { name: '• GERENTE 👑',          color: '#FF8800', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages,
-      PermissionFlagsBits.ManageRoles, PermissionFlagsBits.KickMembers,
-      PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.MentionEveryone,
-      PermissionFlagsBits.ViewAuditLog,
-    ], hoist: true },
-  { name: 'DIRETOR | SS',          color: '#FF5555', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ModerateMembers,
-      PermissionFlagsBits.MoveMembers,
-    ], hoist: true },
-  { name: 'SUPORTE',               color: '#00AAFF', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
-    ], hoist: true },
-  { name: '・SS | MOB',            color: '#00CCFF', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
-    ], hoist: true },
-  { name: '・SS | EMU',            color: '#00DDFF', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
-    ], hoist: true },
-  { name: '・MEDIADOR',            color: '#9B59B6', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.MoveMembers,
-    ], hoist: true },
-  { name: '• FILAS',               color: '#3498DB', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ManageMessages,
-    ], hoist: true },
-  { name: '/👁️‍🗨️',                 color: '#808080', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ReadMessageHistory,
-    ], hoist: true },
-  { name: 'view logs',             color: '#4A4A4A', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory,
-    ], hoist: false },
-  { name: 'BOTS',                  color: '#7289DA', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AttachFiles,
-      PermissionFlagsBits.ManageMessages, PermissionFlagsBits.AddReactions,
-    ], hoist: true },
-  { name: '・gg/[nome da sua org]', color: '#5865F2', perms: [
-      PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-      PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.Connect,
-      PermissionFlagsBits.Speak, PermissionFlagsBits.CreateInstantInvite,
-      PermissionFlagsBits.AddReactions,
-    ], hoist: true },
-  { name: '・@Criador De Conteúdo', color: '#FF69B4', perms: [], hoist: false },
-  { name: '・@STREAMING',          color: '#9146FF', perms: [], hoist: false },
-  { name: '・Magnata',             color: '#FFD700', perms: [], hoist: false },
-  { name: '・rei do 2,90',         color: '#FFA500', perms: [], hoist: false },
-  { name: '・Girl 🎀',             color: '#FFB6C1', perms: [], hoist: false },
-  { name: '・Trem 🚂',             color: '#8B4513', perms: [], hoist: false },
-  { name: '・Rei Dos Clips',       color: '#E74C3C', perms: [], hoist: false },
-  { name: '・GREEN',               color: '#00FF00', perms: [], hoist: false },
-  { name: '・@RICO DA ORG',        color: '#F1C40F', perms: [], hoist: false },
-  { name: '・CRIA DA DG',          color: '#2ECC71', perms: [], hoist: false },
-  { name: '・REI DOS AP',          color: '#E67E22', perms: [], hoist: false },
-  { name: '・REI DA 2X',           color: '#C0392B', perms: [], hoist: false },
-];
-
-async function vkSetup(guild, logFn = () => {}) {
-  const t0 = Date.now();
-  const errors = [];
-  const log = async (msg) => {
-    try { logFn(msg); } catch {}
-    console.log(`[.VK] ${msg}`);
-  };
-
-  const createWithRetry = async (fn, label, retries = 4) => {
-    for (let a = 0; a < retries; a++) {
-      try { const r = await fn(); await sleep(900); return r; }
-      catch (e) {
-        const isRL = e?.status === 429 || e?.httpStatus === 429 || e?.code === 429;
-        if (isRL) {
-          const wait = Math.ceil((e?.retry_after || e?.rawError?.retry_after || 5)) * 1000;
-          console.warn(`[.VK] ⏳ rate limit em "${label}", esperando ${wait}ms`);
-          await sleep(wait + 500); continue;
-        }
-        if (a < retries - 1) { await sleep(1200 * (a + 1)); continue; }
-        errors.push(`${label}: ${e.message}`); return null;
-      }
-    }
-    errors.push(`${label}: máx retries`); return null;
-  };
-
-  // 1. PERMISSÕES
-  await log('🔍 Verificando permissões...');
-  const me = guild.members.me;
-  if (!me) throw new Error('Bot não conseguiu se identificar.');
-  if (!me.permissions.has(PermissionFlagsBits.Administrator)) throw new Error('Bot precisa ser **Administrador**.');
-
-  // 2. DELETAR CANAIS
-  await log('🗑️ Deletando canais...');
-  const channels = [...guild.channels.cache.values()].filter(c => c.deletable);
-  for (let i = 0; i < channels.length; i += 3) {
-    await Promise.allSettled(channels.slice(i, i + 3).map(c => c.delete().catch(() => {})));
-    await sleep(700);
-  }
-
-  // 3. DELETAR ROLES
-  await log('🗑️ Deletando roles...');
-  const rolesToDelete = [...guild.roles.cache.values()].filter(r =>
-    r.id !== guild.roles.everyone.id && !r.managed && !isDevRole(r)
-  );
-  for (let i = 0; i < rolesToDelete.length; i += 3) {
-    await Promise.allSettled(rolesToDelete.slice(i, i + 3).map(r => r.delete().catch(() => {})));
-    await sleep(700);
-  }
-
-  // 4. SUBIR CARGO DO BOT
-  await log('⬆️ Subindo cargo do bot...');
-  try {
-    await guild.roles.fetch();
-    const botRole = me.roles.highest;
-    const top = guild.roles.cache.size - 1;
-    if (botRole.position < top) {
-      await botRole.setPosition(top, { reason: 'Setup .VK' }).catch(() => {});
-      await sleep(1500);
-    }
-  } catch (e) { errors.push(`bot role: ${e.message}`); }
-
-  // 5. CRIAR ROLES
-  await log('🎭 Criando roles...');
-  const roles = {};
-  const createOrder = [...VK_ROLES].reverse();
-  for (const rd of createOrder) {
-    const r = await createWithRetry(() => guild.roles.create({
-      name: rd.name, color: rd.color, permissions: rd.perms || [], hoist: !!rd.hoist,
-      reason: 'Setup .VK',
-    }), `role ${rd.name}`);
-    if (r) roles[rd.name] = r;
-  }
-
-  // 6. CARGO DEV
-  let devRole = findDevRole(guild);
-  if (!devRole) {
-    devRole = await createWithRetry(() => guild.roles.create({
-      name: DEV_ROLE_NAME, color: '#FFD700',
-      permissions: [PermissionFlagsBits.Administrator], hoist: true, reason: 'Setup .VK',
-    }), 'dev role');
-  }
-  if (devRole) {
-    for (const devId of DEVELOPER_IDS) {
-      const m = await guild.members.fetch(devId).catch(() => null);
-      if (m && !m.roles.cache.has(devRole.id)) await m.roles.add(devRole, 'Dev identificado').catch(() => {});
-    }
-  }
-
-  // 7. HIERARQUIA
-  await log('⬆️ Ajustando hierarquia...');
-  try {
-    await guild.roles.fetch();
-    const me2 = guild.members.me;
-    const botRole = me2.roles.highest;
-    const maxPos = guild.roles.cache.size - 1;
-    if (botRole.position < maxPos) {
-      await botRole.setPosition(maxPos, { reason: 'Setup .VK' }).catch(() => {});
-      await sleep(1500);
-      await guild.roles.fetch();
-    }
-
-    const ourIds = new Set(Object.values(roles).map(r => r.id));
-    const positions = [{ role: guild.roles.everyone.id, position: 0 }];
-    let pos = 1;
-
-    for (const r of guild.roles.cache.values()) {
-      if (r.id === guild.roles.everyone.id) continue;
-      if (ourIds.has(r.id)) continue;
-      if (devRole && r.id === devRole.id) continue;
-      if (r.id === botRole.id) continue;
-      positions.push({ role: r.id, position: pos++ });
-    }
-
-    for (let i = VK_ROLES.length - 1; i >= 0; i--) {
-      const r = roles[VK_ROLES[i].name];
-      if (!r) continue;
-      positions.push({ role: r.id, position: pos++ });
-    }
-
-    if (devRole) positions.push({ role: devRole.id, position: pos++ });
-    positions.push({ role: botRole.id, position: pos++ });
-
-    await guild.roles.setPositions(positions);
-    await guild.roles.fetch();
-    const top = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id).sort((a, b) => b.position - a.position).first();
-    console.log(`[.VK] ✅ Hierarquia — topo: ${top?.name}`);
-  } catch (e) { errors.push(`hierarchy: ${e.message}`); }
-
-  // 8. PERMISSÕES
-  const everyone = guild.roles.everyone;
-  const botId = client.user.id;
-  const adminRoles = [roles['・owner'], roles['• DIRETOR 👑'], roles['• GERENTE 👑'], roles['DIRETOR | SS']].filter(Boolean);
-  const staffRoles = [...adminRoles, roles['SUPORTE'], roles['・SS | MOB'], roles['・SS | EMU'], roles['・MEDIADOR'], roles['• FILAS'], roles['/👁️‍🗨️']].filter(Boolean);
-  const analiseRoles = [...adminRoles, roles['SUPORTE'], roles['・SS | MOB'], roles['・SS | EMU'], roles['・MEDIADOR'], roles['/👁️‍🗨️']].filter(Boolean);
-  const streamerRoles = [...staffRoles, roles['・@STREAMING'], roles['・@Criador De Conteúdo']].filter(Boolean);
-  const logRoles = [...adminRoles, roles['view logs']].filter(Boolean);
-
-  const buildPrivOW = (allowed) => {
-    const ow = [
-      { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages] },
-    ];
-    for (const r of allowed) {
-      if (!r) continue;
-      ow.push({ id: r.id, allow: [
-        PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles,
-        PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.AddReactions,
-        PermissionFlagsBits.Connect, PermissionFlagsBits.Speak,
-      ] });
-    }
-    return ow;
-  };
-
-  const buildROOW = () => {
-    const ow = [
-      { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
-      { id: botId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-    ];
-    for (const r of adminRoles) {
-      ow.push({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks] });
-    }
-    return ow;
-  };
-
-  // ═══════════════════════════════════════════════════════════
-  // 9. ESTRUTURA COMPLETA
-  // ═══════════════════════════════════════════════════════════
-  await log('📁 Criando canais...');
-  const created = {};
-  const catMap = {};
-
-  const STRUCTURE = [
-    { cat: null, channels: [
-      { name: '🔒・gg-apostado', type: 'text', priv: true, allow: adminRoles },
-    ]},
-
-    { cat: 'Atendimento', channels: [
-      { name: '🚗・suporte', type: 'text' },
-    ]},
-
-    { cat: 'Partidas', channels: [
-      { name: '🚗・clown', type: 'text' },
-    ]},
-
-    { cat: 'Informações', channels: [
-      { name: '🚗・regras',     type: 'text', ro: true },
-      { name: '🚗・termos',     type: 'text', ro: true },
-      { name: '🚗・avisos',     type: 'text', ro: true },
-      { name: '🚗・invites',    type: 'text', ro: true },
-      { name: '🚗・divulgação', type: 'text', ro: true },
-      { name: '🚗・feedbacks',  type: 'text', ro: true },
-    ]},
-
-    { cat: 'Eventos', channels: [
-      { name: '🚗・evento-invites', type: 'text', ro: true },
-      { name: '🚗・30c-por-kill',   type: 'text', ro: true },
-      { name: '🚗・pagamentos',     type: 'text', ro: true },
-    ]},
-
-    { cat: 'Mobile', channels: [
-      { name: '🚗・1x1-mob',    type: 'text' },
-      { name: '🚗・2x2-mob',    type: 'text' },
-      { name: '🚗・3x3-mob',    type: 'text' },
-      { name: '🚗・4x4-mob',    type: 'text' },
-      { name: '💰・pix-gratis', type: 'text' },
-    ]},
-
-    { cat: 'Mistas', channels: [
-      { name: '🚗・2x2-misto', type: 'text' },
-      { name: '🚗・3x3-misto', type: 'text' },
-      { name: '🚗・4x4-misto', type: 'text' },
-    ]},
-
-    { cat: 'Emulador', channels: [
-      { name: '🚗・1x1-emu', type: 'text' },
-      { name: '🚗・2x2-emu', type: 'text' },
-      { name: '🚗・3x3-emu', type: 'text' },
-      { name: '🚗・4x4-emu', type: 'text' },
-    ]},
-
-    { cat: 'Coins', channels: [
-      { name: '🚗・roleta', type: 'text' },
-      { name: '🚗・coins',  type: 'text', ro: true },
-    ]},
-
-    { cat: 'Análise', priv: true, allow: analiseRoles, channels: [
-      { name: 'regras',  type: 'text', ro: true },
-      { name: 'exposed', type: 'text', ro: true },
-      { name: 'telagem', type: 'text' },
-    ]},
-
-    { cat: 'Staff', priv: true, allow: staffRoles, channels: [
-      { name: '🚗・fila-mediador',  type: 'text' },
-      { name: '🚗・fila-analistas', type: 'text' },
-      { name: '🚗・pix-mediadores', type: 'text' },
-      { name: '🚗・blacklist',      type: 'text' },
-      { name: '🚗・fila-streamer',  type: 'text' },
-    ]},
-
-    { cat: 'Streamers', priv: true, allow: streamerRoles, channels: [
-      { name: '🚗・live-on',       type: 'text' },
-      { name: '🚗・divulgação',    type: 'text' }, // ⚠️ nome duplicado com Informações (ok, categorias diferentes)
-      { name: '🚗・chat-streamer', type: 'text' },
-    ]},
-
-    { cat: 'Logs', priv: true, allow: logRoles, channels: [
-      { name: '🚗・log-suporte',    type: 'text' },
-      { name: '🚗・log-apostas',    type: 'text' },
-      { name: '🚗・log-mediadores', type: 'text' },
-      { name: '🚗・log-coins',      type: 'text' },
-      { name: '🚗・log-config',     type: 'text' },
-    ]},
-  ];
-
-  // Categorias
-  for (const it of STRUCTURE) {
-    if (!it.cat) continue;
-    const cat = await createWithRetry(() => guild.channels.create({
-      name: it.cat, type: ChannelType.GuildCategory,
-      permissionOverwrites: it.priv ? buildPrivOW(it.allow || adminRoles) : [],
-      reason: 'Setup .VK',
-    }), `cat ${it.cat}`);
-    if (cat) catMap[it.cat] = cat;
-  }
-
-  // Canais
-  for (const it of STRUCTURE) {
-    const cat = it.cat ? catMap[it.cat] : null;
-    if (it.cat && !cat) continue;
-    for (const d of it.channels) {
-      const type = d.type === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
-      let ow = [];
-      if (d.priv)       ow = buildPrivOW(d.allow || adminRoles);
-      else if (it.priv) ow = buildPrivOW(it.allow || adminRoles);
-      else if (d.ro)    ow = buildROOW();
-
-      const ch = await createWithRetry(() => guild.channels.create({
-        name: d.name, type, parent: cat?.id || null,
-        permissionOverwrites: ow, reason: 'Setup .VK',
-      }), `ch ${d.name}`);
-      if (ch) {
-        if (created[d.name]) {
-          console.warn(`[.VK] ⚠️ Nome duplicado "${d.name}" — map foi sobrescrito`);
-        }
-        created[d.name] = ch;
-      }
-    }
-  }
-
-  await log(`✅ ${Object.keys(created).length} canais criados`);
-
-  // ═══════════════════════════════════════════════════════════
-  // 10. CONFIG
-  // ═══════════════════════════════════════════════════════════
-  await log('⚙️ Salvando configs...');
-
-  const cfg = await getConfig(guild.id);
-  Object.assign(cfg, {
-    server_type: 'organizacao',
-    admin_role: roles['• GERENTE 👑']?.id || '',
-    membro_role: roles['・gg/[nome da sua org]']?.id || '',
-    ticket_cargo: roles['SUPORTE']?.id || '',
-    autorole_role: roles['・gg/[nome da sua org]']?.id || '',
-    log_channel: created['🚗・log-apostas']?.id || '',
-    ticket_log_channel: created['🚗・log-suporte']?.id || '',
-    welcome_channel: created['🚗・avisos']?.id || '',
-    suggestion_channel: created['🚗・suporte']?.id || '',
-  });
-  await setConfig(guild.id, cfg);
-
-  await ffPatchConfig(guild.id, {
-    topic_channel_id: created['🚗・1x1-mob']?.id || null,
-    log_channel_id: created['🚗・log-apostas']?.id || null,
-    mediator_role_id: roles['・MEDIADOR']?.id || null,
-    analyst_role_id: roles['/👁️‍🗨️']?.id || null,
-    olhinho_role_id: roles['/👁️‍🗨️']?.id || null,
-    admin_role_id: roles['• GERENTE 👑']?.id || null,
-    pix_mediator_channel_id: created['🚗・pix-mediadores']?.id || null,
-    analyst_panel_channel_id: created['🚗・fila-analistas']?.id || null,
-    blacklist_channel_id: created['🚗・blacklist']?.id || null,
-    streamer_channel_id: created['🚗・fila-streamer']?.id || null,
-    value_options: FF_DEFAULT_VALUES,
-    mediator_fee: 0.15,
-    coin_prize: 1,
-    valor_minimo: 0.50,
-    valor_maximo: 1000,
-    auto_thread: true,
-    require_mediator_confirm: true,
-    block_blacklist: true,
-  });
-
-  // Mapear canais de aposta
-  const canalMap = {
-    '1x1_mobile': created['🚗・1x1-mob']?.id,
-    '2x2_mobile': created['🚗・2x2-mob']?.id,
-    '3x3_mobile': created['🚗・3x3-mob']?.id,
-    '4x4_mobile': created['🚗・4x4-mob']?.id,
-    '1x1_emu':    created['🚗・1x1-emu']?.id,
-    '2x2_emu':    created['🚗・2x2-emu']?.id,
-    '3x3_emu':    created['🚗・3x3-emu']?.id, // ✅ FIX: era '3x3-emo'
-    '4x4_emu':    created['🚗・4x4-emu']?.id,
-    '2x2_misto':  created['🚗・2x2-misto']?.id,
-    '3x3_misto':  created['🚗・3x3-misto']?.id,
-    '4x4_misto':  created['🚗・4x4-misto']?.id,
-  };
-  for (const [formato, canalId] of Object.entries(canalMap)) {
-    if (canalId) await ffSetCanal(guild.id, formato, canalId).catch(() => {});
-  }
-
-  const duration = ((Date.now() - t0) / 1000).toFixed(1);
-  const topRole = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id).sort((a, b) => b.position - a.position).first();
-  return { ok: true, duration, errors, stats: {
-    roles: Object.keys(roles).length,
-    categories: Object.values(catMap).length,
-    channels: Object.keys(created).length,
-    topRole: topRole?.name || '—',
-  }};
-}
-
-// ═══════════════════════════════════════════════════════════
-// HANDLER — .VK
-// ═══════════════════════════════════════════════════════════
-client.on('messageCreate', async (m) => {
-  if (m.author.bot || !m.guild) return;
-  const content = (m.content || '').trim();
-  const lower = content.toLowerCase();
-  if (lower !== '.vk' && lower !== '.vk confirmar') return;
-
-  if (!isDeveloper(m.author.id)) {
-    await m.reply({ content: '❌ Apenas devs.' }).catch(() => {});
-    return;
-  }
-
-  if (lower === '.vk') {
-    const e = new EmbedBuilder()
-      .setTitle('⚠️ ATENÇÃO — .VK é destrutivo')
-      .setColor('#FF0000')
-      .setDescription(
-        `Você está prestes a rodar **.VK** em **${m.guild.name}**.\n\n` +
-        `**Vai DELETAR:**\n` +
-        `> 🗑️ TODOS os canais\n` +
-        `> 🗑️ TODAS as roles (exceto @everyone, bots e dev)\n\n` +
-        `**Vai CRIAR (só canais, SEM postar embeds):**\n` +
-        `> 🎭 ~25 roles\n` +
-        `> 📁 13 categorias\n` +
-        `> 📢 ~40 canais com 🚗\n` +
-        `> 📝 Filas, staff, streamers, análise\n` +
-        `> ⚙️ Config básica salva\n\n` +
-        `**Sem postar:** painéis, embeds de apostas, loja de coins\n` +
-        `_(depois use \`/apostas painel\` e \`/solicitar painel\` pra postar)_\n\n` +
-        `**Confirme:** \`.VK confirmar\`\n\n` +
-        `*Você tem 60 segundos.*`
-      )
-      .setTimestamp();
-    await m.reply({ embeds: [e] }).catch(() => {});
-    setTimeout(() => m.delete().catch(() => {}), 60000);
-    return;
-  }
-
-  let progressMsg = null;
-  try { progressMsg = await m.reply({ content: '🏗️ Iniciando .VK...' }).catch(() => null); } catch {}
-  const logFn = async (msg) => { if (!progressMsg) return; try { await progressMsg.edit(`🏗️ **.VK rodando...**\n> ${msg}`); } catch {} };
-
-  try {
-    const result = await vkSetup(m.guild, logFn);
-    const e = new EmbedBuilder()
-      .setTitle('✅ .VK concluído!')
+    const result = await runOrgSetup(guild, logFn, tag);
+    created = result.created || {};
+    embed = new EmbedBuilder().setTitle(`✅ Setup concluído! ${ORG_EMOJI}`)
       .setColor(result.errors.length ? '#FFA500' : '#22c55e')
       .setDescription(
-        `**Org criada em ${m.guild.name}!**\n\n` +
+        `**${ORG_NAME} criada em ${guild.name}!**\n\n` +
         `> ⏱️ Duração: **${result.duration}s**\n` +
         `> 🎭 Roles: **${result.stats.roles}**\n` +
         `> 📁 Categorias: **${result.stats.categories}**\n` +
         `> 📢 Canais: **${result.stats.channels}**\n` +
-        `> 👑 Topo: **${result.stats.topRole}**\n` + // ✅ FIX: agora mostra top role
-        `> ⚠️ Avisos: **${result.errors.length}**\n\n` +
-        `**Nenhum embed foi postado.** Use:\n` +
-        `> \`/apostas painel\` — configurar e postar apostas\n` +
-        `> \`/config ticket\` — postar painéis de ticket\n` +
-        `> \`/config streamer\` — postar painel de streamers\n` +
-        `> \`/solicitar painel ticket\` / \`streamer\` — postar manualmente`
-      )
-      .setFooter({ text: 'Mate Apostas • .VK' })
-      .setTimestamp();
-
+        `> 📨 Embeds enviados: **${result.stats.embedsOk}** (falhas: **${result.stats.embedsFail}**)\n` +
+        `> 🎮 Embeds de apostas: **${result.stats.bets}**\n` +
+        `> 👑 Topo: **${result.stats.topRole}**\n` +
+        `> ⚠️ Avisos: **${result.errors.length}**`
+      ).setFooter({ text: `${ORG_NAME} • ${base}` }).setTimestamp();
     if (result.errors.length) {
-      e.addFields({ name: '⚠️ Avisos', value: result.errors.slice(0, 8).map(x => `• ${x}`).join('\n').substring(0, 1000) });
+      embed.addFields({ name: '⚠️ Avisos', value: result.errors.slice(0, 8).map(x => `• ${x}`).join('\n').substring(0, 1000) });
     }
-
-    if (progressMsg) await progressMsg.edit({ content: null, embeds: [e] }).catch(() => {});
-    else await m.reply({ embeds: [e] }).catch(() => {});
   } catch (err) {
-    console.error('[.VK]', err);
-    const e = new EmbedBuilder().setTitle('❌ Falha no .VK').setColor('#FF0000')
-      .setDescription(`\`\`\`\n${err.message.substring(0, 1800)}\n\`\`\``);
-    if (progressMsg) await progressMsg.edit({ content: null, embeds: [e] }).catch(() => {});
-    else await m.reply({ embeds: [e] }).catch(() => {});
+    console.error(`[${tag}]`, err);
+    embed = new EmbedBuilder().setTitle('❌ Falha no setup').setColor('#FF0000')
+      .setDescription(`\`\`\`\n${String(err.message).substring(0, 1800)}\n\`\`\``);
   }
+
+  // O canal onde o comando foi digitado foi APAGADO pelo setup → entrega o resultado por outros caminhos.
+  if (progressMsg) await progressMsg.edit({ content: null, embeds: [embed] }).catch(() => {});
+  const resultCh = created.log_config || created.avisos;
+  if (resultCh) await resultCh.send({ embeds: [embed] }).catch(() => {});
+  await author.send({ embeds: [embed] }).catch(() => {});
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -8273,7 +8021,7 @@ client.on('interactionCreate', async (i) => {
           const created = await i.guild.stickers.create({
             file: arquivo.url,
             name: cleanName,
-            tags: 'mate',
+            tags: 'back',
             reason: `Adicionado por ${i.user.tag}`,
           });
           return i.editReply({
@@ -8364,6 +8112,13 @@ client.on('interactionCreate', async (i) => {
 // ═══════════════════════════════════════════════════════════
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} online!`);
+
+  // Nome do bot = BACK BOT (o Discord limita a troca de username; falha é ignorada)
+  if (client.user.username !== BOT_NAME) {
+    client.user.setUsername(BOT_NAME)
+      .then(() => console.log(`✏️ Nome do bot alterado para ${BOT_NAME}`))
+      .catch((e) => console.warn(`⚠️ Não consegui trocar o nome do bot: ${e.message}`));
+  }
   console.log(`🔍 [READY] ${client.guilds.cache.size} guilds`);
 
   // Sync guilds com log de falhas
@@ -8390,7 +8145,7 @@ client.once('ready', async () => {
   }, 60000, 'HEARTBEAT');
 
   client.user.setPresence({
-    activities: [{ name: '🎮 /apostas painel', type: ActivityType.Watching }],
+    activities: [{ name: `${ORG_EMOJI} ${ORG_NAME} • /apostas painel`, type: ActivityType.Watching }],
     status: 'online',
   });
 

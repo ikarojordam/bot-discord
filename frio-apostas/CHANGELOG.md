@@ -14,3 +14,8 @@
 
 ## Tickets
 - Ao fechar (manual, auto-close, autor saiu) ou excluir: gera transcript (.html + .txt) e envia no canal de log **e na DM de quem abriu o ticket**. Se a DM estiver fechada, a staff é avisada no log.
+
+## v1.1.1 — comandos slash
+- Comandos globais agora são registrados PRIMEIRO no boot (antes dependiam do sync de servidores e eram apagados antes de recriar).
+- Aceita os eventos `ready` e `clientReady` (discord.js novo).
+- Comando de dev `.registrar` registra os slash commands na hora e mostra o resultado.

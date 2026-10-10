@@ -7644,24 +7644,7 @@ client.on('messageCreate', async (m) => {
 // REGISTRO DE COMANDOS
 // ═══════════════════════════════════════════════════════════
 async function registerCommands() {
-  try {
-    console.log('🧹 [CMDS] Limpando comandos globais antigos...');
-    await client.application.commands.set([]);
-    await sleep(2500);
-    console.log('✅ [CMDS] Globais limpos');
-  } catch (e) {
-    console.error('❌ [CMDS] Erro limpando globais:', e.message);
-  }
-
-  try {
-    for (const g of client.guilds.cache.values()) {
-      await g.commands.set([]).catch(() => {});
-      await sleep(150);
-    }
-    console.log('✅ [CMDS] Guild commands limpos');
-  } catch (e) {
-    console.error('❌ [CMDS] Erro limpando guild:', e.message);
-  }
+  if (!client.application) await client.application?.fetch?.().catch(() => {});
 
   const cmds = [
     new SlashCommandBuilder()
@@ -7810,13 +7793,27 @@ async function registerCommands() {
       .toJSON(),
   ];
 
+  let ok = false;
   try {
-    await client.application.commands.set(cmds);
-    console.log(`✅ [CMDS] ${cmds.length} comandos registrados globalmente`);
+    const set = await client.application.commands.set(cmds);
+    ok = true;
+    console.log(`✅ [CMDS] ${set.size} comandos registrados globalmente`);
     console.log(`✅ [CMDS] Lista: ${cmds.map(c => '/' + c.name).join(', ')}`);
   } catch (e) {
-    console.error('❌ [CMDS] Erro ao registrar globais:', e.message);
+    console.error(`❌ [CMDS] Erro ao registrar globais: ${e.message} (code ${e.code || '?'})`);
   }
+
+  // Remove comandos antigos registrados POR SERVIDOR (evita comando duplicado/velho na lista)
+  if (ok) {
+    for (const g of client.guilds.cache.values()) {
+      try {
+        const cur = await g.commands.fetch();
+        if (cur.size) { await g.commands.set([]); console.log(`🧹 [CMDS] ${cur.size} comando(s) antigos removidos de ${g.name}`); }
+      } catch {}
+      await sleep(150);
+    }
+  }
+  return ok;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -8110,8 +8107,15 @@ client.on('interactionCreate', async (i) => {
 // ═══════════════════════════════════════════════════════════
 // READY
 // ═══════════════════════════════════════════════════════════
-client.once('ready', async () => {
+let _readyDone = false;
+const onReady = async () => {
+  if (_readyDone) return;
+  _readyDone = true;
   console.log(`✅ ${client.user.tag} online!`);
+
+  // Comandos slash primeiro (não pode depender do resto do boot)
+  try { await registerCommands(); } catch (e) { console.error('❌ [CMDS] Falha geral:', e.message); }
+
 
   // Nome do bot = BACK BOT (o Discord limita a troca de username; falha é ignorada)
   if (client.user.username !== BOT_NAME) {
@@ -8136,7 +8140,6 @@ client.once('ready', async () => {
   }
   console.log(`✅ [READY] Sync guilds: ${syncOk} ok, ${syncFail} falhas`);
 
-  await registerCommands();
   safeInterval(checkTicketsAutoClose, 5 * 60 * 1000, 'TICKETS-AUTO-CLOSE');
   startDevRoleWatcher();
 
@@ -8150,6 +8153,25 @@ client.once('ready', async () => {
   });
 
   console.log(`[READY] ✅ ${BOT_VERSION} pronto.`);
+};
+client.once('ready', onReady);
+client.once('clientReady', onReady);
+
+// .registrar — (dev) registra os slash commands de novo e mostra o resultado/erro
+client.on('messageCreate', async (m) => {
+  if (m.author.bot || !m.guild) return;
+  if ((m.content || '').trim().toLowerCase() !== '.registrar') return;
+  if (!isDeveloper(m.author.id)) return;
+  try {
+    const r = await client.application.commands.fetch().catch((e) => ({ err: e }));
+    const antes = r?.err ? `erro ao listar (${r.err.message})` : `${r.size} comando(s) globais no Discord`;
+    const ok = await registerCommands();
+    await m.reply(ok
+      ? `✅ Comandos registrados. Antes: ${antes}. Se não aparecerem, feche e abra o Discord (Ctrl+R) e confira se o bot foi convidado com o escopo \`applications.commands\`.`
+      : `❌ Falha ao registrar. Antes: ${antes}. Veja os logs do bot ([CMDS]) — o código do erro mostra o motivo.`).catch(() => {});
+  } catch (e) {
+    await m.reply(`❌ ${e.message}`).catch(() => {});
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
